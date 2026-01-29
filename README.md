@@ -147,9 +147,10 @@ Convert back:
 
 | Project | Description |
 |---------|-------------|
-| [ALICE-Zip](https://github.com/ext-sakamoro/ALICE-Zip) | Full compression engine |
+| [ALICE-Zip](https://github.com/ext-sakamoro/ALICE-Zip) | Core procedural generation engine |
 | [ALICE-DB](https://github.com/ext-sakamoro/ALICE-DB) | Model-based time-series database |
-| [ALICE-Streaming-Protocol](https://github.com/ext-sakamoro/ALICE-Streaming-Protocol) | Ultra-low bandwidth video |
+| [ALICE-Streaming-Protocol](https://github.com/ext-sakamoro/ALICE-Streaming-Protocol) | Ultra-low bandwidth video streaming |
+| [ALICE-Eco-System](https://github.com/ext-sakamoro/ALICE-Eco-System) | Complete Edge-to-Cloud pipeline demo |
 
 All projects share the core philosophy: **encode the generation process, not the data itself**.
 

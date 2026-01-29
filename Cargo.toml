@@ -1,0 +1,26 @@
+[package]
+name = "alice-edge"
+version = "0.1.0"
+edition = "2021"
+authors = ["Moroya Sakamoto"]
+description = "Embedded Model Generator - Don't send data, send the law"
+license = "MIT"
+repository = "https://github.com/ext-sakamoro/ALICE-Edge"
+keywords = ["embedded", "no_std", "compression", "edge", "iot"]
+categories = ["embedded", "no-std", "compression"]
+readme = "README.md"
+
+[lib]
+name = "alice_edge"
+crate-type = ["rlib"]
+
+[features]
+default = []
+# Enable std for testing on host
+std = []
+
+[dependencies]
+# No dependencies - pure no_std
+
+[dev-dependencies]
+# For testing on host

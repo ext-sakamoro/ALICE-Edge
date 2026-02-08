@@ -12,15 +12,18 @@ readme = "README.md"
 
 [lib]
 name = "alice_edge"
-crate-type = ["rlib"]
+crate-type = ["rlib", "cdylib"]
 
 [features]
 default = []
 # Enable std for testing on host
 std = []
+pyo3 = ["dep:pyo3", "dep:numpy", "std"]  # Python bindings
 
 [dependencies]
-# No dependencies - pure no_std
+# No dependencies - pure no_std (except optional Python bindings)
+pyo3 = { version = "0.27", features = ["extension-module"], optional = true }
+numpy = { version = "0.27", optional = true }
 
 [profile.release]
 opt-level = 3

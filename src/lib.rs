@@ -1,6 +1,5 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![deny(warnings)]
-
 //! ALICE-Edge: Embedded Model Generator (Ultimate Optimization)
 //!
 //! "Don't send data. Send the law."
@@ -48,6 +47,9 @@
 //! - [ALICE-Zip](https://github.com/ext-sakamoro/ALICE-Zip) - Full compression engine
 //! - [ALICE-DB](https://github.com/ext-sakamoro/ALICE-DB) - Model-based database
 //! - [ALICE-Streaming-Protocol](https://github.com/ext-sakamoro/ALICE-Streaming-Protocol) - Video streaming
+
+#[cfg(feature = "pyo3")]
+pub mod python;
 
 /// Q16.16 fixed-point format constant
 pub const Q16_SHIFT: i32 = 16;

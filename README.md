@@ -143,6 +143,18 @@ Convert back:
 - Industrial sensors (trade secrets)
 - Smart home (privacy)
 
+## Cross-Crate Bridges
+
+ALICE-Edge connects to other ALICE ecosystem crates via feature-gated bridge modules:
+
+| Bridge | Feature | Target Crate | Description |
+|--------|---------|--------------|-------------|
+| `zip_bridge` | `zip` | [ALICE-Zip](../ALICE-Zip) | ALICE-Zip compression for edge deployment artifact packaging |
+
+### Cargo Profile
+
+Standardized `[profile.bench]` added for consistent benchmarking across ALICE crates.
+
 ## Related Projects
 
 | Project | Description |

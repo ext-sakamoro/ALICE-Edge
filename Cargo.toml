@@ -19,11 +19,13 @@ default = []
 # Enable std for testing on host
 std = []
 pyo3 = ["dep:pyo3", "dep:numpy", "std"]  # Python bindings
+zip = ["dep:alice_core", "std"]  # Compress model coefficients with ALICE-Zip
 
 [dependencies]
 # No dependencies - pure no_std (except optional Python bindings)
 pyo3 = { version = "0.27", features = ["extension-module"], optional = true }
 numpy = { version = "0.27", optional = true }
+alice_core = { package = "alice-zip", path = "../ALICE-Zip/libalice", optional = true }
 
 [profile.release]
 opt-level = 3
@@ -34,3 +36,9 @@ strip = true
 
 [dev-dependencies]
 # For testing on host
+
+[profile.bench]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = false

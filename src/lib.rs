@@ -50,6 +50,8 @@
 
 #[cfg(feature = "pyo3")]
 pub mod python;
+#[cfg(feature = "zip")]
+pub mod zip_bridge;
 
 /// Q16.16 fixed-point format constant
 pub const Q16_SHIFT: i32 = 16;

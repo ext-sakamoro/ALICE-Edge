@@ -150,6 +150,35 @@ ALICE-Edge connects to other ALICE ecosystem crates via feature-gated bridge mod
 | Bridge | Feature | Target Crate | Description |
 |--------|---------|--------------|-------------|
 | `zip_bridge` | `zip` | [ALICE-Zip](../ALICE-Zip) | ALICE-Zip compression for edge deployment artifact packaging |
+| `db_bridge` | `db` | [ALICE-DB](../ALICE-DB) | Model coefficient persistence (slope/intercept → ALICE-DB time-series) |
+
+### DB Bridge (feature: `db`)
+
+Persists model coefficients (slope, intercept) from on-device linear regression into [ALICE-DB](../ALICE-DB) time-series storage. Q16.16 fixed-point coefficients are converted to f32 for storage.
+
+```toml
+[dependencies]
+alice-edge = { path = "../ALICE-Edge", features = ["db"] }
+```
+
+```rust
+use alice_edge::db_bridge::CoefficientStore;
+
+let store = CoefficientStore::open("/tmp/edge_coefficients")?;
+
+// Record Q16.16 coefficients directly
+store.record_q16(timestamp_ms, slope_q16, intercept_q16)?;
+
+// Record f32 coefficients
+store.record(timestamp_ms, slope_f32, intercept_f32)?;
+
+// Batch record
+store.record_batch(&[(ts1, slope1, intercept1), (ts2, slope2, intercept2)])?;
+
+// Query coefficient history
+let slopes = store.query_slopes(start_ms, end_ms)?;
+let intercepts = store.query_intercepts(start_ms, end_ms)?;
+```
 
 ### Cargo Profile
 

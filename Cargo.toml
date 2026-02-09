@@ -20,12 +20,14 @@ default = []
 std = []
 pyo3 = ["dep:pyo3", "dep:numpy", "std"]  # Python bindings
 zip = ["dep:alice_core", "std"]  # Compress model coefficients with ALICE-Zip
+codec = ["dep:alice-codec", "std"]  # Wavelet denoising for sensor data
 
 [dependencies]
 # No dependencies - pure no_std (except optional Python bindings)
 pyo3 = { version = "0.27", features = ["extension-module"], optional = true }
 numpy = { version = "0.27", optional = true }
 alice_core = { package = "alice-zip", path = "../ALICE-Zip/libalice", optional = true }
+alice-codec = { path = "../ALICE-Codec", optional = true, default-features = false, features = ["std"] }
 
 [profile.release]
 opt-level = 3

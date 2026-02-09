@@ -54,6 +54,8 @@ pub mod python;
 pub mod zip_bridge;
 #[cfg(feature = "codec")]
 pub mod codec_bridge;
+#[cfg(feature = "db")]
+pub mod db_bridge;
 
 /// Q16.16 fixed-point format constant
 pub const Q16_SHIFT: i32 = 16;

@@ -22,6 +22,11 @@ pyo3 = ["dep:pyo3", "dep:numpy", "std"]  # Python bindings
 zip = ["dep:alice_core", "std"]  # Compress model coefficients with ALICE-Zip
 codec = ["dep:alice-codec", "std"]  # Wavelet denoising for sensor data
 db = ["dep:alice-db", "std"]  # ALICE-DB persistence for model coefficients
+depth-camera = ["dep:rusb", "std"]  # Dolphin D5 Lite depth camera driver
+sdf = ["dep:alice-sdf", "std"]  # SDF compression for point clouds
+ml = ["dep:alice-ml", "std"]  # 1.58bit ternary object classification
+asp = ["dep:libasp", "std"]  # ALICE Streaming Protocol bridge
+edge-pipeline = ["depth-camera", "sdf", "ml", "asp"]  # Full edge pipeline
 
 [dependencies]
 # No dependencies - pure no_std (except optional Python bindings)
@@ -30,6 +35,10 @@ numpy = { version = "0.27", optional = true }
 alice_core = { package = "alice-zip", path = "../ALICE-Zip/libalice", optional = true }
 alice-codec = { path = "../ALICE-Codec", optional = true, default-features = false, features = ["std"] }
 alice-db = { path = "../ALICE-DB", optional = true, default-features = false }
+rusb = { version = "0.9", optional = true }
+alice-sdf = { path = "../ALICE-SDF", optional = true, default-features = false, features = ["svo"] }
+alice-ml = { path = "../ALICE-ML", optional = true, default-features = false, features = ["std"] }
+libasp = { path = "../ALICE-Streaming-Protocol", optional = true, default-features = false }
 
 [profile.release]
 opt-level = 3

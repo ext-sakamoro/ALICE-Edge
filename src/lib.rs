@@ -56,6 +56,16 @@ pub mod zip_bridge;
 pub mod codec_bridge;
 #[cfg(feature = "db")]
 pub mod db_bridge;
+#[cfg(feature = "depth-camera")]
+pub mod depth_capture;
+#[cfg(feature = "sdf")]
+pub mod sdf_compress;
+#[cfg(feature = "ml")]
+pub mod object_classifier;
+#[cfg(feature = "asp")]
+pub mod asp_bridge;
+#[cfg(feature = "edge-pipeline")]
+pub mod edge_pipeline;
 
 /// Q16.16 fixed-point format constant
 pub const Q16_SHIFT: i32 = 16;

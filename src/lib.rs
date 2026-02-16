@@ -66,6 +66,12 @@ pub mod object_classifier;
 pub mod asp_bridge;
 #[cfg(feature = "edge-pipeline")]
 pub mod edge_pipeline;
+#[cfg(feature = "sensors")]
+pub mod sensors;
+#[cfg(feature = "mqtt")]
+pub mod mqtt_bridge;
+#[cfg(feature = "dashboard")]
+pub mod dashboard;
 
 /// Q16.16 fixed-point format constant
 pub const Q16_SHIFT: i32 = 16;

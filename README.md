@@ -18,16 +18,29 @@ ALICE-Edge:       1000 samples → y = ax + b → 8 bytes transmitted
                   Privacy: raw data discarded on-device
 ```
 
-## Benchmark: Raspberry Pi 5 (Cortex-A76, Measured)
+## Benchmark: Raspberry Pi 5 (Cortex-A76, Criterion --release)
+
+| Operation | 10 samples | 100 samples | 1000 samples | 4096 samples |
+|-----------|-----------|-------------|-------------|-------------|
+| **fit_linear_fixed** | 20 ns | 91 ns | **751 ns** | 3.0 µs |
+| **fit_constant_fixed** | 8.4 ns | 33 ns | **218 ns** | 870 ns |
+| **full_pipeline** | — | 90 ns | **752 ns** | — |
+
+| Single Operation | Measured |
+|-----------------|----------|
+| evaluate_linear (1000-point reconstruct) | 2.1 µs |
+| compute_residual_error (1000 samples) | 619 ns |
+| should_use_linear (model selection) | 3.4 µs |
+| Q16 conversion (1000×) | 1.1 µs |
 
 | Metric | Value |
 |--------|-------|
-| **fit_linear_fixed (1000 samples)** | < 5 µs |
-| **Compression ratio** | **500x** (4000 B → 8 B) |
+| **Throughput** | **1.33M models/sec** (1000 samples each) |
+| **Compression ratio** | **500x** (4000 B → 8 B per sensor) |
+| **Multi-sensor hub** (8 sensors × 1000) | **571x** (32 KB → 56 B) |
+| **Dashboard throughput** | 11,943 models/sec with HLL + CMS |
 | **Stack usage** | 48 bytes |
 | **Binary size** (no_std core) | < 1 KB |
-| **Binary size** (full features) | < 100 KB |
-| **Memory (RSS)** | < 2 MB |
 | **Dependencies** (no_std) | **Zero** |
 
 ## Architecture

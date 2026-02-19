@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Create dependency stubs
+        shell: bash
+        run: |
+          for crate_info in \
+            "ALICE-Zip/libalice:alice-zip" \
+            "ALICE-Codec:alice-codec" \
+            "ALICE-DB:alice-db" \
+            "ALICE-SDF:alice-sdf" \
+            "ALICE-ML:alice-ml" \
+            "ALICE-Streaming-Protocol:libasp" \
+            "ALICE-Analytics:alice-analytics"; do
+            dir=$(echo "$crate_info" | cut -d: -f1)
+            pkg=$(echo "$crate_info" | cut -d: -f2)
+            mkdir -p "../$dir/src"
+            cat > "../$dir/Cargo.toml" << TOML
+          [package]
+          name = "$pkg"
+          version = "0.1.0"
+          edition = "2021"
+          [features]
+          default = []
+          std = []
+          svo = []
+          [lib]
+          path = "src/lib.rs"
+          TOML
+            echo "" > "../$dir/src/lib.rs"
+          done
+
+      - name: Build (no default features) [T0]
+        run: cargo build --lib --no-default-features
+
+      - name: Build (std) [T1]
+        run: cargo build --lib --features "std"
+
+      - name: Test (std) [T1]
+        run: cargo test --lib --features "std"
+
+      - name: Build (std + sensors) [T3]
+        run: cargo build --lib --features "std,sensors"
+
+      - name: Build (std + all bridges) [T3]
+        run: cargo build --lib --features "std,zip,codec,db,ml"
+
+      - name: Build (std + telemetry) [T3]
+        run: cargo build --lib --features "std,mqtt,dashboard"
+
+      - name: Build (edge-pipeline) [T2]
+        run: cargo build --lib --features "edge-pipeline"
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Create dependency stubs
+        run: |
+          for crate_info in \
+            "ALICE-Zip/libalice:alice-zip" \
+            "ALICE-Codec:alice-codec" \
+            "ALICE-DB:alice-db" \
+            "ALICE-SDF:alice-sdf" \
+            "ALICE-ML:alice-ml" \
+            "ALICE-Streaming-Protocol:libasp" \
+            "ALICE-Analytics:alice-analytics"; do
+            dir=$(echo "$crate_info" | cut -d: -f1)
+            pkg=$(echo "$crate_info" | cut -d: -f2)
+            mkdir -p "../$dir/src"
+            cat > "../$dir/Cargo.toml" << TOML
+          [package]
+          name = "$pkg"
+          version = "0.1.0"
+          edition = "2021"
+          [features]
+          default = []
+          std = []
+          svo = []
+          [lib]
+          path = "src/lib.rs"
+          TOML
+            echo "" > "../$dir/src/lib.rs"
+          done
+
+      - name: Clippy
+        run: cargo clippy --lib -- --cap-lints warn
+        continue-on-error: true
+
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt -- --check

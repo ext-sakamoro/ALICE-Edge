@@ -143,7 +143,8 @@ fn evaluate_linear_batch<'py>(
 /// Convert Q16.16 fixed-point to float.
 #[pyfunction]
 fn q16_to_f32(q: i32) -> f32 {
-    q as f32 / crate::Q16_ONE as f32
+    const INV_Q16_ONE: f32 = 1.0 / (1i32 << 16) as f32;
+    q as f32 * INV_Q16_ONE
 }
 
 /// Convert integer to Q16.16 fixed-point.
@@ -167,8 +168,8 @@ fn q16_to_f32_batch<'py>(
     let s = values
         .as_slice()
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let scale = crate::Q16_ONE as f32;
-    let result = py.detach(|| s.iter().map(|&q| q as f32 / scale).collect::<Vec<f32>>());
+    let inv_scale = 1.0 / crate::Q16_ONE as f32;
+    let result = py.detach(|| s.iter().map(|&q| q as f32 * inv_scale).collect::<Vec<f32>>());
     Ok(result.into_pyarray(py))
 }
 

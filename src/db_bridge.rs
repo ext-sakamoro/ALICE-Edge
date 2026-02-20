@@ -38,8 +38,9 @@ impl CoefficientStore {
     ///
     /// Converts Q16.16 fixed-point values to f32 for storage.
     pub fn record_q16(&self, timestamp_ms: u64, slope_q16: i32, intercept_q16: i32) {
-        let slope_f32 = slope_q16 as f32 / crate::Q16_ONE as f32;
-        let intercept_f32 = intercept_q16 as f32 / crate::Q16_ONE as f32;
+        const INV_Q16_ONE: f32 = 1.0 / (1i32 << 16) as f32;
+        let slope_f32 = slope_q16 as f32 * INV_Q16_ONE;
+        let intercept_f32 = intercept_q16 as f32 * INV_Q16_ONE;
         let _ = self.slope_db.put(timestamp_ms as i64, slope_f32);
         let _ = self.intercept_db.put(timestamp_ms as i64, intercept_f32);
     }

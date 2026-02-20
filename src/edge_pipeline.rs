@@ -183,11 +183,12 @@ impl EdgePipeline {
         self.latency_sum_total += total_ms;
 
         let n = self.stats.frames_processed as f64;
-        self.stats.avg_capture_ms = self.latency_sum_capture / n;
-        self.stats.avg_compress_ms = self.latency_sum_compress / n;
-        self.stats.avg_classify_ms = self.latency_sum_classify / n;
-        self.stats.avg_encode_ms = self.latency_sum_encode / n;
-        self.stats.avg_total_ms = self.latency_sum_total / n;
+        let inv_n = 1.0 / n;
+        self.stats.avg_capture_ms = self.latency_sum_capture * inv_n;
+        self.stats.avg_compress_ms = self.latency_sum_compress * inv_n;
+        self.stats.avg_classify_ms = self.latency_sum_classify * inv_n;
+        self.stats.avg_encode_ms = self.latency_sum_encode * inv_n;
+        self.stats.avg_total_ms = self.latency_sum_total * inv_n;
 
         match &packet {
             AspEdgePacket::Keyframe { .. } => {
@@ -326,6 +327,7 @@ impl EdgePipeline {
     }
 }
 
+#[inline(always)]
 fn compute_bounds_size(points: &[[f32; 3]]) -> [f32; 3] {
     if points.is_empty() {
         return [1.0, 1.0, 1.0];

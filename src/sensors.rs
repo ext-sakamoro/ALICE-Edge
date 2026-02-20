@@ -278,6 +278,7 @@ impl Bme280Sensor {
 
     /// Compensate raw humidity to % × 100 (integer)
     #[allow(dead_code)]
+    #[inline(always)]
     fn compensate_humidity(&self, adc_h: i32, t_fine: i32) -> i32 {
         let mut var = t_fine - 76800_i32;
         if var == 0 {
@@ -300,11 +301,12 @@ impl Bme280Sensor {
         if var > 419430400 {
             var = 419430400;
         }
-        (var >> 12) * 100 / 1024 // % × 100
+        (var >> 12) * 100 >> 10 // % × 100 (>>10 == /1024)
     }
 
     /// Compensate raw pressure to hPa × 10 (integer)
     #[allow(dead_code)]
+    #[inline(always)]
     fn compensate_pressure(&self, adc_p: i32, t_fine: i32) -> i32 {
         let mut var1 = (t_fine as i64) - 128000;
         let mut var2 = var1 * var1 * (self.dig_p6 as i64);
@@ -320,7 +322,7 @@ impl Bme280Sensor {
         var1 = ((self.dig_p9 as i64) * (p >> 13) * (p >> 13)) >> 25;
         var2 = ((self.dig_p8 as i64) * p) >> 19;
         p = ((p + var1 + var2) >> 8) + ((self.dig_p7 as i64) << 4);
-        (p / 256 * 10 / 100) as i32 // hPa × 10
+        ((p >> 8) / 10) as i32 // hPa × 10 (>>8 == /256, /10 == *10/100 collapsed)
     }
 }
 
@@ -400,7 +402,8 @@ impl SensorDriver for Bme280Sensor {
             #[cfg(not(feature = "sensors-hw"))]
             {
                 // Simulated data for testing without hardware
-                let t = ts as f32 / 1000.0;
+                const INV_1000: f32 = 1.0 / 1000.0;
+                let t = ts as f32 * INV_1000;
                 batch.temperature.push(2500 + (t * 10.0) as i32); // 25.00°C rising
                 batch.humidity.push(6500 - (t * 5.0) as i32); // 65.00% falling
                 batch.pressure.push(10132 + (t * 2.0) as i32); // 1013.2 hPa rising
@@ -540,7 +543,8 @@ impl SensorDriver for Dht22Sensor {
 
             #[cfg(not(feature = "sensors-hw"))]
             {
-                let t = ts as f32 / 1000.0;
+                const INV_1000: f32 = 1.0 / 1000.0;
+                let t = ts as f32 * INV_1000;
                 batch.temperature.push(2200 + (t * 15.0) as i32);
                 batch.humidity.push(7000 - (t * 8.0) as i32);
             }
@@ -668,7 +672,8 @@ impl SensorDriver for Adxl345Sensor {
 
             #[cfg(not(feature = "sensors-hw"))]
             {
-                let t = ts as f32 / 1000.0;
+                const INV_1000: f32 = 1.0 / 1000.0;
+                let t = ts as f32 * INV_1000;
                 batch.accel_x.push((t.sin() * 100.0) as i32);
                 batch.accel_y.push((t.cos() * 100.0) as i32);
                 batch.accel_z.push(1000 + (t * 5.0) as i32); // ~1g + drift
@@ -727,19 +732,21 @@ impl GpsSensor {
         }
 
         // Latitude: ddmm.mmmm
+        const INV_100: f64 = 1.0 / 100.0;
+        const INV_60: f64 = 1.0 / 60.0;
         let lat_raw = parts[2].parse::<f64>().ok()?;
-        let lat_deg = (lat_raw / 100.0).floor();
+        let lat_deg = (lat_raw * INV_100).floor();
         let lat_min = lat_raw - lat_deg * 100.0;
-        let mut lat = ((lat_deg + lat_min / 60.0) * 1_000_000.0) as i32;
+        let mut lat = ((lat_deg + lat_min * INV_60) * 1_000_000.0) as i32;
         if parts[3] == "S" {
             lat = -lat;
         }
 
         // Longitude: dddmm.mmmm
         let lon_raw = parts[4].parse::<f64>().ok()?;
-        let lon_deg = (lon_raw / 100.0).floor();
+        let lon_deg = (lon_raw * INV_100).floor();
         let lon_min = lon_raw - lon_deg * 100.0;
-        let mut lon = ((lon_deg + lon_min / 60.0) * 1_000_000.0) as i32;
+        let mut lon = ((lon_deg + lon_min * INV_60) * 1_000_000.0) as i32;
         if parts[5] == "W" {
             lon = -lon;
         }
@@ -861,6 +868,7 @@ impl SimulatedSensor {
     }
 
     /// Simple deterministic pseudo-random noise
+    #[inline(always)]
     fn noise(seed: u64) -> i32 {
         let hash = seed
             .wrapping_mul(0x9E3779B97F4A7C15)
@@ -882,6 +890,7 @@ impl SensorDriver for SimulatedSensor {
         let mut batch = SensorBatch::new("Simulated");
         let start = Instant::now();
 
+        const INV_100: f32 = 1.0 / 100.0;
         for i in 0..count {
             let ts = start.elapsed().as_millis() as u64;
             let t = i as f32;
@@ -893,7 +902,7 @@ impl SensorDriver for SimulatedSensor {
 
             batch
                 .temperature
-                .push(self.base_temp + (t * self.temp_drift as f32 / 100.0) as i32 + noise);
+                .push(self.base_temp + (t * self.temp_drift as f32 * INV_100) as i32 + noise);
             batch.humidity.push(6500 - (t * 5.0) as i32 + noise / 2);
             batch.pressure.push(10132 + (t * 2.0) as i32 + noise / 3);
             batch.accel_x.push(((t * 0.1).sin() * 100.0) as i32 + noise);

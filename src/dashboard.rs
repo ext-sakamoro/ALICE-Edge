@@ -128,6 +128,7 @@ impl EdgeDashboard {
     }
 
     /// Average compression ratio
+    #[inline(always)]
     pub fn avg_compression_ratio(&self) -> f32 {
         if self.compression_ratios.is_empty() {
             return 0.0;
@@ -141,6 +142,7 @@ impl EdgeDashboard {
     }
 
     /// Models per second
+    #[inline(always)]
     pub fn models_per_sec(&self) -> f64 {
         let elapsed = self.start.elapsed().as_secs_f64();
         if elapsed > 0.0 {
@@ -245,11 +247,14 @@ pub struct LatencyStats {
 }
 
 /// Format bytes to human-readable string
+#[inline(always)]
 fn format_bytes(bytes: u64) -> String {
+    const INV_MB: f64 = 1.0 / 1_000_000.0;
+    const INV_KB: f64 = 1.0 / 1_000.0;
     if bytes >= 1_000_000 {
-        format!("{:.1} MB", bytes as f64 / 1_000_000.0)
+        format!("{:.1} MB", bytes as f64 * INV_MB)
     } else if bytes >= 1_000 {
-        format!("{:.1} KB", bytes as f64 / 1_000.0)
+        format!("{:.1} KB", bytes as f64 * INV_KB)
     } else {
         format!("{} B", bytes)
     }

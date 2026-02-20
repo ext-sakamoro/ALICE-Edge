@@ -68,6 +68,7 @@ pub struct SdfFeatures {
 
 impl SdfFeatures {
     /// Extract features from primitive fitting result
+    #[inline(always)]
     pub fn from_primitive(
         kind: u8,
         params: &[f32],
@@ -115,6 +116,7 @@ impl SdfFeatures {
         SdfFeatures { features }
     }
 
+    #[inline(always)]
     pub fn from_svo_stats(
         node_count: u32,
         leaf_count: u32,
@@ -198,6 +200,7 @@ impl TernaryClassifier {
     ///
     /// Returns (class_id, confidence)
     /// All computation is zero-allocation (stack buffers only).
+    #[inline(always)]
     pub fn classify(&self, features: &SdfFeatures) -> (ObjectClass, f32) {
         // Layer 1: 16 → 32 + ReLU
         let mut hidden1 = [0.0f32; HIDDEN_DIM];

@@ -260,7 +260,8 @@ pub const fn int_to_q16(i: i32) -> i32 {
 #[cfg(feature = "std")]
 #[inline(always)]
 pub fn q16_to_f32(q: i32) -> f32 {
-    q as f32 / Q16_ONE as f32
+    const INV_Q16_ONE: f32 = 1.0 / (1i32 << 16) as f32;
+    q as f32 * INV_Q16_ONE
 }
 
 /// Fit a constant model (just the mean) - Optimized

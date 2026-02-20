@@ -211,7 +211,7 @@ pub fn compress_point_cloud(
     (
         CompressedSdf::SvoChunks {
             chunks: vec![chunk],
-            total_nodes: stats.output_bytes as u32 / 32,
+            total_nodes: (stats.output_bytes as u32) >> 5, // /32 as bit shift
         },
         stats,
     )
@@ -269,6 +269,7 @@ fn serialize_fitted_primitive(prim: &FittedPrimitive, mse: f32) -> SerializedPri
     SerializedPrimitive { kind, params, mse }
 }
 
+#[inline(always)]
 fn compute_bounds(points: &[[f32; 3]]) -> ([f32; 3], [f32; 3]) {
     let mut min = [f32::MAX; 3];
     let mut max = [f32::MIN; 3];
@@ -307,6 +308,7 @@ fn build_svo_from_bounds(config: &SvoBuildConfig, min: [f32; 3], max: [f32; 3]) 
 /// Compute SVO difference hash for delta detection
 ///
 /// Returns a 64-bit hash of the SVO structure for change detection.
+#[inline(always)]
 pub fn svo_diff_hash(data: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf29ce484222325;
     let chunks = data.chunks_exact(8);

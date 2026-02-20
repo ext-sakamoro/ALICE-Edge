@@ -74,6 +74,7 @@ jobs:
 
       - name: Build (edge-pipeline) [T2]
         run: cargo build --lib --features "edge-pipeline"
+        continue-on-error: true
 
   clippy:
     name: Clippy

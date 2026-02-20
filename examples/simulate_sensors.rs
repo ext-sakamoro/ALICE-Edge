@@ -8,7 +8,7 @@
 //!
 //! Author: Moroya Sakamoto
 
-use alice_edge::sensors::{SimulatedSensor, SensorDriver};
+use alice_edge::sensors::{SensorDriver, SimulatedSensor};
 use alice_edge::{fit_linear_fixed, q16_to_int, Q16_SHIFT};
 
 fn main() {
@@ -32,17 +32,35 @@ fn main() {
     let (slope, intercept) = fit_linear_fixed(temperature);
 
     println!("\nModel coefficients (Q16.16):");
-    println!("  slope     = {} (≈ {:.4})", slope, slope as f64 / (1 << Q16_SHIFT) as f64);
-    println!("  intercept = {} (≈ {:.2})", intercept, intercept as f64 / (1 << Q16_SHIFT) as f64);
+    println!(
+        "  slope     = {} (≈ {:.4})",
+        slope,
+        slope as f64 / (1 << Q16_SHIFT) as f64
+    );
+    println!(
+        "  intercept = {} (≈ {:.2})",
+        intercept,
+        intercept as f64 / (1 << Q16_SHIFT) as f64
+    );
 
     // Compression ratio
     let raw_bytes = temperature.len() * 4;
     let compressed_bytes = 8; // slope + intercept = 2 × i32
     println!("\nCompression:");
-    println!("  Raw:        {} bytes ({} samples × 4)", raw_bytes, temperature.len());
-    println!("  Compressed: {} bytes (slope + intercept)", compressed_bytes);
+    println!(
+        "  Raw:        {} bytes ({} samples × 4)",
+        raw_bytes,
+        temperature.len()
+    );
+    println!(
+        "  Compressed: {} bytes (slope + intercept)",
+        compressed_bytes
+    );
     println!("  Ratio:      {}x", raw_bytes / compressed_bytes);
-    println!("  Savings:    {:.1}%", (1.0 - compressed_bytes as f64 / raw_bytes as f64) * 100.0);
+    println!(
+        "  Savings:    {:.1}%",
+        (1.0 - compressed_bytes as f64 / raw_bytes as f64) * 100.0
+    );
 
     // Verify reconstruction
     println!("\nReconstruction verification (first 5 points):");
@@ -52,10 +70,15 @@ fn main() {
         let predicted_val = q16_to_int(predicted);
         println!(
             "  x={}: actual={} predicted={} error={}",
-            i, actual, predicted_val,
+            i,
+            actual,
+            predicted_val,
             (actual - predicted_val).abs()
         );
     }
 
-    println!("\nDone! Transmitted 8 bytes instead of {} bytes.", raw_bytes);
+    println!(
+        "\nDone! Transmitted 8 bytes instead of {} bytes.",
+        raw_bytes
+    );
 }

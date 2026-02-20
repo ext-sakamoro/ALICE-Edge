@@ -21,8 +21,8 @@
 //! // slope/intercept are cleaner than fit_linear_fixed(&noisy)
 //! ```
 
-use alice_codec::Wavelet1D;
 use crate::fit_linear_fixed;
+use alice_codec::Wavelet1D;
 
 /// Denoise sensor data with Wavelet1D, then fit a linear model.
 ///

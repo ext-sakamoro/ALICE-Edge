@@ -48,30 +48,30 @@
 //! - [ALICE-DB](https://github.com/ext-sakamoro/ALICE-DB) - Model-based database
 //! - [ALICE-Streaming-Protocol](https://github.com/ext-sakamoro/ALICE-Streaming-Protocol) - Video streaming
 
-#[cfg(feature = "pyo3")]
-pub mod python;
-#[cfg(feature = "zip")]
-pub mod zip_bridge;
+#[cfg(feature = "asp")]
+pub mod asp_bridge;
 #[cfg(feature = "codec")]
 pub mod codec_bridge;
+#[cfg(feature = "dashboard")]
+pub mod dashboard;
 #[cfg(feature = "db")]
 pub mod db_bridge;
 #[cfg(feature = "depth-camera")]
 pub mod depth_capture;
-#[cfg(feature = "sdf")]
-pub mod sdf_compress;
-#[cfg(feature = "ml")]
-pub mod object_classifier;
-#[cfg(feature = "asp")]
-pub mod asp_bridge;
 #[cfg(feature = "edge-pipeline")]
 pub mod edge_pipeline;
-#[cfg(feature = "sensors")]
-pub mod sensors;
 #[cfg(feature = "mqtt")]
 pub mod mqtt_bridge;
-#[cfg(feature = "dashboard")]
-pub mod dashboard;
+#[cfg(feature = "ml")]
+pub mod object_classifier;
+#[cfg(feature = "pyo3")]
+pub mod python;
+#[cfg(feature = "sdf")]
+pub mod sdf_compress;
+#[cfg(feature = "sensors")]
+pub mod sensors;
+#[cfg(feature = "zip")]
+pub mod zip_bridge;
 
 /// Q16.16 fixed-point format constant
 pub const Q16_SHIFT: i32 = 16;

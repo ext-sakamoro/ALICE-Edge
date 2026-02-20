@@ -15,8 +15,8 @@
 
 #[cfg(all(feature = "sensors", feature = "mqtt"))]
 fn main() {
-    use alice_edge::sensors::{SimulatedSensor, SensorDriver};
-    use alice_edge::mqtt_bridge::{MqttConfig, MqttPublisher, CoefficientPayload};
+    use alice_edge::mqtt_bridge::{CoefficientPayload, MqttConfig, MqttPublisher};
+    use alice_edge::sensors::{SensorDriver, SimulatedSensor};
     use alice_edge::{fit_linear_fixed, Q16_SHIFT};
     use std::time::{SystemTime, UNIX_EPOCH};
 

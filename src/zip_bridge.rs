@@ -4,8 +4,8 @@
 //! ALICE-Zip's procedural generation for ultra-compact storage.
 //! Enables batched coefficient transmission from IoT fleets.
 
+use crate::{evaluate_linear_fixed, fit_linear_fixed, Q16_SHIFT};
 use alice_core::compression;
-use crate::{fit_linear_fixed, evaluate_linear_fixed, Q16_SHIFT};
 
 /// Compressed model coefficients for batch transmission.
 ///
@@ -26,9 +26,7 @@ pub fn compress_coefficients(coefficients: &[(i32, i32)]) -> std::io::Result<Com
     // Convert to float for quantization
     let floats: Vec<f32> = coefficients
         .iter()
-        .flat_map(|&(slope, intercept)| {
-            [slope as f32, intercept as f32]
-        })
+        .flat_map(|&(slope, intercept)| [slope as f32, intercept as f32])
         .collect();
 
     let data = compression::compress_residual_quantized(&floats, 16, 6)?;
@@ -64,14 +62,12 @@ pub fn fit_and_compress(sensor_batches: &[&[i32]]) -> std::io::Result<Compressed
 }
 
 /// Decompress and evaluate all models at a given point.
-pub fn decompress_and_evaluate(
-    batch: &CompressedModelBatch,
-    x: i32,
-) -> std::io::Result<Vec<i32>> {
+pub fn decompress_and_evaluate(batch: &CompressedModelBatch, x: i32) -> std::io::Result<Vec<i32>> {
     let coefficients = decompress_coefficients(batch)?;
-    Ok(coefficients.iter().map(|&(slope, intercept)| {
-        evaluate_linear_fixed(slope, intercept, x)
-    }).collect())
+    Ok(coefficients
+        .iter()
+        .map(|&(slope, intercept)| evaluate_linear_fixed(slope, intercept, x))
+        .collect())
 }
 
 #[cfg(test)]
@@ -102,8 +98,12 @@ mod tests {
             let slope_err = (orig.0 as f64 - rec.0 as f64).abs();
             let intercept_err = (orig.1 as f64 - rec.1 as f64).abs();
             // Error should be within quantization tolerance
-            assert!(slope_err < orig.0.abs() as f64 * 0.1 + 1.0,
-                "slope error too large: {} vs {}", orig.0, rec.0);
+            assert!(
+                slope_err < orig.0.abs() as f64 * 0.1 + 1.0,
+                "slope error too large: {} vs {}",
+                orig.0,
+                rec.0
+            );
             let _ = intercept_err;
         }
     }

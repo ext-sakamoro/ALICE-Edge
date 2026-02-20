@@ -3,10 +3,10 @@
 //! Embedded Model Generator for IoT/Raspberry Pi.
 //! Fixed-point least squares fitting exposed to Python + NumPy.
 
-use pyo3::prelude::*;
-use pyo3::exceptions::PyValueError;
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
 
 // ============================================================================
 // Core Functions
@@ -17,21 +17,19 @@ use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2}
 /// Returns (slope, intercept) in Q16.16 format.
 /// Input: numpy array of int32 sensor readings.
 #[pyfunction]
-fn fit_linear<'py>(
-    py: Python<'py>,
-    data: PyReadonlyArray1<'py, i32>,
-) -> PyResult<(i32, i32)> {
-    let slice = data.as_slice().map_err(|e| PyValueError::new_err(e.to_string()))?;
+fn fit_linear<'py>(py: Python<'py>, data: PyReadonlyArray1<'py, i32>) -> PyResult<(i32, i32)> {
+    let slice = data
+        .as_slice()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(py.detach(|| crate::fit_linear_fixed(slice)))
 }
 
 /// Fit a constant model (mean) in Q16.16 format.
 #[pyfunction]
-fn fit_constant<'py>(
-    py: Python<'py>,
-    data: PyReadonlyArray1<'py, i32>,
-) -> PyResult<i32> {
-    let slice = data.as_slice().map_err(|e| PyValueError::new_err(e.to_string()))?;
+fn fit_constant<'py>(py: Python<'py>, data: PyReadonlyArray1<'py, i32>) -> PyResult<i32> {
+    let slice = data
+        .as_slice()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(py.detach(|| crate::fit_constant_fixed(slice)))
 }
 
@@ -49,17 +47,18 @@ fn compute_error<'py>(
     slope: i32,
     intercept: i32,
 ) -> PyResult<i64> {
-    let slice = data.as_slice().map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let slice = data
+        .as_slice()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(py.detach(|| crate::compute_residual_error(slice, slope, intercept)))
 }
 
 /// Model selection: returns True if linear model is significantly better.
 #[pyfunction]
-fn should_use_linear<'py>(
-    py: Python<'py>,
-    data: PyReadonlyArray1<'py, i32>,
-) -> PyResult<bool> {
-    let slice = data.as_slice().map_err(|e| PyValueError::new_err(e.to_string()))?;
+fn should_use_linear<'py>(py: Python<'py>, data: PyReadonlyArray1<'py, i32>) -> PyResult<bool> {
+    let slice = data
+        .as_slice()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(py.detach(|| crate::should_use_linear(slice)))
 }
 
@@ -79,7 +78,9 @@ fn fit_linear_batch<'py>(
     let shape = streams.as_array();
     let num_streams = shape.shape()[0];
     let num_samples = shape.shape()[1];
-    let slice = streams.as_slice().map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let slice = streams
+        .as_slice()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
     let result = py.detach(|| {
         let mut out = Vec::with_capacity(num_streams * 2);
@@ -110,8 +111,12 @@ fn evaluate_linear_batch<'py>(
 ) -> PyResult<Bound<'py, PyArray2<i32>>> {
     let c_shape = coeffs.as_array();
     let num_streams = c_shape.shape()[0];
-    let c_slice = coeffs.as_slice().map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let x_slice = x_values.as_slice().map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let c_slice = coeffs
+        .as_slice()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let x_slice = x_values
+        .as_slice()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let num_points = x_slice.len();
 
     let result = py.detach(|| {
@@ -159,7 +164,9 @@ fn q16_to_f32_batch<'py>(
     py: Python<'py>,
     values: PyReadonlyArray1<'py, i32>,
 ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-    let s = values.as_slice().map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let s = values
+        .as_slice()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let scale = crate::Q16_ONE as f32;
     let result = py.detach(|| s.iter().map(|&q| q as f32 / scale).collect::<Vec<f32>>());
     Ok(result.into_pyarray(py))

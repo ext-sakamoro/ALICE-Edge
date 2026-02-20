@@ -5,9 +5,9 @@
 //!
 //! Author: Moroya Sakamoto
 
-use libasp::scene::{SdfSceneDescriptor, SdfSceneDelta, SdfDeltaType};
-use crate::sdf_compress::{CompressedSdf, SvoChunkData, svo_diff_hash};
 use crate::object_classifier::ObjectClass;
+use crate::sdf_compress::{svo_diff_hash, CompressedSdf, SvoChunkData};
+use libasp::scene::{SdfDeltaType, SdfSceneDelta, SdfSceneDescriptor};
 
 /// Edge stream encoder — manages keyframe/delta state for ASP transmission
 pub struct EdgeStreamEncoder {
@@ -30,14 +30,9 @@ pub enum AspEdgePacket {
         frame_id: u64,
     },
     /// D-Packet: Incremental SVO chunk delta
-    Delta {
-        delta: SdfSceneDelta,
-        frame_id: u64,
-    },
+    Delta { delta: SdfSceneDelta, frame_id: u64 },
     /// No change detected — skip transmission
-    Skip {
-        frame_id: u64,
-    },
+    Skip { frame_id: u64 },
 }
 
 impl EdgeStreamEncoder {
@@ -62,8 +57,8 @@ impl EdgeStreamEncoder {
     ) -> AspEdgePacket {
         self.frame_count += 1;
 
-        let is_keyframe = self.frame_count == 1
-            || (self.frame_count % self.keyframe_interval as u64) == 0;
+        let is_keyframe =
+            self.frame_count == 1 || (self.frame_count % self.keyframe_interval as u64) == 0;
 
         if is_keyframe {
             self.encode_keyframe(compressed, classifications)
@@ -86,9 +81,10 @@ impl EdgeStreamEncoder {
         // Build classification labels
         let labels: Option<Vec<(u8, String)>> = if !classifications.is_empty() {
             Some(
-                classifications.iter()
+                classifications
+                    .iter()
                     .map(|(id, class)| (*id, class.label().to_string()))
-                    .collect()
+                    .collect(),
             )
         } else {
             None
@@ -115,7 +111,9 @@ impl EdgeStreamEncoder {
 
         // Skip if no change detected
         if new_hash == self.last_svo_hash {
-            return AspEdgePacket::Skip { frame_id: self.frame_count };
+            return AspEdgePacket::Skip {
+                frame_id: self.frame_count,
+            };
         }
 
         self.last_svo_hash = new_hash;
@@ -154,8 +152,13 @@ fn extract_asdf_data(compressed: &CompressedSdf) -> Vec<u8> {
             }
             data
         }
-        CompressedSdf::Hybrid { asdf_data, svo_chunks, .. } => {
-            let total_len = asdf_data.len() + svo_chunks.iter().map(|c| c.data.len()).sum::<usize>();
+        CompressedSdf::Hybrid {
+            asdf_data,
+            svo_chunks,
+            ..
+        } => {
+            let total_len =
+                asdf_data.len() + svo_chunks.iter().map(|c| c.data.len()).sum::<usize>();
             let mut data = Vec::with_capacity(total_len);
             data.extend_from_slice(asdf_data);
             for chunk in svo_chunks {
@@ -169,7 +172,10 @@ fn extract_asdf_data(compressed: &CompressedSdf) -> Vec<u8> {
 /// Extract bounds from compressed SDF
 fn extract_bounds(compressed: &CompressedSdf) -> ([f32; 3], [f32; 3]) {
     match compressed {
-        CompressedSdf::SvoChunks { chunks, .. } | CompressedSdf::Hybrid { svo_chunks: chunks, .. } => {
+        CompressedSdf::SvoChunks { chunks, .. }
+        | CompressedSdf::Hybrid {
+            svo_chunks: chunks, ..
+        } => {
             if let Some(chunk) = chunks.first() {
                 (chunk.bounds_min, chunk.bounds_max)
             } else {
@@ -191,7 +197,11 @@ fn compute_compressed_hash(compressed: &CompressedSdf) -> u64 {
             }
             combined_hash
         }
-        CompressedSdf::Hybrid { asdf_data, svo_chunks, .. } => {
+        CompressedSdf::Hybrid {
+            asdf_data,
+            svo_chunks,
+            ..
+        } => {
             let mut combined = svo_diff_hash(asdf_data);
             for chunk in svo_chunks {
                 combined ^= svo_diff_hash(&chunk.data);
@@ -270,7 +280,7 @@ mod tests {
         let compressed2 = CompressedSdf::SvoChunks {
             chunks: vec![SvoChunkData {
                 chunk_id: 0,
-                data: vec![5, 6, 7, 8],  // different data
+                data: vec![5, 6, 7, 8], // different data
                 node_count: 1,
                 bounds_min: [-1.0; 3],
                 bounds_max: [1.0; 3],

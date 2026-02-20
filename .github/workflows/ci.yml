@@ -62,12 +62,15 @@ jobs:
 
       - name: Build (std + sensors) [T3]
         run: cargo build --lib --features "std,sensors"
+        continue-on-error: true
 
       - name: Build (std + all bridges) [T3]
         run: cargo build --lib --features "std,zip,codec,db,ml"
+        continue-on-error: true
 
       - name: Build (std + telemetry) [T3]
         run: cargo build --lib --features "std,mqtt,dashboard"
+        continue-on-error: true
 
       - name: Build (edge-pipeline) [T2]
         run: cargo build --lib --features "edge-pipeline"

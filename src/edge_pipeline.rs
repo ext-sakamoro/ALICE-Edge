@@ -7,10 +7,12 @@
 
 use std::time::{Duration, Instant};
 
-use crate::depth_capture::{DepthCameraDriver, DepthFrame, DolphinD5Driver, CameraConfig, PointNormal};
+use crate::asp_bridge::{AspEdgePacket, EdgeStreamEncoder};
+use crate::depth_capture::{
+    CameraConfig, DepthCameraDriver, DepthFrame, DolphinD5Driver, PointNormal,
+};
+use crate::object_classifier::{ObjectClass, SdfFeatures, TernaryClassifier, DEFAULT_NUM_CLASSES};
 use crate::sdf_compress::{compress_point_cloud, CompressConfig, CompressStats, CompressedSdf};
-use crate::object_classifier::{TernaryClassifier, SdfFeatures, ObjectClass, DEFAULT_NUM_CLASSES};
-use crate::asp_bridge::{EdgeStreamEncoder, AspEdgePacket};
 
 /// Pipeline configuration
 #[derive(Debug, Clone)]
@@ -134,7 +136,9 @@ impl EdgePipeline {
     /// Process a single frame through the pipeline
     ///
     /// Returns the encoded ASP packet and compression statistics.
-    pub fn process_frame(&mut self) -> Result<(AspEdgePacket, CompressStats), crate::depth_capture::CaptureError> {
+    pub fn process_frame(
+        &mut self,
+    ) -> Result<(AspEdgePacket, CompressStats), crate::depth_capture::CaptureError> {
         let total_start = Instant::now();
 
         // Stage 1: Capture
@@ -150,16 +154,12 @@ impl EdgePipeline {
         }
 
         // Convert to f32 array for compression
-        let point_arrays: Vec<[f32; 3]> = points.iter()
-            .map(|p| [p.x, p.y, p.z])
-            .collect();
+        let point_arrays: Vec<[f32; 3]> = points.iter().map(|p| [p.x, p.y, p.z]).collect();
 
         // Stage 2: Compress
         let compress_start = Instant::now();
-        let (compressed, compress_stats) = compress_point_cloud(
-            &point_arrays,
-            &self.config.compress,
-        );
+        let (compressed, compress_stats) =
+            compress_point_cloud(&point_arrays, &self.config.compress);
         let compress_ms = compress_start.elapsed().as_secs_f64() * 1000.0;
 
         // Stage 3: Classify
@@ -244,45 +244,65 @@ impl EdgePipeline {
             CompressedSdf::Primitives { primitives, .. } => {
                 let bounds = compute_bounds_size(points);
                 let point_len = points.len();
-                primitives.iter().enumerate().map(|(i, prim)| {
-                    let features = SdfFeatures::from_primitive(
-                        prim.kind as u8,
-                        &prim.params,
-                        bounds,
-                        point_len,
-                    );
-                    let (class, _conf) = self.classifier.classify(&features);
-                    (i as u8, class)
-                }).collect()
+                primitives
+                    .iter()
+                    .enumerate()
+                    .map(|(i, prim)| {
+                        let features = SdfFeatures::from_primitive(
+                            prim.kind as u8,
+                            &prim.params,
+                            bounds,
+                            point_len,
+                        );
+                        let (class, _conf) = self.classifier.classify(&features);
+                        (i as u8, class)
+                    })
+                    .collect()
             }
-            CompressedSdf::SvoChunks { chunks, total_nodes } => {
-                chunks.iter().map(|chunk| {
-                    let bounds_size = [
-                        chunk.bounds_max[0] - chunk.bounds_min[0],
-                        chunk.bounds_max[1] - chunk.bounds_min[1],
-                        chunk.bounds_max[2] - chunk.bounds_min[2],
-                    ];
-                    let features = SdfFeatures::from_svo_stats(
-                        *total_nodes,
-                        chunk.node_count,
-                        6, // default depth
-                        bounds_size,
-                    );
-                    let (class, _conf) = self.classifier.classify(&features);
-                    (chunk.chunk_id as u8, class)
-                }).collect()
+            CompressedSdf::SvoChunks {
+                chunks,
+                total_nodes,
+            } => {
+                chunks
+                    .iter()
+                    .map(|chunk| {
+                        let bounds_size = [
+                            chunk.bounds_max[0] - chunk.bounds_min[0],
+                            chunk.bounds_max[1] - chunk.bounds_min[1],
+                            chunk.bounds_max[2] - chunk.bounds_min[2],
+                        ];
+                        let features = SdfFeatures::from_svo_stats(
+                            *total_nodes,
+                            chunk.node_count,
+                            6, // default depth
+                            bounds_size,
+                        );
+                        let (class, _conf) = self.classifier.classify(&features);
+                        (chunk.chunk_id as u8, class)
+                    })
+                    .collect()
             }
-            CompressedSdf::Hybrid { primitives, svo_chunks, .. } => {
+            CompressedSdf::Hybrid {
+                primitives,
+                svo_chunks,
+                ..
+            } => {
                 let bounds = compute_bounds_size(points);
                 let point_len = points.len();
-                let mut results: Vec<(u8, ObjectClass)> = primitives.iter().enumerate().map(|(i, prim)| {
-                    let features = SdfFeatures::from_primitive(
-                        prim.kind as u8, &prim.params,
-                        bounds, point_len,
-                    );
-                    let (class, _) = self.classifier.classify(&features);
-                    (i as u8, class)
-                }).collect();
+                let mut results: Vec<(u8, ObjectClass)> = primitives
+                    .iter()
+                    .enumerate()
+                    .map(|(i, prim)| {
+                        let features = SdfFeatures::from_primitive(
+                            prim.kind as u8,
+                            &prim.params,
+                            bounds,
+                            point_len,
+                        );
+                        let (class, _) = self.classifier.classify(&features);
+                        (i as u8, class)
+                    })
+                    .collect();
 
                 for chunk in svo_chunks {
                     let bounds_size = [
@@ -291,7 +311,10 @@ impl EdgePipeline {
                         chunk.bounds_max[2] - chunk.bounds_min[2],
                     ];
                     let features = SdfFeatures::from_svo_stats(
-                        chunk.node_count, chunk.node_count, 6, bounds_size,
+                        chunk.node_count,
+                        chunk.node_count,
+                        6,
+                        bounds_size,
                     );
                     let (class, _) = self.classifier.classify(&features);
                     results.push((chunk.chunk_id as u8, class));
@@ -342,17 +365,36 @@ mod tests {
             self.frame_counter += 1;
             Ok(DepthFrame {
                 points: vec![
-                    PointNormal { x: 0.0, y: 0.0, z: 1.0, ..Default::default() },
-                    PointNormal { x: 0.1, y: 0.0, z: 1.0, ..Default::default() },
-                    PointNormal { x: 0.0, y: 0.1, z: 1.0, ..Default::default() },
+                    PointNormal {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 1.0,
+                        ..Default::default()
+                    },
+                    PointNormal {
+                        x: 0.1,
+                        y: 0.0,
+                        z: 1.0,
+                        ..Default::default()
+                    },
+                    PointNormal {
+                        x: 0.0,
+                        y: 0.1,
+                        z: 1.0,
+                        ..Default::default()
+                    },
                 ],
                 timestamp_ms: self.frame_counter as u64 * 100,
                 frame_id: self.frame_counter,
             })
         }
 
-        fn is_connected(&self) -> bool { true }
-        fn info(&self) -> String { "MockCamera".to_string() }
+        fn is_connected(&self) -> bool {
+            true
+        }
+        fn info(&self) -> String {
+            "MockCamera".to_string()
+        }
     }
 
     #[test]

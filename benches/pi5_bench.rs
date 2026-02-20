@@ -8,16 +8,17 @@
 //!
 //! Author: Moroya Sakamoto
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use alice_edge::{
-    fit_linear_fixed, fit_constant_fixed, evaluate_linear_fixed,
-    compute_residual_error, should_use_linear,
-    Q16_SHIFT, int_to_q16, q16_to_int,
+    compute_residual_error, evaluate_linear_fixed, fit_constant_fixed, fit_linear_fixed,
+    int_to_q16, q16_to_int, should_use_linear, Q16_SHIFT,
 };
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 fn generate_linear_data(n: usize) -> Vec<i32> {
     // y = 10x + 2500 + noise
-    (0..n).map(|i| 2500 + (i as i32) * 10 + (i as i32 % 7) - 3).collect()
+    (0..n)
+        .map(|i| 2500 + (i as i32) * 10 + (i as i32 % 7) - 3)
+        .collect()
 }
 
 fn generate_constant_data(n: usize) -> Vec<i32> {
@@ -30,11 +31,9 @@ fn bench_fit_linear(c: &mut Criterion) {
 
     for &n in &[10, 100, 500, 1000, 4096] {
         let data = generate_linear_data(n);
-        group.bench_with_input(
-            BenchmarkId::new("samples", n),
-            &data,
-            |b, data| b.iter(|| fit_linear_fixed(black_box(data))),
-        );
+        group.bench_with_input(BenchmarkId::new("samples", n), &data, |b, data| {
+            b.iter(|| fit_linear_fixed(black_box(data)))
+        });
     }
 
     group.finish();
@@ -45,11 +44,9 @@ fn bench_fit_constant(c: &mut Criterion) {
 
     for &n in &[10, 100, 500, 1000, 4096] {
         let data = generate_constant_data(n);
-        group.bench_with_input(
-            BenchmarkId::new("samples", n),
-            &data,
-            |b, data| b.iter(|| fit_constant_fixed(black_box(data))),
-        );
+        group.bench_with_input(BenchmarkId::new("samples", n), &data, |b, data| {
+            b.iter(|| fit_constant_fixed(black_box(data)))
+        });
     }
 
     group.finish();
@@ -120,19 +117,15 @@ fn bench_batch_pipeline(c: &mut Criterion) {
 
     for &n in &[100, 500, 1000] {
         let data = generate_linear_data(n);
-        group.bench_with_input(
-            BenchmarkId::new("samples", n),
-            &data,
-            |b, data| {
-                b.iter(|| {
-                    // Full pipeline: fit → evaluate → error check
-                    let (slope, intercept) = fit_linear_fixed(black_box(data));
-                    let _error = compute_residual_error(data, slope, intercept);
-                    let _last = evaluate_linear_fixed(slope, intercept, (data.len() - 1) as i32);
-                    (slope, intercept)
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("samples", n), &data, |b, data| {
+            b.iter(|| {
+                // Full pipeline: fit → evaluate → error check
+                let (slope, intercept) = fit_linear_fixed(black_box(data));
+                let _error = compute_residual_error(data, slope, intercept);
+                let _last = evaluate_linear_fixed(slope, intercept, (data.len() - 1) as i32);
+                (slope, intercept)
+            })
+        });
     }
 
     group.finish();

@@ -12,9 +12,9 @@
 
 #[cfg(all(feature = "sensors", feature = "dashboard"))]
 fn main() {
-    use alice_edge::sensors::{SimulatedSensor, SensorDriver};
     use alice_edge::dashboard::EdgeDashboard;
     use alice_edge::fit_linear_fixed;
+    use alice_edge::sensors::{SensorDriver, SimulatedSensor};
     use std::time::Instant;
 
     println!("=== ALICE-Edge: Dashboard Demo ===\n");
@@ -50,12 +50,7 @@ fn main() {
             let raw_bytes = data.len() * 4;
             let compressed_bytes = 8;
 
-            dashboard.record_compression(
-                sensor_id,
-                raw_bytes,
-                compressed_bytes,
-                latency_us,
-            );
+            dashboard.record_compression(sensor_id, raw_bytes, compressed_bytes, latency_us);
         }
     }
 

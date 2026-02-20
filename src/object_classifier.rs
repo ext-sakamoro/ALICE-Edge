@@ -7,7 +7,7 @@
 //!
 //! Author: Moroya Sakamoto
 
-use alice_ml::{TernaryWeight, TernaryWeightKernel, ternary_matvec_kernel};
+use alice_ml::{ternary_matvec_kernel, TernaryWeight, TernaryWeightKernel};
 
 /// Default number of classification categories
 pub const DEFAULT_NUM_CLASSES: usize = 8;
@@ -77,7 +77,10 @@ impl SdfFeatures {
         let mut features = [0.0f32; FEATURE_DIM];
 
         // Feature 0-2: Bounding box dimensions (normalized)
-        let max_dim = bounds_size[0].max(bounds_size[1]).max(bounds_size[2]).max(1e-6);
+        let max_dim = bounds_size[0]
+            .max(bounds_size[1])
+            .max(bounds_size[2])
+            .max(1e-6);
         let inv_max = 1.0 / max_dim;
         features[0] = bounds_size[0] * inv_max;
         features[1] = bounds_size[1] * inv_max;
@@ -120,7 +123,10 @@ impl SdfFeatures {
     ) -> Self {
         let mut features = [0.0f32; FEATURE_DIM];
 
-        let max_dim = bounds_size[0].max(bounds_size[1]).max(bounds_size[2]).max(1e-6);
+        let max_dim = bounds_size[0]
+            .max(bounds_size[1])
+            .max(bounds_size[2])
+            .max(1e-6);
         let inv_max = 1.0 / max_dim;
         features[0] = bounds_size[0] * inv_max;
         features[1] = bounds_size[1] * inv_max;
@@ -149,9 +155,9 @@ impl SdfFeatures {
 /// Total weights: 16*32 + 32*32 + 32*8 = 1792 ternary values
 /// Memory: 1792 / 4 = 448 bytes (packed) + ~96 bytes overhead = ~544 bytes
 pub struct TernaryClassifier {
-    layer1: TernaryWeightKernel,  // 16 → 32
-    layer2: TernaryWeightKernel,  // 32 → 32
-    layer3: TernaryWeightKernel,  // 32 → num_classes
+    layer1: TernaryWeightKernel, // 16 → 32
+    layer2: TernaryWeightKernel, // 32 → 32
+    layer3: TernaryWeightKernel, // 32 → num_classes
     num_classes: usize,
 }
 
@@ -179,12 +185,7 @@ impl TernaryClassifier {
     }
 
     /// Load classifier from packed weight bytes
-    pub fn from_weights(
-        w1: &[i8],
-        w2: &[i8],
-        w3: &[i8],
-        num_classes: usize,
-    ) -> Self {
+    pub fn from_weights(w1: &[i8], w2: &[i8], w3: &[i8], num_classes: usize) -> Self {
         Self {
             layer1: TernaryWeightKernel::from_ternary(w1, HIDDEN_DIM, FEATURE_DIM),
             layer2: TernaryWeightKernel::from_ternary(w2, HIDDEN_DIM, HIDDEN_DIM),
@@ -244,9 +245,7 @@ impl TernaryClassifier {
 
     /// Memory footprint of all model weights in bytes
     pub fn memory_bytes(&self) -> usize {
-        self.layer1.memory_bytes()
-            + self.layer2.memory_bytes()
-            + self.layer3.memory_bytes()
+        self.layer1.memory_bytes() + self.layer2.memory_bytes() + self.layer3.memory_bytes()
     }
 }
 

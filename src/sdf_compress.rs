@@ -7,8 +7,7 @@
 //! Author: Moroya Sakamoto
 
 use alice_sdf::mesh::{
-    detect_primitive, primitives_to_csg,
-    FittedPrimitive, FittingConfig, FittingResult,
+    detect_primitive, primitives_to_csg, FittedPrimitive, FittingConfig, FittingResult,
 };
 use alice_sdf::svo::{SparseVoxelOctree, SvoBuildConfig, SvoNode};
 
@@ -44,7 +43,7 @@ pub enum CompressedSdf {
 #[derive(Debug, Clone)]
 pub struct SerializedPrimitive {
     pub kind: PrimitiveKind,
-    pub params: [f32; 8],  // up to 8 float parameters
+    pub params: [f32; 8], // up to 8 float parameters
     pub mse: f32,
 }
 
@@ -87,7 +86,7 @@ impl Default for CompressConfig {
     fn default() -> Self {
         Self {
             fitting: FittingConfig::default(),
-            svo_depth: 6,  // Adaptive depth for Pi 5 memory budget
+            svo_depth: 6, // Adaptive depth for Pi 5 memory budget
             primitive_mse_threshold: 0.01,
             min_inlier_ratio: 0.8,
             svo_distance_threshold: 1.5,
@@ -121,10 +120,13 @@ pub fn compress_point_cloud(
     };
 
     if points.is_empty() {
-        return (CompressedSdf::Primitives {
-            primitives: Vec::new(),
-            asdf_data: Vec::new(),
-        }, stats);
+        return (
+            CompressedSdf::Primitives {
+                primitives: Vec::new(),
+                asdf_data: Vec::new(),
+            },
+            stats,
+        );
     }
 
     // Convert to Vec3 for alice-sdf API
@@ -165,7 +167,13 @@ pub fn compress_point_cloud(
                 0.0
             };
 
-            return (CompressedSdf::Primitives { primitives, asdf_data }, stats);
+            return (
+                CompressedSdf::Primitives {
+                    primitives,
+                    asdf_data,
+                },
+                stats,
+            );
         }
     }
 
@@ -200,10 +208,13 @@ pub fn compress_point_cloud(
         0.0
     };
 
-    (CompressedSdf::SvoChunks {
-        chunks: vec![chunk],
-        total_nodes: stats.output_bytes as u32 / 32,
-    }, stats)
+    (
+        CompressedSdf::SvoChunks {
+            chunks: vec![chunk],
+            total_nodes: stats.output_bytes as u32 / 32,
+        },
+        stats,
+    )
 }
 
 /// Serialize a FittedPrimitive to compact transmission format
@@ -217,7 +228,10 @@ fn serialize_fitted_primitive(prim: &FittedPrimitive, mse: f32) -> SerializedPri
             params[3] = *radius;
             PrimitiveKind::Sphere
         }
-        FittedPrimitive::Box { center, half_extents } => {
+        FittedPrimitive::Box {
+            center,
+            half_extents,
+        } => {
             params[0] = center.x;
             params[1] = center.y;
             params[2] = center.z;
@@ -226,7 +240,12 @@ fn serialize_fitted_primitive(prim: &FittedPrimitive, mse: f32) -> SerializedPri
             params[5] = half_extents.z;
             PrimitiveKind::Box
         }
-        FittedPrimitive::Cylinder { center, axis, radius, half_height } => {
+        FittedPrimitive::Cylinder {
+            center,
+            axis,
+            radius,
+            half_height,
+        } => {
             params[0] = center.x;
             params[1] = center.y;
             params[2] = center.z;
@@ -275,9 +294,13 @@ fn build_svo_from_bounds(config: &SvoBuildConfig, min: [f32; 3], max: [f32; 3]) 
     // Depth
     data.extend_from_slice(&config.max_depth.to_le_bytes());
     // Bounds min
-    for v in &min { data.extend_from_slice(&v.to_le_bytes()); }
+    for v in &min {
+        data.extend_from_slice(&v.to_le_bytes());
+    }
     // Bounds max
-    for v in &max { data.extend_from_slice(&v.to_le_bytes()); }
+    for v in &max {
+        data.extend_from_slice(&v.to_le_bytes());
+    }
     data
 }
 
@@ -306,11 +329,7 @@ mod tests {
 
     #[test]
     fn test_compute_bounds() {
-        let points = vec![
-            [0.0, 1.0, 2.0],
-            [-1.0, 0.0, 0.0],
-            [3.0, 2.0, 1.0],
-        ];
+        let points = vec![[0.0, 1.0, 2.0], [-1.0, 0.0, 0.0], [3.0, 2.0, 1.0]];
         let (min, max) = compute_bounds(&points);
         assert_eq!(min, [-1.0, 0.0, 0.0]);
         assert_eq!(max, [3.0, 2.0, 2.0]);

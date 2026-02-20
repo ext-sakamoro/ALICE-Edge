@@ -121,10 +121,14 @@ impl CoefficientPayload {
     pub fn to_json(&self) -> String {
         format!(
             r#"{{"sensor":"{}","channel":"{}","slope":{},"intercept":{},"slope_q16":{},"intercept_q16":{},"samples":{},"error":{:.6},"ts":{}}}"#,
-            self.sensor_id, self.channel,
-            self.slope_f32, self.intercept_f32,
-            self.slope_q16, self.intercept_q16,
-            self.sample_count, self.residual_error,
+            self.sensor_id,
+            self.channel,
+            self.slope_f32,
+            self.intercept_f32,
+            self.slope_q16,
+            self.intercept_q16,
+            self.sample_count,
+            self.residual_error,
             self.timestamp_ms
         )
     }
@@ -156,11 +160,7 @@ pub struct MqttPublisher {
 impl MqttPublisher {
     /// Create a new MQTT publisher
     pub fn new(config: MqttConfig) -> Result<Self, MqttError> {
-        let mut opts = MqttOptions::new(
-            &config.client_id,
-            &config.host,
-            config.port,
-        );
+        let mut opts = MqttOptions::new(&config.client_id, &config.host, config.port);
         opts.set_keep_alive(config.keep_alive);
 
         if let (Some(user), Some(pass)) = (&config.username, &config.password) {
@@ -194,7 +194,8 @@ impl MqttPublisher {
         let json = payload.to_json();
         let bytes = json.len() as u64;
 
-        self.client.publish(&topic, QoS::AtLeastOnce, false, json.as_bytes())
+        self.client
+            .publish(&topic, QoS::AtLeastOnce, false, json.as_bytes())
             .map_err(|e| MqttError::Publish(format!("{}", e)))?;
 
         self.messages_sent += 1;
@@ -211,7 +212,8 @@ impl MqttPublisher {
         let topic = format!("{}/{}", self.config.topic_prefix, topic_suffix);
         let binary = payload.to_binary();
 
-        self.client.publish(&topic, QoS::AtLeastOnce, false, &binary)
+        self.client
+            .publish(&topic, QoS::AtLeastOnce, false, &binary)
             .map_err(|e| MqttError::Publish(format!("{}", e)))?;
 
         self.messages_sent += 1;
@@ -220,10 +222,7 @@ impl MqttPublisher {
     }
 
     /// Publish a batch of coefficients for multiple channels
-    pub fn publish_batch(
-        &mut self,
-        payloads: &[CoefficientPayload],
-    ) -> Result<(), MqttError> {
+    pub fn publish_batch(&mut self, payloads: &[CoefficientPayload]) -> Result<(), MqttError> {
         for payload in payloads {
             let topic = format!("{}/{}", payload.sensor_id, payload.channel);
             self.publish_coefficients(&topic, payload)?;
@@ -287,7 +286,10 @@ mod tests {
         };
         let binary = payload.to_binary();
         assert_eq!(binary.len(), 24);
-        assert_eq!(i32::from_le_bytes([binary[0], binary[1], binary[2], binary[3]]), 100);
+        assert_eq!(
+            i32::from_le_bytes([binary[0], binary[1], binary[2], binary[3]]),
+            100
+        );
     }
 
     #[test]

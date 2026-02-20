@@ -24,8 +24,8 @@ pub struct CoefficientStore {
 impl CoefficientStore {
     /// Open or create coefficient databases at the given directory.
     pub fn open(dir: &str) -> Result<Self, String> {
-        let slope_db = AliceDB::open(format!("{}/slope", dir))
-            .map_err(|e| format!("slope db: {}", e))?;
+        let slope_db =
+            AliceDB::open(format!("{}/slope", dir)).map_err(|e| format!("slope db: {}", e))?;
         let intercept_db = AliceDB::open(format!("{}/intercept", dir))
             .map_err(|e| format!("intercept db: {}", e))?;
         Ok(Self {
@@ -73,7 +73,8 @@ impl CoefficientStore {
     /// Record a batch of coefficient pairs.
     pub fn record_batch(&self, entries: &[(u64, f32, f32)]) {
         let slopes: Vec<(i64, f32)> = entries.iter().map(|&(ts, s, _)| (ts as i64, s)).collect();
-        let intercepts: Vec<(i64, f32)> = entries.iter().map(|&(ts, _, i)| (ts as i64, i)).collect();
+        let intercepts: Vec<(i64, f32)> =
+            entries.iter().map(|&(ts, _, i)| (ts as i64, i)).collect();
         let _ = self.slope_db.put_batch(&slopes);
         let _ = self.intercept_db.put_batch(&intercepts);
     }

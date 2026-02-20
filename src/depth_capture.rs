@@ -61,7 +61,7 @@ pub struct CameraConfig {
 impl Default for CameraConfig {
     fn default() -> Self {
         Self {
-            voxel_size: 0.01,  // 1cm voxels
+            voxel_size: 0.01, // 1cm voxels
             max_depth: 3.0,
             min_depth: 0.1,
             max_points: MAX_POINTS_PER_FRAME,
@@ -205,12 +205,15 @@ impl DepthCameraDriver for DolphinD5Driver {
         let context = rusb::Context::new()
             .map_err(|e| CaptureError::UsbError(format!("USB context: {}", e)))?;
 
-        let device = context.devices()
+        let device = context
+            .devices()
             .map_err(|e| CaptureError::UsbError(format!("USB devices: {}", e)))?
             .iter()
             .find(|d| {
                 d.device_descriptor()
-                    .map(|desc| desc.vendor_id() == DOLPHIN_D5_VID && desc.product_id() == DOLPHIN_D5_PID)
+                    .map(|desc| {
+                        desc.vendor_id() == DOLPHIN_D5_VID && desc.product_id() == DOLPHIN_D5_PID
+                    })
                     .unwrap_or(false)
             });
 
@@ -234,7 +237,8 @@ impl DepthCameraDriver for DolphinD5Driver {
         //
         // For now, return an empty frame structure that the real USB driver
         // would fill with data from the device's depth endpoint.
-        let timestamp_ms = self.start_time
+        let timestamp_ms = self
+            .start_time
             .map(|t| t.elapsed().as_millis() as u64)
             .unwrap_or(0);
 
@@ -254,8 +258,7 @@ impl DepthCameraDriver for DolphinD5Driver {
     fn info(&self) -> String {
         format!(
             "Dolphin D5 Lite (VID:{:04X} PID:{:04X}) voxel={}m max_depth={}m",
-            DOLPHIN_D5_VID, DOLPHIN_D5_PID,
-            self.config.voxel_size, self.config.max_depth
+            DOLPHIN_D5_VID, DOLPHIN_D5_PID, self.config.voxel_size, self.config.max_depth
         )
     }
 }
@@ -267,10 +270,30 @@ mod tests {
     #[test]
     fn test_voxel_downsample() {
         let points = vec![
-            PointNormal { x: 0.001, y: 0.001, z: 0.001, ..Default::default() },
-            PointNormal { x: 0.002, y: 0.002, z: 0.002, ..Default::default() },
-            PointNormal { x: 0.1, y: 0.1, z: 0.1, ..Default::default() },
-            PointNormal { x: 0.101, y: 0.101, z: 0.101, ..Default::default() },
+            PointNormal {
+                x: 0.001,
+                y: 0.001,
+                z: 0.001,
+                ..Default::default()
+            },
+            PointNormal {
+                x: 0.002,
+                y: 0.002,
+                z: 0.002,
+                ..Default::default()
+            },
+            PointNormal {
+                x: 0.1,
+                y: 0.1,
+                z: 0.1,
+                ..Default::default()
+            },
+            PointNormal {
+                x: 0.101,
+                y: 0.101,
+                z: 0.101,
+                ..Default::default()
+            },
         ];
 
         let result = DolphinD5Driver::voxel_downsample(&points, 0.01);
@@ -281,9 +304,24 @@ mod tests {
     #[test]
     fn test_estimate_normals() {
         let mut points = vec![
-            PointNormal { x: 0.0, y: 0.0, z: 0.0, ..Default::default() },
-            PointNormal { x: 1.0, y: 0.0, z: 0.0, ..Default::default() },
-            PointNormal { x: 0.0, y: 1.0, z: 0.0, ..Default::default() },
+            PointNormal {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                ..Default::default()
+            },
+            PointNormal {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                ..Default::default()
+            },
+            PointNormal {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+                ..Default::default()
+            },
         ];
 
         DolphinD5Driver::estimate_normals(&mut points, 2);

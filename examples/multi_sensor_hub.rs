@@ -13,7 +13,7 @@
 //!
 //! Author: Moroya Sakamoto
 
-use alice_edge::sensors::{SimulatedSensor, SensorDriver};
+use alice_edge::sensors::{SensorDriver, SimulatedSensor};
 use alice_edge::{fit_linear_fixed, should_use_linear};
 use std::time::Instant;
 
@@ -25,21 +25,23 @@ impl SensorHub {
     fn new() -> Self {
         Self {
             sensors: vec![
-                ("bme280-temp", SimulatedSensor::new(2500, 5)),   // 25.00°C ±0.05
-                ("bme280-humi", SimulatedSensor::new(6000, 20)),  // 60.00% ±0.20
+                ("bme280-temp", SimulatedSensor::new(2500, 5)), // 25.00°C ±0.05
+                ("bme280-humi", SimulatedSensor::new(6000, 20)), // 60.00% ±0.20
                 ("bme280-pres", SimulatedSensor::new(101325, 50)), // 1013.25 hPa ±0.50
-                ("dht22-temp", SimulatedSensor::new(2200, 10)),   // 22.00°C ±0.10
-                ("dht22-humi", SimulatedSensor::new(4500, 30)),   // 45.00% ±0.30
-                ("adxl345-x", SimulatedSensor::new(0, 100)),     // 0g ±1.00 accel
-                ("adxl345-y", SimulatedSensor::new(0, 100)),     // 0g ±1.00
-                ("adxl345-z", SimulatedSensor::new(9800, 50)),    // ~1g ±0.50
+                ("dht22-temp", SimulatedSensor::new(2200, 10)), // 22.00°C ±0.10
+                ("dht22-humi", SimulatedSensor::new(4500, 30)), // 45.00% ±0.30
+                ("adxl345-x", SimulatedSensor::new(0, 100)),    // 0g ±1.00 accel
+                ("adxl345-y", SimulatedSensor::new(0, 100)),    // 0g ±1.00
+                ("adxl345-z", SimulatedSensor::new(9800, 50)),  // ~1g ±0.50
             ],
         }
     }
 
     fn init_all(&mut self) {
         for (name, sensor) in &mut self.sensors {
-            sensor.init().unwrap_or_else(|e| panic!("Failed to init {}: {:?}", name, e));
+            sensor
+                .init()
+                .unwrap_or_else(|e| panic!("Failed to init {}: {:?}", name, e));
         }
     }
 
@@ -53,7 +55,9 @@ impl SensorHub {
 
         for (name, sensor) in &mut self.sensors {
             let start = Instant::now();
-            let batch = sensor.read_samples(samples_per_sensor).expect("read failed");
+            let batch = sensor
+                .read_samples(samples_per_sensor)
+                .expect("read failed");
             let data = &batch.temperature; // Simulated sensor puts all data in temperature
 
             let raw_bytes = data.len() * 4;

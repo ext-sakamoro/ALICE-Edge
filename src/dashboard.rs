@@ -12,7 +12,7 @@
 //!
 //! Author: Moroya Sakamoto
 
-use alice_analytics::{HyperLogLog, CountMinSketch};
+use alice_analytics::{CountMinSketch, HyperLogLog};
 use std::time::Instant;
 
 /// Edge dashboard collecting processing metrics
@@ -158,32 +158,49 @@ impl EdgeDashboard {
         println!("┌─────────────────────────────────────────────────────┐");
         println!("│           ALICE-Edge Dashboard                      │");
         println!("├─────────────────────────────────────────────────────┤");
-        println!("│ Uptime: {:.1}s  |  Models/sec: {:.1}",
-            uptime, self.models_per_sec());
+        println!(
+            "│ Uptime: {:.1}s  |  Models/sec: {:.1}",
+            uptime,
+            self.models_per_sec()
+        );
         println!("│                                                     │");
         println!("│ Sensors:                                            │");
-        println!("│   Unique: ~{:<8} (HyperLogLog estimate)",
-            self.unique_sensors());
-        println!("│   Total models: {:<12}  Samples: {}",
-            self.total_models, self.total_samples);
+        println!(
+            "│   Unique: ~{:<8} (HyperLogLog estimate)",
+            self.unique_sensors()
+        );
+        println!(
+            "│   Total models: {:<12}  Samples: {}",
+            self.total_models, self.total_samples
+        );
         println!("│                                                     │");
         println!("│ Compression:                                        │");
-        println!("│   Avg ratio: {:.1}x",
-            self.avg_compression_ratio());
-        println!("│   Bytes saved: {:<12}  Bytes sent: {}",
+        println!("│   Avg ratio: {:.1}x", self.avg_compression_ratio());
+        println!(
+            "│   Bytes saved: {:<12}  Bytes sent: {}",
             format_bytes(self.total_bytes_saved),
-            format_bytes(self.total_bytes_sent));
-        println!("│   Savings: {:.1}%",
+            format_bytes(self.total_bytes_sent)
+        );
+        println!(
+            "│   Savings: {:.1}%",
             if self.total_bytes_saved + self.total_bytes_sent > 0 {
-                self.total_bytes_saved as f64 /
-                (self.total_bytes_saved + self.total_bytes_sent) as f64 * 100.0
-            } else { 0.0 });
+                self.total_bytes_saved as f64
+                    / (self.total_bytes_saved + self.total_bytes_sent) as f64
+                    * 100.0
+            } else {
+                0.0
+            }
+        );
         println!("│                                                     │");
         println!("│ Latency (us):                                       │");
-        println!("│   p50: {:<8}  p95: {:<8}  p99: {}",
-            latency.p50, latency.p95, latency.p99);
-        println!("│   min: {:<8}  max: {:<8}  avg: {}",
-            latency.min, latency.max, latency.avg);
+        println!(
+            "│   p50: {:<8}  p95: {:<8}  p99: {}",
+            latency.p50, latency.p95, latency.p99
+        );
+        println!(
+            "│   min: {:<8}  max: {:<8}  avg: {}",
+            latency.min, latency.max, latency.avg
+        );
         println!("└─────────────────────────────────────────────────────┘");
     }
 

@@ -15,9 +15,9 @@
 
 #[cfg(feature = "sensors-hw")]
 use alice_edge::sensors::Bme280Sensor;
+use alice_edge::sensors::SensorDriver;
 #[cfg(not(feature = "sensors-hw"))]
 use alice_edge::sensors::SimulatedSensor;
-use alice_edge::sensors::SensorDriver;
 use alice_edge::{fit_linear_fixed, Q16_SHIFT};
 
 fn main() {
@@ -52,7 +52,9 @@ fn main() {
             "Temperature: slope={:.4} intercept={:.2} | {} → {} bytes ({}x)",
             t_slope as f64 / (1 << Q16_SHIFT) as f64,
             t_intercept as f64 / (1 << Q16_SHIFT) as f64,
-            raw_bytes, compressed_bytes, raw_bytes / compressed_bytes
+            raw_bytes,
+            compressed_bytes,
+            raw_bytes / compressed_bytes
         );
 
         // Humidity channel (if available)
@@ -62,7 +64,9 @@ fn main() {
                 "Humidity:    slope={:.4} intercept={:.2} | {} → {} bytes ({}x)",
                 h_slope as f64 / (1 << Q16_SHIFT) as f64,
                 h_intercept as f64 / (1 << Q16_SHIFT) as f64,
-                raw_bytes, compressed_bytes, raw_bytes / compressed_bytes
+                raw_bytes,
+                compressed_bytes,
+                raw_bytes / compressed_bytes
             );
         }
 
@@ -73,7 +77,9 @@ fn main() {
                 "Pressure:    slope={:.4} intercept={:.2} | {} → {} bytes ({}x)",
                 p_slope as f64 / (1 << Q16_SHIFT) as f64,
                 p_intercept as f64 / (1 << Q16_SHIFT) as f64,
-                raw_bytes, compressed_bytes, raw_bytes / compressed_bytes
+                raw_bytes,
+                compressed_bytes,
+                raw_bytes / compressed_bytes
             );
         }
     }

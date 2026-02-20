@@ -15,8 +15,8 @@
 
 #[cfg(all(feature = "sensors", feature = "mqtt"))]
 fn main() {
-    use alice_edge::sensors::{SimulatedSensor, SensorDriver};
-    use alice_edge::mqtt_bridge::{MqttConfig, MqttPublisher, CoefficientPayload};
+    use alice_edge::mqtt_bridge::{CoefficientPayload, MqttConfig, MqttPublisher};
+    use alice_edge::sensors::{SensorDriver, SimulatedSensor};
     use alice_edge::{fit_linear_fixed, Q16_SHIFT};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -26,12 +26,13 @@ fn main() {
         Ok(e) => e,
         Err(_) => {
             eprintln!("Set AWS_IOT_ENDPOINT environment variable");
-            eprintln!("Example: export AWS_IOT_ENDPOINT=\"abc123-ats.iot.ap-northeast-1.amazonaws.com\"");
+            eprintln!(
+                "Example: export AWS_IOT_ENDPOINT=\"abc123-ats.iot.ap-northeast-1.amazonaws.com\""
+            );
             return;
         }
     };
-    let client_id = std::env::var("AWS_IOT_CLIENT_ID")
-        .unwrap_or_else(|_| "alice-edge-pi5".into());
+    let client_id = std::env::var("AWS_IOT_CLIENT_ID").unwrap_or_else(|_| "alice-edge-pi5".into());
 
     let config = MqttConfig::aws_iot(&endpoint, &client_id);
     println!("Endpoint: {}:{}", config.host, config.port);

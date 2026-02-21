@@ -54,6 +54,9 @@ jobs:
             echo "" > "../$dir/src/lib.rs"
           done
 
+      - name: Build (no default features) [T0]
+        run: cargo build --lib --no-default-features
+
       - name: Build (std) [T1]
         run: cargo build --lib --features "std"
 

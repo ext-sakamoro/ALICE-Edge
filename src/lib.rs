@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(warnings)]
 //! ALICE-Edge: Embedded Model Generator (Ultimate Optimization)
@@ -127,7 +128,9 @@ pub fn fit_linear_fixed(data: &[i32]) -> (i32, i32) {
         if n == 1 {
             // SAFETY: n==1 confirmed
             let val = unsafe { *data.get_unchecked(0) };
-            return (0, val << Q16_SHIFT);
+            // Use wrapping_shl: values outside Q16.16 representable range
+            // (abs > 32767) are expected to wrap, matching the Q16.16 contract.
+            return (0, val.wrapping_shl(Q16_SHIFT as u32));
         }
         return (0, 0);
     }
@@ -198,9 +201,12 @@ pub fn fit_linear_fixed(data: &[i32]) -> (i32, i32) {
     // D = n²(n²-1)/12  (mathematical identity)
     // This eliminates sum_xx entirely!
     //
-    // Note: n⁴ overflow at n > 55,000, safe for embedded buffers (< 1024)
-    let n_sq = n64 * n64;
-    let denominator = (n_sq * (n_sq - 1)) / 12;
+    // Use i128 for the intermediate n⁴ product to avoid overflow when
+    // n > 55,000 (n² overflows i64 at n > ~3B, but n_sq * (n_sq-1) can
+    // still be large; i128 keeps correctness for arbitrarily large slices
+    // such as those passed from the Python binding).
+    let n_sq = n64 as i128 * n64 as i128;
+    let denominator = ((n_sq * (n_sq - 1)) / 12) as i64;
 
     if denominator == 0 {
         return (0, (sum_y / n64) as i32);

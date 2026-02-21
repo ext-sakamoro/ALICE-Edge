@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 //! Raspberry Pi GPIO/I2C/SPI/UART sensor drivers for ALICE-Edge
 //!
 //! Provides traits and drivers for common IoT sensors on Raspberry Pi 5.

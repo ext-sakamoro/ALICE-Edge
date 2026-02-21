@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 //! SDF Compression for Point Clouds
 //!
 //! Two-stage compression pipeline:
@@ -162,7 +163,9 @@ pub fn compress_point_cloud(
             stats.primitive_inliers = result.inlier_count;
             stats.output_bytes = asdf_data.len() + std::mem::size_of::<SerializedPrimitive>();
             stats.compression_ratio = if stats.output_bytes > 0 {
-                (points.len() * 12) as f32 / stats.output_bytes as f32
+                // Cast to u64 before multiplying to avoid overflow on 32-bit targets
+                // where usize is 32 bits and points.len() * 12 could wrap.
+                (points.len() as u64).saturating_mul(12) as f32 / stats.output_bytes as f32
             } else {
                 0.0
             };
@@ -203,7 +206,9 @@ pub fn compress_point_cloud(
     stats.residual_points = points.len();
     stats.output_bytes = svo_data.len();
     stats.compression_ratio = if stats.output_bytes > 0 {
-        (points.len() * 12) as f32 / stats.output_bytes as f32
+        // Cast to u64 before multiplying to avoid overflow on 32-bit targets
+        // where usize is 32 bits and points.len() * 12 could wrap.
+        (points.len() as u64).saturating_mul(12) as f32 / stats.output_bytes as f32
     } else {
         0.0
     };

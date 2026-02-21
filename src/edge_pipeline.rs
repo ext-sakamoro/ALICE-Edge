@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 //! Edge Pipeline Orchestrator
 //!
 //! Integrates capture → compress → classify → stream into a unified

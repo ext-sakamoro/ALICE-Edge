@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 //! 1.58-bit Ternary Object Classifier
 //!
 //! Ultra-lightweight MLP classifier using ALICE-ML ternary inference.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 //! ALICE-Analytics dashboard for ALICE-Edge
 //!
 //! Provides real-time monitoring of edge sensor processing using
@@ -82,9 +83,11 @@ impl EdgeDashboard {
         compressed_bytes: usize,
         latency_us: u64,
     ) {
-        let raw_bytes = raw_samples * 4; // i32 = 4 bytes
+        // Use saturating_mul to prevent overflow on 32-bit targets when raw_samples is large.
+        let raw_bytes = raw_samples.saturating_mul(4); // i32 = 4 bytes
         self.total_samples += raw_samples as u64;
-        self.total_bytes_saved += (raw_bytes - compressed_bytes) as u64;
+        // Use saturating_sub to avoid underflow when compressed_bytes > raw_bytes.
+        self.total_bytes_saved += raw_bytes.saturating_sub(compressed_bytes) as u64;
         self.total_bytes_sent += compressed_bytes as u64;
         self.total_models += 1;
 
@@ -117,10 +120,12 @@ impl EdgeDashboard {
         sorted.sort_unstable();
         let n = sorted.len();
 
+        // Divide before multiplying to prevent overflow when n is large on
+        // platforms where usize is 32 bits (e.g. Cortex-M with std feature).
         LatencyStats {
-            p50: sorted[n * 50 / 100],
-            p95: sorted[n * 95 / 100],
-            p99: sorted[n.saturating_sub(1) * 99 / 100],
+            p50: sorted[n / 2],
+            p95: sorted[n - (n / 20).max(1)],
+            p99: sorted[n - (n / 100).max(1)],
             min: sorted[0],
             max: sorted[n - 1],
             avg: sorted.iter().sum::<u64>() / n as u64,

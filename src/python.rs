@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 //! PyO3 Python Bindings for ALICE-Edge
 //!
 //! Embedded Model Generator for IoT/Raspberry Pi.

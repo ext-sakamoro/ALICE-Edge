@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 //! Depth Camera Driver for Dolphin D5 Lite 3D Scanner
 //!
 //! USB 3.0 depth stream capture with voxel downsampling and normal estimation.

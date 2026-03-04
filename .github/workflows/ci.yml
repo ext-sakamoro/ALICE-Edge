@@ -54,8 +54,9 @@ jobs:
             echo "" > "../$dir/src/lib.rs"
           done
 
-      - name: Build (no default features) [T0]
-        run: cargo build --lib --no-default-features
+      - name: Check (no default features) [T0]
+        run: cargo check --lib --no-default-features
+        continue-on-error: true
 
       - name: Build (std) [T1]
         run: cargo build --lib --features "std"
@@ -78,6 +79,30 @@ jobs:
       - name: Build (edge-pipeline) [T2]
         run: cargo build --lib --features "edge-pipeline"
         continue-on-error: true
+
+      - name: Test (edge-pipeline) [T2]
+        run: cargo test --lib --features "edge-pipeline"
+        continue-on-error: true
+
+      - name: Test (std + ml) [T2]
+        run: cargo test --lib --features "std,ml"
+
+      - name: Doc tests
+        run: cargo test --doc --features "std"
+
+  no-std-cross:
+    name: no_std cross-compile (thumbv7em)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain + target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabihf
+
+      - name: Build no_std (thumbv7em-none-eabihf)
+        run: cargo build --lib --target thumbv7em-none-eabihf --no-default-features
 
   clippy:
     name: Clippy

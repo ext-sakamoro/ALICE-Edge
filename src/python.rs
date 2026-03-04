@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-//! PyO3 Python Bindings for ALICE-Edge
+//! `PyO3` Python Bindings for ALICE-Edge
 //!
 //! Embedded Model Generator for IoT/Raspberry Pi.
-//! Fixed-point least squares fitting exposed to Python + NumPy.
+//! Fixed-point least squares fitting exposed to Python + `NumPy`.
 
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
@@ -18,6 +18,7 @@ use pyo3::prelude::*;
 /// Returns (slope, intercept) in Q16.16 format.
 /// Input: numpy array of int32 sensor readings.
 #[pyfunction]
+#[allow(clippy::needless_pass_by_value)]
 fn fit_linear<'py>(py: Python<'py>, data: PyReadonlyArray1<'py, i32>) -> PyResult<(i32, i32)> {
     let slice = data
         .as_slice()
@@ -27,6 +28,7 @@ fn fit_linear<'py>(py: Python<'py>, data: PyReadonlyArray1<'py, i32>) -> PyResul
 
 /// Fit a constant model (mean) in Q16.16 format.
 #[pyfunction]
+#[allow(clippy::needless_pass_by_value)]
 fn fit_constant<'py>(py: Python<'py>, data: PyReadonlyArray1<'py, i32>) -> PyResult<i32> {
     let slice = data
         .as_slice()
@@ -42,6 +44,7 @@ fn evaluate_linear(slope: i32, intercept: i32, x: i32) -> i32 {
 
 /// Compute residual error (sum of squared differences).
 #[pyfunction]
+#[allow(clippy::needless_pass_by_value)]
 fn compute_error<'py>(
     py: Python<'py>,
     data: PyReadonlyArray1<'py, i32>,
@@ -56,6 +59,7 @@ fn compute_error<'py>(
 
 /// Model selection: returns True if linear model is significantly better.
 #[pyfunction]
+#[allow(clippy::needless_pass_by_value)]
 fn should_use_linear<'py>(py: Python<'py>, data: PyReadonlyArray1<'py, i32>) -> PyResult<bool> {
     let slice = data
         .as_slice()
@@ -69,9 +73,10 @@ fn should_use_linear<'py>(py: Python<'py>, data: PyReadonlyArray1<'py, i32>) -> 
 
 /// Fit linear models for multiple sensor streams at once.
 ///
-/// Input: (num_streams, num_samples) int32 array
-/// Output: (num_streams, 2) int32 array — columns are [slope, intercept] in Q16.16
+/// Input: (`num_streams`, `num_samples`) int32 array
+/// Output: (`num_streams`, 2) int32 array — columns are [slope, intercept] in Q16.16
 #[pyfunction]
+#[allow(clippy::needless_pass_by_value)]
 fn fit_linear_batch<'py>(
     py: Python<'py>,
     streams: PyReadonlyArray2<'py, i32>,
@@ -101,10 +106,11 @@ fn fit_linear_batch<'py>(
 
 /// Evaluate linear models for multiple streams at multiple x positions.
 ///
-/// coeffs: (num_streams, 2) — [slope, intercept] per stream
-/// x_values: (num_points,) — x positions to evaluate
-/// Output: (num_streams, num_points) — predicted y in Q16.16
+/// coeffs: (`num_streams`, 2) — [slope, intercept] per stream
+/// `x_values`: (`num_points`,) — x positions to evaluate
+/// Output: (`num_streams`, `num_points`) — predicted y in Q16.16
 #[pyfunction]
+#[allow(clippy::needless_pass_by_value)]
 fn evaluate_linear_batch<'py>(
     py: Python<'py>,
     coeffs: PyReadonlyArray2<'py, i32>,
@@ -162,6 +168,7 @@ fn q16_to_int(q: i32) -> i32 {
 
 /// Batch convert Q16.16 array to float array.
 #[pyfunction]
+#[allow(clippy::needless_pass_by_value)]
 fn q16_to_f32_batch<'py>(
     py: Python<'py>,
     values: PyReadonlyArray1<'py, i32>,
@@ -170,7 +177,11 @@ fn q16_to_f32_batch<'py>(
         .as_slice()
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let inv_scale = 1.0 / crate::Q16_ONE as f32;
-    let result = py.detach(|| s.iter().map(|&q| q as f32 * inv_scale).collect::<Vec<f32>>());
+    let result = py.detach(|| {
+        s.iter()
+            .map(|&q| q as f32 * inv_scale)
+            .collect::<Vec<f32>>()
+    });
     Ok(result.into_pyarray(py))
 }
 
@@ -178,6 +189,9 @@ fn q16_to_f32_batch<'py>(
 // Module
 // ============================================================================
 
+/// # Errors
+///
+/// Returns `PyResult::Err` if any function or constant fails to register with the Python module.
 #[pymodule]
 pub fn alice_edge(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Core
@@ -202,4 +216,73 @@ pub fn alice_edge(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("Q16_ONE", crate::Q16_ONE)?;
 
     Ok(())
+}
+
+// PyO3テストは Python ランタイムが必要なため、ラップ先のRustコアロジックを
+// 直接テストする。PyO3関数は薄いラッパーなので、コア関数の正確性を確認。
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_fit_linear_core() {
+        let data = [100, 200, 300, 400, 500];
+        let (slope, intercept) = crate::fit_linear_fixed(&data);
+        assert_ne!(slope, 0);
+        assert_ne!(intercept, 0);
+    }
+
+    #[test]
+    fn test_fit_constant_core() {
+        let data = [500, 500, 500, 500];
+        let mean = crate::fit_constant_fixed(&data);
+        assert_eq!(crate::q16_to_int(mean), 500);
+    }
+
+    #[test]
+    fn test_evaluate_linear_core() {
+        let val = crate::evaluate_linear_fixed(crate::int_to_q16(10), crate::int_to_q16(5), 3);
+        assert_eq!(crate::q16_to_int(val), 35);
+    }
+
+    #[test]
+    fn test_compute_error_core() {
+        let data = [100, 200, 300, 400, 500];
+        let (slope, intercept) = crate::fit_linear_fixed(&data);
+        let err = crate::compute_residual_error(&data, slope, intercept);
+        assert!(err < 100); // 完全な線形データは残差ほぼ0
+    }
+
+    #[test]
+    fn test_should_use_linear_core() {
+        let rising = [100, 200, 300, 400, 500];
+        let constant = [500, 500, 500, 500, 500];
+        assert!(crate::should_use_linear(&rising));
+        assert!(!crate::should_use_linear(&constant));
+    }
+
+    #[test]
+    fn test_q16_conversion_roundtrip() {
+        for val in [-100, -1, 0, 1, 42, 1000] {
+            assert_eq!(crate::q16_to_int(crate::int_to_q16(val)), val);
+        }
+    }
+
+    #[test]
+    fn test_q16_to_f32_accuracy() {
+        let q = crate::int_to_q16(10);
+        let f = crate::q16_to_f32(q);
+        assert!((f - 10.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_batch_fit_logic() {
+        // バッチAPIのコアロジック: 複数ストリームを順次フィット
+        let streams: Vec<Vec<i32>> = vec![vec![100, 200, 300], vec![500, 500, 500]];
+        let mut results = Vec::new();
+        for stream in &streams {
+            let (s, i) = crate::fit_linear_fixed(stream);
+            results.push((s, i));
+        }
+        assert_ne!(results[0].0, 0); // 上昇データ: slope != 0
+        assert_eq!(crate::q16_to_int(results[1].0), 0); // 定数データ: slope ≈ 0
+    }
 }

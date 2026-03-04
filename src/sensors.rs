@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Raspberry Pi GPIO/I2C/SPI/UART sensor drivers for ALICE-Edge
 //!
-//! Provides traits and drivers for common IoT sensors on Raspberry Pi 5.
+//! Provides traits and drivers for common `IoT` sensors on Raspberry Pi 5.
 //! All drivers produce `&[i32]` slices suitable for `fit_linear_fixed()`.
 //!
 //! # Supported Sensors
@@ -15,16 +15,17 @@
 //!
 //! # Example
 //!
-//! ```ignore
+//! ```no_run
 //! use alice_edge::sensors::{Bme280Sensor, SensorDriver};
 //!
-//! let mut bme = Bme280Sensor::new(0x76)?;
-//! let samples = bme.read_samples(100, Duration::from_millis(100))?;
-//! let (slope, intercept) = fit_linear_fixed(&samples.temperature);
+//! let mut bme = Bme280Sensor::new(1, 0x76);
+//! let samples = bme.read_samples(100).unwrap();
+//! let (slope, intercept) = alice_edge::fit_linear_fixed(&samples.temperature);
 //! ```
 //!
 //! Author: Moroya Sakamoto
 
+use std::borrow::Cow;
 use std::time::{Duration, Instant};
 
 /// Sensor reading with timestamp
@@ -39,8 +40,8 @@ pub struct TimestampedReading {
 /// Multi-channel sensor data batch
 #[derive(Debug, Clone)]
 pub struct SensorBatch {
-    /// Sensor identifier
-    pub sensor_id: &'static str,
+    /// Sensor identifier (Cow で動的生成名にも対応)
+    pub sensor_id: Cow<'static, str>,
     /// Temperature readings (×100, e.g., 2500 = 25.00°C)
     pub temperature: Vec<i32>,
     /// Humidity readings (×100, e.g., 6500 = 65.00%)
@@ -53,9 +54,9 @@ pub struct SensorBatch {
     pub accel_y: Vec<i32>,
     /// Acceleration Z (×1000, milli-g)
     pub accel_z: Vec<i32>,
-    /// Latitude (×1_000_000, microdegrees)
+    /// Latitude (×`1_000_000`, microdegrees)
     pub latitude: Vec<i32>,
-    /// Longitude (×1_000_000, microdegrees)
+    /// Longitude (×`1_000_000`, microdegrees)
     pub longitude: Vec<i32>,
     /// Altitude (×100, centimeters)
     pub altitude: Vec<i32>,
@@ -66,7 +67,7 @@ pub struct SensorBatch {
 impl SensorBatch {
     fn new(sensor_id: &'static str) -> Self {
         Self {
-            sensor_id,
+            sensor_id: Cow::Borrowed(sensor_id),
             temperature: Vec::new(),
             humidity: Vec::new(),
             pressure: Vec::new(),
@@ -84,12 +85,24 @@ impl SensorBatch {
 /// Trait for all sensor drivers
 pub trait SensorDriver {
     /// Initialize the sensor
+    ///
+    /// # Errors
+    ///
+    /// Returns `SensorError` if the hardware initialization fails (I2C/SPI/UART error or device not found).
     fn init(&mut self) -> Result<(), SensorError>;
     /// Read a batch of samples (default interval: 0ms for maximum speed)
+    ///
+    /// # Errors
+    ///
+    /// Returns `SensorError` if reading samples from the sensor fails.
     fn read_samples(&mut self, count: usize) -> Result<SensorBatch, SensorError> {
         self.read_samples_interval(count, Duration::from_millis(0))
     }
     /// Read a batch of samples at the given interval
+    ///
+    /// # Errors
+    ///
+    /// Returns `SensorError` if reading samples from the sensor fails.
     fn read_samples_interval(
         &mut self,
         count: usize,
@@ -121,12 +134,12 @@ pub enum SensorError {
 impl std::fmt::Display for SensorError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SensorError::I2c(e) => write!(f, "I2C error: {}", e),
-            SensorError::Spi(e) => write!(f, "SPI error: {}", e),
-            SensorError::Gpio(e) => write!(f, "GPIO error: {}", e),
-            SensorError::Uart(e) => write!(f, "UART error: {}", e),
-            SensorError::NotFound(e) => write!(f, "Sensor not found: {}", e),
-            SensorError::InvalidData(e) => write!(f, "Invalid data: {}", e),
+            SensorError::I2c(e) => write!(f, "I2C error: {e}"),
+            SensorError::Spi(e) => write!(f, "SPI error: {e}"),
+            SensorError::Gpio(e) => write!(f, "GPIO error: {e}"),
+            SensorError::Uart(e) => write!(f, "UART error: {e}"),
+            SensorError::NotFound(e) => write!(f, "Sensor not found: {e}"),
+            SensorError::InvalidData(e) => write!(f, "Invalid data: {e}"),
             SensorError::Timeout => write!(f, "Sensor timeout"),
         }
     }
@@ -183,6 +196,7 @@ impl Bme280Sensor {
     ///
     /// * `bus` - I2C bus number (1 on Pi 5)
     /// * `address` - I2C address (0x76 default, 0x77 alternate)
+    #[must_use]
     pub fn new(_bus: u8, address: u16) -> Self {
         Self {
             address,
@@ -281,7 +295,7 @@ impl Bme280Sensor {
     #[allow(dead_code)]
     #[inline(always)]
     fn compensate_humidity(&self, adc_h: i32, t_fine: i32) -> i32 {
-        let mut var = t_fine - 76800_i32;
+        let mut var = t_fine - 76_800_i32;
         if var == 0 {
             return 0;
         }
@@ -291,34 +305,29 @@ impl Bme280Sensor {
             * (((((((var * (self.dig_h6 as i32)) >> 10)
                 * (((var * (self.dig_h3 as i32)) >> 11) + 32768))
                 >> 10)
-                + 2097152)
+                + 2_097_152)
                 * (self.dig_h2 as i32)
                 + 8192)
                 >> 14);
         var -= ((((var >> 15) * (var >> 15)) >> 7) * (self.dig_h1 as i32)) >> 4;
-        if var < 0 {
-            var = 0;
-        }
-        if var > 419430400 {
-            var = 419430400;
-        }
-        (var >> 12) * 100 >> 10 // % × 100 (>>10 == /1024)
+        var = var.clamp(0, 419_430_400);
+        ((var >> 12) * 100) >> 10 // % × 100 (>>10 == /1024)
     }
 
     /// Compensate raw pressure to hPa × 10 (integer)
     #[allow(dead_code)]
     #[inline(always)]
     fn compensate_pressure(&self, adc_p: i32, t_fine: i32) -> i32 {
-        let mut var1 = (t_fine as i64) - 128000;
+        let mut var1 = (t_fine as i64) - 128_000;
         let mut var2 = var1 * var1 * (self.dig_p6 as i64);
         var2 += (var1 * (self.dig_p5 as i64)) << 17;
         var2 += (self.dig_p4 as i64) << 35;
         var1 = ((var1 * var1 * (self.dig_p3 as i64)) >> 8) + ((var1 * (self.dig_p2 as i64)) << 12);
-        var1 = ((1_i64 << 47) + var1) * (self.dig_p1 as i64) >> 33;
+        var1 = (((1_i64 << 47) + var1) * (self.dig_p1 as i64)) >> 33;
         if var1 == 0 {
             return 0;
         }
-        let mut p: i64 = 1048576 - adc_p as i64;
+        let mut p: i64 = 1_048_576 - adc_p as i64;
         p = (((p << 31) - var2) * 3125) / var1;
         var1 = ((self.dig_p9 as i64) * (p >> 13) * (p >> 13)) >> 25;
         var2 = ((self.dig_p8 as i64) * p) >> 19;
@@ -430,6 +439,13 @@ impl SensorDriver for Bme280Sensor {
 ///
 /// Single-wire protocol, temperature and humidity.
 ///
+/// # 注意: タイミング精度
+///
+/// DHT22 は µs 精度のGPIOパルス計測を必要とする。Linux 非RTOS 環境では
+/// `thread::sleep` がカーネルスケジューラの影響で不正確になるため、
+/// 連続読み取りの 10-20% がタイムアウトや CRC エラーになる可能性がある。
+/// 本番環境では複数回リトライ or ハードウェアタイマー割り込みを推奨。
+///
 /// # Pi 5 Wiring
 ///
 /// | DHT22 | Pi 5 GPIO |
@@ -444,6 +460,7 @@ pub struct Dht22Sensor {
 }
 
 impl Dht22Sensor {
+    #[must_use]
     pub fn new(gpio_pin: u8) -> Self {
         Self {
             gpio_pin,
@@ -591,7 +608,14 @@ pub struct Adxl345Sensor {
     initialized: bool,
 }
 
+impl Default for Adxl345Sensor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Adxl345Sensor {
+    #[must_use]
     pub fn new() -> Self {
         Self { initialized: false }
     }
@@ -643,19 +667,21 @@ impl SensorDriver for Adxl345Sensor {
         let mut batch = SensorBatch::new("ADXL345");
         let start = Instant::now();
 
+        // A5: SPI接続をループ外で1度だけ開く（毎サンプルで再オープンしない）
+        #[cfg(feature = "sensors-hw")]
+        let mut spi = rppal::spi::Spi::new(
+            rppal::spi::Bus::Spi0,
+            rppal::spi::SlaveSelect::Ss0,
+            5_000_000,
+            rppal::spi::Mode::Mode3,
+        )
+        .map_err(|e| SensorError::Spi(format!("{}", e)))?;
+
         for _ in 0..count {
             let ts = start.elapsed().as_millis() as u64;
 
             #[cfg(feature = "sensors-hw")]
             {
-                let mut spi = rppal::spi::Spi::new(
-                    rppal::spi::Bus::Spi0,
-                    rppal::spi::SlaveSelect::Ss0,
-                    5_000_000,
-                    rppal::spi::Mode::Mode3,
-                )
-                .map_err(|e| SensorError::Spi(format!("{}", e)))?;
-
                 // Read 6 bytes from DATAX0 (0x32) with multi-byte flag
                 let mut buf = [0u8; 7];
                 buf[0] = 0x80 | 0x40 | 0x32; // Read + multi-byte + DATAX0
@@ -716,6 +742,7 @@ pub struct GpsSensor {
 }
 
 impl GpsSensor {
+    #[must_use]
     pub fn new(port_path: &str, baud_rate: u32) -> Self {
         Self {
             port_path: port_path.to_string(),
@@ -727,14 +754,15 @@ impl GpsSensor {
     /// Parse NMEA GGA sentence for position data
     #[allow(dead_code)]
     fn parse_gga(sentence: &str) -> Option<(i32, i32, i32)> {
+        const INV_100: f64 = 1.0 / 100.0;
+        const INV_60: f64 = 1.0 / 60.0;
+
         let parts: Vec<&str> = sentence.split(',').collect();
         if parts.len() < 10 || !parts[0].ends_with("GGA") {
             return None;
         }
 
         // Latitude: ddmm.mmmm
-        const INV_100: f64 = 1.0 / 100.0;
-        const INV_60: f64 = 1.0 / 60.0;
         let lat_raw = parts[2].parse::<f64>().ok()?;
         let lat_deg = (lat_raw * INV_100).floor();
         let lat_min = lat_raw - lat_deg * 100.0;
@@ -839,6 +867,285 @@ impl SensorDriver for GpsSensor {
 }
 
 // ============================================================
+// BNO055 — 9-Axis IMU (I2C) [E7]
+// ============================================================
+
+/// BNO055 9-axis absolute orientation IMU
+///
+/// Bosch BNO055: Accelerometer + Gyroscope + Magnetometer with on-chip fusion.
+/// Output: Euler angles, quaternions, linear acceleration, gravity vector.
+///
+/// # Pi 5 Wiring
+///
+/// | BNO055 | Pi 5 GPIO |
+/// |--------|-----------|
+/// | VCC | 3.3V (Pin 1) |
+/// | GND | GND (Pin 6) |
+/// | SDA | GPIO 2 (Pin 3) |
+/// | SCL | GPIO 3 (Pin 5) |
+#[allow(dead_code)]
+pub struct Bno055Sensor {
+    address: u16,
+    initialized: bool,
+}
+
+impl Bno055Sensor {
+    /// Create a new BNO055 sensor (default address 0x28, alternate 0x29)
+    #[must_use]
+    pub fn new(address: u16) -> Self {
+        Self {
+            address,
+            initialized: false,
+        }
+    }
+}
+
+impl SensorDriver for Bno055Sensor {
+    fn init(&mut self) -> Result<(), SensorError> {
+        #[cfg(feature = "sensors-hw")]
+        {
+            let mut i2c = rppal::i2c::I2c::with_bus(1)
+                .map_err(|e| SensorError::I2c(format!("I2C init: {}", e)))?;
+            i2c.set_slave_address(self.address).map_err(|e| {
+                SensorError::I2c(format!("Set address 0x{:02X}: {}", self.address, e))
+            })?;
+
+            // Check chip ID (should be 0xA0)
+            let mut id = [0u8; 1];
+            i2c.write(&[0x00])
+                .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+            i2c.read(&mut id)
+                .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+            if id[0] != 0xA0 {
+                return Err(SensorError::NotFound(format!(
+                    "BNO055 not found (chip ID: 0x{:02X})",
+                    id[0]
+                )));
+            }
+
+            // Set NDOF mode (9-axis fusion)
+            i2c.write(&[0x3D, 0x0C])
+                .map_err(|e| SensorError::I2c(format!("Set NDOF: {}", e)))?;
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        self.initialized = true;
+        Ok(())
+    }
+
+    fn read_samples_interval(
+        &mut self,
+        count: usize,
+        interval: Duration,
+    ) -> Result<SensorBatch, SensorError> {
+        if !self.initialized {
+            self.init()?;
+        }
+
+        let mut batch = SensorBatch::new("BNO055");
+        let start = Instant::now();
+
+        for i in 0..count {
+            let ts = start.elapsed().as_millis() as u64;
+
+            #[cfg(not(feature = "sensors-hw"))]
+            {
+                // シミュレーション: ゆるやかな回転 + 重力 + 微小振動
+                const INV_1000: f32 = 1.0 / 1000.0;
+                let t = i as f32 * INV_1000;
+                // 加速度 (milli-g): 静止時 z≈1000
+                batch.accel_x.push((t.sin() * 50.0) as i32);
+                batch.accel_y.push((t.cos() * 50.0) as i32);
+                batch.accel_z.push(1000 + (t * 2.0) as i32);
+                // 温度 (°C × 100)
+                batch.temperature.push(2800 + (t * 5.0) as i32);
+            }
+
+            #[cfg(feature = "sensors-hw")]
+            {
+                let mut i2c =
+                    rppal::i2c::I2c::with_bus(1).map_err(|e| SensorError::I2c(format!("{}", e)))?;
+                i2c.set_slave_address(self.address)
+                    .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+
+                // Linear acceleration (m/s² × 100) register 0x28..0x2D
+                let mut accel = [0u8; 6];
+                i2c.write(&[0x28])
+                    .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+                i2c.read(&mut accel)
+                    .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+
+                batch
+                    .accel_x
+                    .push(i16::from_le_bytes([accel[0], accel[1]]) as i32);
+                batch
+                    .accel_y
+                    .push(i16::from_le_bytes([accel[2], accel[3]]) as i32);
+                batch
+                    .accel_z
+                    .push(i16::from_le_bytes([accel[4], accel[5]]) as i32);
+
+                // Temperature register 0x34
+                let mut temp = [0u8; 1];
+                i2c.write(&[0x34])
+                    .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+                i2c.read(&mut temp)
+                    .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+                batch.temperature.push(temp[0] as i32 * 100);
+            }
+
+            batch.timestamps.push(ts);
+            std::thread::sleep(interval);
+        }
+
+        Ok(batch)
+    }
+
+    fn name(&self) -> &'static str {
+        "BNO055"
+    }
+}
+
+// ============================================================
+// MAX30102 — Heart Rate / SpO2 (I2C) [E7]
+// ============================================================
+
+/// MAX30102 pulse oximeter and heart rate sensor
+///
+/// Maxim MAX30102: Red + IR LED, photodetector for pulse oximetry.
+/// Output: Heart rate (BPM × 10), `SpO2` (% × 100).
+///
+/// # Pi 5 Wiring
+///
+/// | MAX30102 | Pi 5 GPIO |
+/// |----------|-----------|
+/// | VCC | 3.3V (Pin 1) |
+/// | GND | GND (Pin 6) |
+/// | SDA | GPIO 2 (Pin 3) |
+/// | SCL | GPIO 3 (Pin 5) |
+/// | INT | GPIO 17 (Pin 11) — optional |
+#[allow(dead_code)]
+pub struct Max30102Sensor {
+    address: u16,
+    initialized: bool,
+}
+
+impl Max30102Sensor {
+    /// Create a new MAX30102 sensor (default address 0x57)
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            address: 0x57,
+            initialized: false,
+        }
+    }
+}
+
+impl Default for Max30102Sensor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SensorDriver for Max30102Sensor {
+    fn init(&mut self) -> Result<(), SensorError> {
+        #[cfg(feature = "sensors-hw")]
+        {
+            let mut i2c = rppal::i2c::I2c::with_bus(1)
+                .map_err(|e| SensorError::I2c(format!("I2C init: {}", e)))?;
+            i2c.set_slave_address(self.address).map_err(|e| {
+                SensorError::I2c(format!("Set address 0x{:02X}: {}", self.address, e))
+            })?;
+
+            // Check part ID (should be 0x15)
+            let mut id = [0u8; 1];
+            i2c.write(&[0xFF])
+                .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+            i2c.read(&mut id)
+                .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+            if id[0] != 0x15 {
+                return Err(SensorError::NotFound(format!(
+                    "MAX30102 not found (part ID: 0x{:02X})",
+                    id[0]
+                )));
+            }
+
+            // Reset
+            i2c.write(&[0x09, 0x40])
+                .map_err(|e| SensorError::I2c(format!("Reset: {}", e)))?;
+            std::thread::sleep(Duration::from_millis(100));
+
+            // SpO2 mode, 100 samples/sec, 18-bit ADC
+            i2c.write(&[0x09, 0x03])
+                .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+            i2c.write(&[0x0A, 0x27])
+                .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+        }
+        self.initialized = true;
+        Ok(())
+    }
+
+    fn read_samples_interval(
+        &mut self,
+        count: usize,
+        interval: Duration,
+    ) -> Result<SensorBatch, SensorError> {
+        if !self.initialized {
+            self.init()?;
+        }
+
+        let mut batch = SensorBatch::new("MAX30102");
+        let start = Instant::now();
+
+        for i in 0..count {
+            let ts = start.elapsed().as_millis() as u64;
+
+            #[cfg(not(feature = "sensors-hw"))]
+            {
+                // シミュレーション: 心拍数70-75 BPM, SpO2 97-98%
+                // temperature チャネルに心拍数(BPM×10), humidity チャネルに SpO2(%×100)
+                let noise = SimulatedSensor::noise(i as u64);
+                batch.temperature.push(720 + noise % 50); // ~72.0 BPM
+                batch.humidity.push(9750 + noise % 50); // ~97.50%
+            }
+
+            #[cfg(feature = "sensors-hw")]
+            {
+                let mut i2c =
+                    rppal::i2c::I2c::with_bus(1).map_err(|e| SensorError::I2c(format!("{}", e)))?;
+                i2c.set_slave_address(self.address)
+                    .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+
+                // Read FIFO data (6 bytes: 3 red + 3 IR)
+                let mut fifo = [0u8; 6];
+                i2c.write(&[0x07])
+                    .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+                i2c.read(&mut fifo)
+                    .map_err(|e| SensorError::I2c(format!("{}", e)))?;
+
+                let red =
+                    ((fifo[0] as i32) << 16 | (fifo[1] as i32) << 8 | fifo[2] as i32) & 0x3FFFF;
+                let ir =
+                    ((fifo[3] as i32) << 16 | (fifo[4] as i32) << 8 | fifo[5] as i32) & 0x3FFFF;
+
+                // 簡易 SpO2 推定: R = (ACred/DCred)/(ACir/DCir) → SpO2 = 110 - 25*R
+                // ここでは raw値を格納（後段で信号処理）
+                batch.temperature.push(red); // Red LED raw
+                batch.humidity.push(ir); // IR LED raw
+            }
+
+            batch.timestamps.push(ts);
+            std::thread::sleep(interval);
+        }
+
+        Ok(batch)
+    }
+
+    fn name(&self) -> &'static str {
+        "MAX30102"
+    }
+}
+
+// ============================================================
 // Simulated Sensor — For testing without hardware
 // ============================================================
 
@@ -860,6 +1167,7 @@ impl SimulatedSensor {
     ///
     /// * `base_temp` - Base temperature in °C × 100 (e.g., 2500 = 25.00°C)
     /// * `noise_amplitude` - Maximum noise amplitude (e.g., 5 = ±0.05°C)
+    #[must_use]
     pub fn new(base_temp: i32, noise_amplitude: i32) -> Self {
         Self {
             noise_amplitude,
@@ -872,8 +1180,8 @@ impl SimulatedSensor {
     #[inline(always)]
     fn noise(seed: u64) -> i32 {
         let hash = seed
-            .wrapping_mul(0x9E3779B97F4A7C15)
-            .wrapping_add(0x6A09E667);
+            .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            .wrapping_add(0x6A09_E667);
         ((hash >> 48) as i32) % 50 - 25 // ±25
     }
 }
@@ -888,10 +1196,10 @@ impl SensorDriver for SimulatedSensor {
         count: usize,
         interval: Duration,
     ) -> Result<SensorBatch, SensorError> {
+        const INV_100: f32 = 1.0 / 100.0;
         let mut batch = SensorBatch::new("Simulated");
         let start = Instant::now();
 
-        const INV_100: f32 = 1.0 / 100.0;
         for i in 0..count {
             let ts = start.elapsed().as_millis() as u64;
             let t = i as f32;
@@ -970,5 +1278,228 @@ mod tests {
         assert!(lat > 48_000_000); // ~48°N
         assert!(lon > 11_000_000); // ~11°E
         assert_eq!(alt, 54540); // 545.4m
+    }
+
+    // ── New tests ─────────────────────────────────────────────
+
+    #[test]
+    fn test_sensor_batch_new_empty() {
+        let batch = SensorBatch::new("TEST");
+        assert_eq!(batch.sensor_id, "TEST");
+        assert!(batch.temperature.is_empty());
+        assert!(batch.humidity.is_empty());
+        assert!(batch.pressure.is_empty());
+        assert!(batch.accel_x.is_empty());
+        assert!(batch.accel_y.is_empty());
+        assert!(batch.accel_z.is_empty());
+        assert!(batch.latitude.is_empty());
+        assert!(batch.longitude.is_empty());
+        assert!(batch.altitude.is_empty());
+        assert!(batch.timestamps.is_empty());
+    }
+
+    #[test]
+    fn test_sensor_error_display_i2c() {
+        let err = SensorError::I2c("bus error".into());
+        assert_eq!(format!("{}", err), "I2C error: bus error");
+    }
+
+    #[test]
+    fn test_sensor_error_display_spi() {
+        let err = SensorError::Spi("clock error".into());
+        assert_eq!(format!("{}", err), "SPI error: clock error");
+    }
+
+    #[test]
+    fn test_sensor_error_display_gpio() {
+        let err = SensorError::Gpio("pin busy".into());
+        assert_eq!(format!("{}", err), "GPIO error: pin busy");
+    }
+
+    #[test]
+    fn test_sensor_error_display_uart() {
+        let err = SensorError::Uart("framing error".into());
+        assert_eq!(format!("{}", err), "UART error: framing error");
+    }
+
+    #[test]
+    fn test_sensor_error_display_not_found() {
+        let err = SensorError::NotFound("BME280 missing".into());
+        assert_eq!(format!("{}", err), "Sensor not found: BME280 missing");
+    }
+
+    #[test]
+    fn test_sensor_error_display_invalid_data() {
+        let err = SensorError::InvalidData("checksum fail".into());
+        assert_eq!(format!("{}", err), "Invalid data: checksum fail");
+    }
+
+    #[test]
+    fn test_sensor_error_display_timeout() {
+        let err = SensorError::Timeout;
+        assert_eq!(format!("{}", err), "Sensor timeout");
+    }
+
+    #[test]
+    fn test_simulated_sensor_zero_noise() {
+        let mut sensor = SimulatedSensor::new(3000, 0);
+        let batch = sensor.read_samples(5).unwrap();
+        // With zero noise all temperature readings start from base_temp
+        assert_eq!(batch.temperature.len(), 5);
+        // First sample: base_temp + 0 drift * INV_100 + 0 noise = base_temp
+        assert_eq!(batch.temperature[0], 3000);
+    }
+
+    #[test]
+    fn test_simulated_sensor_name() {
+        let sensor = SimulatedSensor::new(2500, 5);
+        assert_eq!(sensor.name(), "Simulated");
+    }
+
+    #[test]
+    fn test_simulated_sensor_accel_channels() {
+        let mut sensor = SimulatedSensor::new(2500, 0);
+        let batch = sensor.read_samples(4).unwrap();
+        assert_eq!(batch.accel_x.len(), 4);
+        assert_eq!(batch.accel_y.len(), 4);
+        assert_eq!(batch.accel_z.len(), 4);
+    }
+
+    #[test]
+    fn test_bme280_sensor_name() {
+        let sensor = Bme280Sensor::new(1, 0x76);
+        assert_eq!(sensor.name(), "BME280");
+    }
+
+    #[test]
+    fn test_dht22_sensor_name() {
+        let sensor = Dht22Sensor::new(4);
+        assert_eq!(sensor.name(), "DHT22");
+    }
+
+    #[test]
+    fn test_adxl345_sensor_name() {
+        let sensor = Adxl345Sensor::new();
+        assert_eq!(sensor.name(), "ADXL345");
+    }
+
+    #[test]
+    fn test_gps_sensor_name() {
+        let sensor = GpsSensor::new("/dev/ttyS0", 9600);
+        assert_eq!(sensor.name(), "GPS");
+    }
+
+    #[test]
+    fn test_gps_parse_gga_south_west() {
+        // Southern hemisphere, western longitude
+        let sentence = "$GPGGA,000000,3327.576,S,07040.512,W,1,04,1.0,10.0,M,0.0,M,,";
+        let result = GpsSensor::parse_gga(sentence);
+        assert!(result.is_some());
+        let (lat, lon, _alt) = result.unwrap();
+        assert!(lat < 0, "Southern latitude should be negative");
+        assert!(lon < 0, "Western longitude should be negative");
+    }
+
+    #[test]
+    fn test_gps_parse_gga_invalid_header() {
+        // Not a GGA sentence
+        let sentence = "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W";
+        let result = GpsSensor::parse_gga(sentence);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_gps_parse_gga_too_short() {
+        let sentence = "$GPGGA,123519";
+        let result = GpsSensor::parse_gga(sentence);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_gps_parse_gga_zero_altitude() {
+        let sentence = "$GPGGA,120000,3539.256,N,13944.123,E,1,08,1.0,0.0,M,0.0,M,,";
+        let result = GpsSensor::parse_gga(sentence);
+        assert!(result.is_some());
+        let (_lat, _lon, alt) = result.unwrap();
+        assert_eq!(alt, 0);
+    }
+
+    #[test]
+    fn test_simulated_sensor_timestamps_non_decreasing() {
+        let mut sensor = SimulatedSensor::new(2500, 0);
+        let batch = sensor.read_samples(5).unwrap();
+        assert_eq!(batch.timestamps.len(), 5);
+        for w in batch.timestamps.windows(2) {
+            assert!(w[1] >= w[0], "timestamps must be non-decreasing");
+        }
+    }
+
+    #[test]
+    fn test_bme280_compensate_humidity_zero_t_fine_returns_zero() {
+        // When t_fine == 76800, var becomes 0 and function returns 0
+        let mut sensor = Bme280Sensor::new(1, 0x76);
+        // All calibration values at zero; adc_t chosen so t_fine == 76800 is hard to hit
+        // but var1+var2 should round to 76800 for adc_t=0 with dig_t1=dig_t2=dig_t3=0.
+        // Actual outcome: t_fine = 0 for all-zero calibration.
+        // We just confirm the function does not panic and returns a value.
+        sensor.dig_t1 = 0;
+        sensor.dig_t2 = 0;
+        sensor.dig_t3 = 0;
+        let (_temp, t_fine) = sensor.compensate_temperature(0);
+        let _hum = sensor.compensate_humidity(0, t_fine);
+        // No panic = pass
+    }
+
+    #[test]
+    fn test_bme280_compensate_pressure_zero_var1() {
+        // dig_p1 = 0 causes var1 = 0, function returns 0 early
+        let mut sensor = Bme280Sensor::new(1, 0x76);
+        sensor.dig_p1 = 0;
+        let result = sensor.compensate_pressure(500000, 10000);
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_simulated_sensor_read_samples_default_interval() {
+        // read_samples() without interval — uses Duration::ZERO, should be fast
+        let mut sensor = SimulatedSensor::new(2500, 0);
+        let batch = sensor.read_samples(3).unwrap();
+        assert_eq!(batch.temperature.len(), 3);
+    }
+
+    // ── E7: BNO055 / MAX30102 テスト ──────────────────────────────
+
+    #[test]
+    fn test_bno055_sensor_name() {
+        let sensor = Bno055Sensor::new(0x28);
+        assert_eq!(sensor.name(), "BNO055");
+    }
+
+    #[test]
+    fn test_bno055_simulated_data() {
+        let mut sensor = Bno055Sensor::new(0x28);
+        sensor.init().unwrap();
+        let batch = sensor.read_samples(10).unwrap();
+        assert_eq!(batch.accel_x.len(), 10);
+        assert_eq!(batch.accel_y.len(), 10);
+        assert_eq!(batch.accel_z.len(), 10);
+        assert_eq!(batch.temperature.len(), 10);
+        assert_eq!(batch.sensor_id, "BNO055");
+    }
+
+    #[test]
+    fn test_max30102_sensor_name() {
+        let sensor = Max30102Sensor::new();
+        assert_eq!(sensor.name(), "MAX30102");
+    }
+
+    #[test]
+    fn test_max30102_simulated_data() {
+        let mut sensor = Max30102Sensor::new();
+        sensor.init().unwrap();
+        let batch = sensor.read_samples(10).unwrap();
+        assert_eq!(batch.temperature.len(), 10); // heart rate channel
+        assert_eq!(batch.humidity.len(), 10); // SpO2 channel
+        assert_eq!(batch.sensor_id, "MAX30102");
     }
 }

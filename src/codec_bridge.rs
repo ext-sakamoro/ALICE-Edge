@@ -13,7 +13,7 @@
 //!
 //! # Example
 //!
-//! ```ignore
+//! ```no_run
 //! use alice_edge::codec_bridge::fit_denoised;
 //!
 //! // Noisy temperature readings (25.0°C rising, with noise)
@@ -25,7 +25,7 @@
 use crate::fit_linear_fixed;
 use alice_codec::Wavelet1D;
 
-/// Denoise sensor data with Wavelet1D, then fit a linear model.
+/// Denoise sensor data with `Wavelet1D`, then fit a linear model.
 ///
 /// # Arguments
 ///
@@ -37,6 +37,7 @@ use alice_codec::Wavelet1D;
 /// # Returns
 ///
 /// `(slope, intercept)` in Q16.16 fixed-point, same as `fit_linear_fixed`.
+#[must_use]
 pub fn fit_denoised(data: &[i32], threshold: i32) -> (i32, i32) {
     if data.len() < 4 {
         // Too short for meaningful wavelet transform; fall back
@@ -47,13 +48,14 @@ pub fn fit_denoised(data: &[i32], threshold: i32) -> (i32, i32) {
     fit_linear_fixed(&denoised)
 }
 
-/// Apply Wavelet1D denoising to a sensor data slice.
+/// Apply `Wavelet1D` denoising to a sensor data slice.
 ///
 /// Performs forward CDF 5/3 wavelet transform, thresholds
 /// high-frequency coefficients, then inverse-transforms.
 ///
 /// The input is padded to a power of 2 internally and the
 /// result is truncated back to the original length.
+#[must_use]
 pub fn wavelet_denoise(data: &[i32], threshold: i32) -> Vec<i32> {
     let n = data.len();
     if n < 2 {
@@ -77,7 +79,7 @@ pub fn wavelet_denoise(data: &[i32], threshold: i32) -> Vec<i32> {
     // Threshold high-frequency half (detail coefficients)
     let half = padded_len / 2;
     let abs_threshold = threshold.unsigned_abs();
-    for coeff in buf[half..].iter_mut() {
+    for coeff in &mut buf[half..] {
         if (*coeff as i64).unsigned_abs() < abs_threshold as u64 {
             *coeff = 0;
         }
@@ -95,6 +97,7 @@ pub fn wavelet_denoise(data: &[i32], threshold: i32) -> Vec<i32> {
 ///
 /// Returns `(error_raw, error_denoised)` — both in Q32.32.
 /// A lower `error_denoised` indicates the wavelet denoising helped.
+#[must_use]
 pub fn denoising_benefit(data: &[i32], threshold: i32) -> (i64, i64) {
     let (slope_raw, intercept_raw) = fit_linear_fixed(data);
     let error_raw = crate::compute_residual_error(data, slope_raw, intercept_raw);
@@ -134,5 +137,86 @@ mod tests {
         let (err_raw, err_dn) = denoising_benefit(&data, 30);
         // Denoised error should be <= raw error
         assert!(err_dn <= err_raw);
+    }
+
+    // ── New tests ─────────────────────────────────────────────
+
+    #[test]
+    fn test_wavelet_denoise_single_element() {
+        let data = [42];
+        let denoised = wavelet_denoise(&data, 10);
+        // Falls back: length preserved, value unchanged
+        assert_eq!(denoised.len(), 1);
+        assert_eq!(denoised[0], 42);
+    }
+
+    #[test]
+    fn test_wavelet_denoise_two_elements() {
+        let data = [10, 20];
+        let denoised = wavelet_denoise(&data, 5);
+        assert_eq!(denoised.len(), 2);
+    }
+
+    #[test]
+    fn test_wavelet_denoise_power_of_two_length() {
+        // Power-of-2 lengths should not need padding — length preserved
+        let data = [
+            10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
+        ];
+        let denoised = wavelet_denoise(&data, 5);
+        assert_eq!(denoised.len(), data.len());
+    }
+
+    #[test]
+    fn test_wavelet_denoise_non_power_of_two_length() {
+        // Non-power-of-2: 6 elements — padded to 8 internally
+        let data = [10, 20, 30, 40, 50, 60];
+        let denoised = wavelet_denoise(&data, 5);
+        assert_eq!(denoised.len(), 6);
+    }
+
+    #[test]
+    fn test_wavelet_denoise_zero_threshold() {
+        // Threshold of 0: no high-frequency coefficients are zeroed
+        let data = [100, 200, 150, 250, 300, 200, 350, 400];
+        let denoised = wavelet_denoise(&data, 0);
+        assert_eq!(denoised.len(), data.len());
+    }
+
+    #[test]
+    fn test_fit_denoised_fallback_for_three_elements() {
+        // 3 elements is < 4, so falls back to fit_linear_fixed
+        let data = [0, 50, 100];
+        let (slope_dn, intercept_dn) = fit_denoised(&data, 10);
+        let (slope_raw, intercept_raw) = fit_linear_fixed(&data);
+        assert_eq!(slope_dn, slope_raw);
+        assert_eq!(intercept_dn, intercept_raw);
+    }
+
+    #[test]
+    fn test_fit_denoised_processes_four_elements() {
+        // 4 elements: wavelet path is taken (no panic)
+        let data = [100, 200, 300, 400];
+        let (slope, intercept) = fit_denoised(&data, 5);
+        // Result must be finite Q16.16 values — just check no overflow to i32::MIN/MAX
+        assert!(slope != i32::MIN);
+        assert!(intercept != i32::MIN);
+    }
+
+    #[test]
+    fn test_denoising_benefit_constant_data() {
+        // Constant data: both raw and denoised should have very small errors
+        let data = [500, 500, 500, 500, 500, 500, 500, 500];
+        let (err_raw, err_dn) = denoising_benefit(&data, 10);
+        assert!(err_dn <= err_raw + 1); // denoised never worse (within rounding)
+    }
+
+    #[test]
+    fn test_denoising_benefit_returns_two_values() {
+        let data = [1, 2, 3, 4, 5, 6, 7, 8];
+        let (err_raw, err_dn) = denoising_benefit(&data, 5);
+        // Both values should be non-negative
+        assert!(err_raw >= 0);
+        assert!(err_dn >= 0);
     }
 }

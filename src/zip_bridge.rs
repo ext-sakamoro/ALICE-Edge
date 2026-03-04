@@ -3,9 +3,9 @@
 //!
 //! Compress edge model coefficients (slope, intercept) using
 //! ALICE-Zip's procedural generation for ultra-compact storage.
-//! Enables batched coefficient transmission from IoT fleets.
+//! Enables batched coefficient transmission from `IoT` fleets.
 
-use crate::{evaluate_linear_fixed, fit_linear_fixed, Q16_SHIFT};
+use crate::{evaluate_linear_fixed, fit_linear_fixed};
 use alice_core::compression;
 
 /// Compressed model coefficients for batch transmission.
@@ -23,6 +23,10 @@ pub struct CompressedModelBatch {
 ///
 /// Uses 8-bit quantization + LZMA compression.
 /// Typical compression: 1000 models × 8 bytes → ~200-500 bytes.
+///
+/// # Errors
+///
+/// Returns `std::io::Error` if the underlying LZMA compression fails.
 pub fn compress_coefficients(coefficients: &[(i32, i32)]) -> std::io::Result<CompressedModelBatch> {
     // Convert to float for quantization
     let floats: Vec<f32> = coefficients
@@ -39,6 +43,10 @@ pub fn compress_coefficients(coefficients: &[(i32, i32)]) -> std::io::Result<Com
 }
 
 /// Decompress a batch of coefficient pairs.
+///
+/// # Errors
+///
+/// Returns `std::io::Error` if the underlying LZMA decompression fails or the data is malformed.
 pub fn decompress_coefficients(batch: &CompressedModelBatch) -> std::io::Result<Vec<(i32, i32)>> {
     let floats = compression::decompress_residual_quantized(&batch.data)?;
 
@@ -53,6 +61,10 @@ pub fn decompress_coefficients(batch: &CompressedModelBatch) -> std::io::Result<
 /// Fit models from raw sensor data batches, then compress all coefficients.
 ///
 /// Takes multiple sensor data arrays and returns a compressed batch.
+///
+/// # Errors
+///
+/// Returns `std::io::Error` if the LZMA compression of the fitted coefficients fails.
 pub fn fit_and_compress(sensor_batches: &[&[i32]]) -> std::io::Result<CompressedModelBatch> {
     let coefficients: Vec<(i32, i32)> = sensor_batches
         .iter()
@@ -63,6 +75,10 @@ pub fn fit_and_compress(sensor_batches: &[&[i32]]) -> std::io::Result<Compressed
 }
 
 /// Decompress and evaluate all models at a given point.
+///
+/// # Errors
+///
+/// Returns `std::io::Error` if decompression of the batch fails.
 pub fn decompress_and_evaluate(batch: &CompressedModelBatch, x: i32) -> std::io::Result<Vec<i32>> {
     let coefficients = decompress_coefficients(batch)?;
     Ok(coefficients
@@ -74,6 +90,7 @@ pub fn decompress_and_evaluate(batch: &CompressedModelBatch, x: i32) -> std::io:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Q16_SHIFT;
 
     #[test]
     fn test_compress_decompress_roundtrip() {
@@ -120,5 +137,51 @@ mod tests {
 
         let evaluated = decompress_and_evaluate(&batch, 2).unwrap();
         assert_eq!(evaluated.len(), 3);
+    }
+
+    #[test]
+    fn test_compress_empty() {
+        let batch = compress_coefficients(&[]).unwrap();
+        assert_eq!(batch.count, 0);
+    }
+
+    #[test]
+    fn test_compress_single() {
+        let coeffs = [(1 << Q16_SHIFT, 50 << Q16_SHIFT)];
+        let batch = compress_coefficients(&coeffs).unwrap();
+        assert_eq!(batch.count, 1);
+        assert!(!batch.data.is_empty());
+    }
+
+    #[test]
+    fn test_decompress_and_evaluate_at_zero() {
+        let coefficients = vec![(10 << Q16_SHIFT, 100 << Q16_SHIFT)];
+        let batch = compress_coefficients(&coefficients).unwrap();
+        let evaluated = decompress_and_evaluate(&batch, 0).unwrap();
+        assert_eq!(evaluated.len(), 1);
+    }
+
+    #[test]
+    fn test_fit_and_compress_single_stream() {
+        let data = [100, 200, 300];
+        let batch = fit_and_compress(&[&data]).unwrap();
+        assert_eq!(batch.count, 1);
+    }
+
+    #[test]
+    fn test_compressed_batch_has_data() {
+        let coefficients: Vec<(i32, i32)> = (0..50)
+            .map(|i| (i * (1 << Q16_SHIFT), 100 * (1 << Q16_SHIFT)))
+            .collect();
+        let batch = compress_coefficients(&coefficients).unwrap();
+        assert_eq!(batch.count, 50);
+        // 圧縮後は元の生バイト数 (50*8=400) よりも小さくなるはず
+        assert!(batch.data.len() < 400);
+    }
+
+    #[test]
+    fn test_fit_and_compress_empty() {
+        let batch = fit_and_compress(&[]).unwrap();
+        assert_eq!(batch.count, 0);
     }
 }

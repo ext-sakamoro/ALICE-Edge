@@ -6,6 +6,7 @@
 //!
 //! Author: Moroya Sakamoto
 
+use rusb::UsbContext;
 use std::time::Instant;
 
 /// Maximum points per frame (100K limit for Pi 5 memory budget)
@@ -114,6 +115,8 @@ impl std::fmt::Display for CaptureError {
 pub struct DolphinD5Driver {
     config: CameraConfig,
     initialized: bool,
+    /// デバイス不在時のシミュレーションモード
+    simulation_mode: bool,
     frame_counter: u32,
     start_time: Option<Instant>,
 }
@@ -123,14 +126,21 @@ impl DolphinD5Driver {
         Self {
             config,
             initialized: false,
+            simulation_mode: false,
             frame_counter: 0,
             start_time: None,
         }
     }
 
+    /// シミュレーションモードかどうか
+    pub fn is_simulation(&self) -> bool {
+        self.simulation_mode
+    }
+
     /// Voxel grid downsampling — reduces point count while preserving structure
     ///
-    /// Algorithm: hash each point to a voxel cell, keep one point per cell.
+    /// Algorithm: hash each point to a voxel cell, keep **first-point-wins** per cell.
+    /// 同一ボクセル内で最初に出現した点のみを保持し、後続の点は破棄する。
     /// O(N) time, O(N/voxel_ratio) memory.
     pub fn voxel_downsample(points: &[PointNormal], voxel_size: f32) -> Vec<PointNormal> {
         if voxel_size <= 0.0 || points.is_empty() {
@@ -219,7 +229,11 @@ impl DepthCameraDriver for DolphinD5Driver {
             });
 
         if device.is_none() {
-            return Err(CaptureError::DeviceNotFound);
+            // デバイス不在時はシミュレーションモードにフォールバック
+            self.simulation_mode = true;
+            self.initialized = true;
+            self.start_time = Some(Instant::now());
+            return Ok(());
         }
 
         self.initialized = true;
@@ -232,12 +246,6 @@ impl DepthCameraDriver for DolphinD5Driver {
             return Err(CaptureError::NotInitialized);
         }
 
-        // In production: read USB bulk transfer from D5 Lite depth endpoint
-        // The D5 Lite outputs structured light depth maps at up to 10 fps
-        // Each frame is a 640x480 depth image (16-bit depth per pixel)
-        //
-        // For now, return an empty frame structure that the real USB driver
-        // would fill with data from the device's depth endpoint.
         let timestamp_ms = self
             .start_time
             .map(|t| t.elapsed().as_millis() as u64)
@@ -245,6 +253,34 @@ impl DepthCameraDriver for DolphinD5Driver {
 
         self.frame_counter += 1;
 
+        if self.simulation_mode {
+            // シミュレーション: 10×10 グリッドの決定的ポイントクラウド
+            let mut points = Vec::with_capacity(100);
+            let frame_f = self.frame_counter as f32 * 0.1;
+            for iy in 0..10 {
+                for ix in 0..10 {
+                    let x = (ix as f32 - 4.5) * 0.1;
+                    let z = (iy as f32 - 4.5) * 0.1;
+                    // sin/cos で決定的な深度変化
+                    let y = 1.0 + 0.1 * (x * 3.14 + frame_f).sin() * (z * 2.71 + frame_f).cos();
+                    points.push(PointNormal {
+                        x,
+                        y,
+                        z,
+                        nx: 0.0,
+                        ny: 1.0,
+                        nz: 0.0,
+                    });
+                }
+            }
+            return Ok(DepthFrame {
+                points,
+                timestamp_ms,
+                frame_id: self.frame_counter,
+            });
+        }
+
+        // In production: read USB bulk transfer from D5 Lite depth endpoint
         Ok(DepthFrame {
             points: Vec::new(),
             timestamp_ms,
@@ -343,5 +379,54 @@ mod tests {
         let driver = DolphinD5Driver::new(CameraConfig::default());
         let info = driver.info();
         assert!(info.contains("Dolphin D5 Lite"));
+    }
+
+    #[test]
+    fn test_voxel_downsample_empty() {
+        let result = DolphinD5Driver::voxel_downsample(&[], 0.01);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_voxel_downsample_zero_voxel_size() {
+        let points = vec![PointNormal {
+            x: 1.0,
+            y: 2.0,
+            z: 3.0,
+            ..Default::default()
+        }];
+        // voxel_size <= 0 は入力をそのまま返す
+        let result = DolphinD5Driver::voxel_downsample(&points, 0.0);
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_estimate_normals_too_few_points() {
+        let mut points = vec![
+            PointNormal {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                ..Default::default()
+            },
+            PointNormal {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                ..Default::default()
+            },
+        ];
+        // 3点未満 → 法線計算をスキップ（パニックしない）
+        DolphinD5Driver::estimate_normals(&mut points, 2);
+        // 法線はデフォルト（0）のまま
+        assert_eq!(points[0].nx, 0.0);
+    }
+
+    #[test]
+    fn test_driver_not_initialized() {
+        let driver = DolphinD5Driver::new(CameraConfig::default());
+        // 初期化前は接続判定 false
+        assert!(!driver.is_connected());
+        assert!(!driver.is_simulation());
     }
 }

@@ -8,7 +8,7 @@
 
 use crate::object_classifier::ObjectClass;
 use crate::sdf_compress::{svo_diff_hash, CompressedSdf, SvoChunkData};
-use libasp::scene::{SdfDeltaType, SdfSceneDelta, SdfSceneDescriptor};
+use libasp::scene::{SdfSceneDelta, SdfSceneDescriptor};
 
 /// Edge stream encoder — manages keyframe/delta state for ASP transmission
 pub struct EdgeStreamEncoder {
@@ -307,5 +307,58 @@ mod tests {
         let _ = encoder.encode_frame(&compressed, &[]); // frame 2: skip/delta
         let packet = encoder.encode_frame(&compressed, &[]); // frame 3: keyframe
         assert!(matches!(packet, AspEdgePacket::Keyframe { .. }));
+    }
+
+    #[test]
+    fn test_scene_version_increments() {
+        let mut encoder = EdgeStreamEncoder::new(100);
+        assert_eq!(encoder.scene_version(), 0);
+
+        let compressed = CompressedSdf::Primitives {
+            primitives: vec![],
+            asdf_data: vec![1],
+        };
+        let _ = encoder.encode_frame(&compressed, &[]);
+        assert_eq!(encoder.scene_version(), 1);
+    }
+
+    #[test]
+    fn test_frame_count_increments() {
+        let mut encoder = EdgeStreamEncoder::new(100);
+        assert_eq!(encoder.frame_count(), 0);
+
+        let compressed = CompressedSdf::Primitives {
+            primitives: vec![],
+            asdf_data: vec![],
+        };
+        let _ = encoder.encode_frame(&compressed, &[]);
+        let _ = encoder.encode_frame(&compressed, &[]);
+        assert_eq!(encoder.frame_count(), 2);
+    }
+
+    #[test]
+    fn test_extract_bounds_from_svo() {
+        let bounds = extract_bounds(&CompressedSdf::SvoChunks {
+            chunks: vec![SvoChunkData {
+                chunk_id: 0,
+                data: vec![],
+                node_count: 1,
+                bounds_min: [-5.0, -3.0, -1.0],
+                bounds_max: [5.0, 3.0, 1.0],
+            }],
+            total_nodes: 1,
+        });
+        assert_eq!(bounds.0, [-5.0, -3.0, -1.0]);
+        assert_eq!(bounds.1, [5.0, 3.0, 1.0]);
+    }
+
+    #[test]
+    fn test_extract_bounds_default_for_primitives() {
+        let bounds = extract_bounds(&CompressedSdf::Primitives {
+            primitives: vec![],
+            asdf_data: vec![],
+        });
+        assert_eq!(bounds.0, [-10.0; 3]);
+        assert_eq!(bounds.1, [10.0; 3]);
     }
 }

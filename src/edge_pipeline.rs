@@ -233,6 +233,7 @@ impl EdgePipeline {
     }
 
     /// Get current pipeline statistics
+    #[must_use]
     pub fn stats(&self) -> &PipelineStats {
         &self.stats
     }
@@ -328,6 +329,50 @@ impl EdgePipeline {
     }
 }
 
+/// Voxel grid downsampling — averages points within each voxel cell [E6]
+///
+/// More accurate than simple strided sampling. Groups points by voxel
+/// coordinate and outputs centroid of each occupied voxel.
+///
+/// # Arguments
+///
+/// * `points` - Input point cloud (x, y, z)
+/// * `voxel_size` - Edge length of each voxel cube (meters)
+///
+/// # Returns
+///
+/// Downsampled point cloud
+#[must_use]
+pub fn voxel_grid_downsample(points: &[[f32; 3]], voxel_size: f32) -> Vec<[f32; 3]> {
+    if points.is_empty() || voxel_size <= 0.0 {
+        return points.to_vec();
+    }
+
+    let inv_voxel = 1.0 / voxel_size;
+    let mut voxel_map: std::collections::HashMap<(i32, i32, i32), (f64, f64, f64, u32)> =
+        std::collections::HashMap::new();
+
+    for p in points {
+        let vx = (p[0] * inv_voxel).floor() as i32;
+        let vy = (p[1] * inv_voxel).floor() as i32;
+        let vz = (p[2] * inv_voxel).floor() as i32;
+
+        let entry = voxel_map.entry((vx, vy, vz)).or_insert((0.0, 0.0, 0.0, 0));
+        entry.0 += p[0] as f64;
+        entry.1 += p[1] as f64;
+        entry.2 += p[2] as f64;
+        entry.3 += 1;
+    }
+
+    voxel_map
+        .values()
+        .map(|&(sx, sy, sz, count)| {
+            let inv = 1.0 / count as f64;
+            [(sx * inv) as f32, (sy * inv) as f32, (sz * inv) as f32]
+        })
+        .collect()
+}
+
 #[inline(always)]
 fn compute_bounds_size(points: &[[f32; 3]]) -> [f32; 3] {
     if points.is_empty() {
@@ -415,7 +460,7 @@ mod tests {
         let mut pipeline = EdgePipeline::with_driver(config, mock);
         pipeline.init().unwrap();
 
-        let (packet, stats) = pipeline.process_frame().unwrap();
+        let (packet, _) = pipeline.process_frame().unwrap();
         assert!(matches!(packet, AspEdgePacket::Keyframe { .. }));
         assert_eq!(pipeline.stats().frames_processed, 1);
     }
@@ -434,5 +479,200 @@ mod tests {
         let stats = pipeline.stats();
         assert_eq!(stats.frames_processed, 5);
         assert!(stats.avg_total_ms >= 0.0);
+    }
+
+    // ── E6: ボクセルダウンサンプル テスト ──────────────────────────
+
+    #[test]
+    fn test_voxel_grid_downsample_basic() {
+        // 同じボクセル内の3点 → 1点に集約
+        let points = vec![[0.01, 0.01, 0.01], [0.02, 0.02, 0.02], [0.03, 0.03, 0.03]];
+        let result = voxel_grid_downsample(&points, 0.1);
+        assert_eq!(result.len(), 1);
+        // 平均: (0.01+0.02+0.03)/3 = 0.02
+        assert!((result[0][0] - 0.02).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_voxel_grid_downsample_separate() {
+        // 離れた2点 → 2点のまま
+        let points = vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]];
+        let result = voxel_grid_downsample(&points, 0.1);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_voxel_grid_downsample_empty() {
+        let result = voxel_grid_downsample(&[], 0.1);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_voxel_grid_downsample_zero_size() {
+        let points = vec![[0.0, 0.0, 0.0]];
+        let result = voxel_grid_downsample(&points, 0.0);
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_pipeline_multi_frame_keyframe_delta() {
+        let config = PipelineConfig {
+            keyframe_interval: 3,
+            ..PipelineConfig::default()
+        };
+        let mock = Box::new(MockCamera { frame_counter: 0 });
+        let mut pipeline = EdgePipeline::with_driver(config, mock);
+        pipeline.init().unwrap();
+
+        // Frame 1: keyframe
+        let (p1, _) = pipeline.process_frame().unwrap();
+        assert!(matches!(p1, AspEdgePacket::Keyframe { .. }));
+
+        // Frame 2: delta or skip (data changes each frame)
+        let (p2, _) = pipeline.process_frame().unwrap();
+        assert!(matches!(
+            p2,
+            AspEdgePacket::Delta { .. } | AspEdgePacket::Skip { .. }
+        ));
+
+        // Frame 3: keyframe (interval=3)
+        let (p3, _) = pipeline.process_frame().unwrap();
+        assert!(matches!(p3, AspEdgePacket::Keyframe { .. }));
+    }
+
+    #[test]
+    fn test_pipeline_latency_stats_accumulate() {
+        let config = PipelineConfig::default();
+        let mock = Box::new(MockCamera { frame_counter: 0 });
+        let mut pipeline = EdgePipeline::with_driver(config, mock);
+        pipeline.init().unwrap();
+
+        for _ in 0..10 {
+            let _ = pipeline.process_frame();
+        }
+
+        let stats = pipeline.stats();
+        assert_eq!(stats.frames_processed, 10);
+        assert!(stats.avg_capture_ms >= 0.0);
+        assert!(stats.avg_compress_ms >= 0.0);
+        assert!(stats.avg_classify_ms >= 0.0);
+        assert!(stats.avg_encode_ms >= 0.0);
+        assert!(stats.avg_total_ms >= stats.avg_capture_ms);
+        // keyframes + deltas + skips = total frames
+        assert_eq!(
+            stats.keyframes_sent + stats.deltas_sent + stats.frames_skipped,
+            stats.frames_processed
+        );
+    }
+
+    #[test]
+    fn test_pipeline_bytes_sent_tracking() {
+        let config = PipelineConfig::default();
+        let mock = Box::new(MockCamera { frame_counter: 0 });
+        let mut pipeline = EdgePipeline::with_driver(config, mock);
+        pipeline.init().unwrap();
+
+        let _ = pipeline.process_frame().unwrap();
+        // 最初のフレームは keyframe なのでバイト送信がある
+        assert!(pipeline.stats().total_bytes_sent > 0);
+    }
+
+    /// 空のフレームを返すモックカメラ
+    struct EmptyCamera;
+    impl DepthCameraDriver for EmptyCamera {
+        fn init(&mut self) -> Result<(), crate::depth_capture::CaptureError> {
+            Ok(())
+        }
+        fn capture_frame(&mut self) -> Result<DepthFrame, crate::depth_capture::CaptureError> {
+            Ok(DepthFrame {
+                points: vec![],
+                timestamp_ms: 0,
+                frame_id: 0,
+            })
+        }
+        fn is_connected(&self) -> bool {
+            true
+        }
+        fn info(&self) -> String {
+            "EmptyCamera".to_string()
+        }
+    }
+
+    #[test]
+    fn test_pipeline_empty_frame() {
+        let config = PipelineConfig::default();
+        let mock = Box::new(EmptyCamera);
+        let mut pipeline = EdgePipeline::with_driver(config, mock);
+        pipeline.init().unwrap();
+
+        let (packet, compress_stats) = pipeline.process_frame().unwrap();
+        assert!(matches!(packet, AspEdgePacket::Keyframe { .. }));
+        assert_eq!(compress_stats.input_points, 0);
+    }
+
+    #[test]
+    fn test_classify_compressed_primitives() {
+        use crate::sdf_compress::{PrimitiveKind, SerializedPrimitive};
+        let config = PipelineConfig::default();
+        let mock = Box::new(MockCamera { frame_counter: 0 });
+        let pipeline = EdgePipeline::with_driver(config, mock);
+
+        let compressed = CompressedSdf::Primitives {
+            primitives: vec![SerializedPrimitive {
+                kind: PrimitiveKind::Sphere,
+                params: [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+                mse: 0.001,
+            }],
+            asdf_data: vec![1, 2, 3],
+        };
+        let points = vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]];
+        let result = pipeline.classify_compressed(&compressed, &points);
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_classify_compressed_svo_chunks() {
+        use crate::sdf_compress::SvoChunkData;
+        let config = PipelineConfig::default();
+        let mock = Box::new(MockCamera { frame_counter: 0 });
+        let pipeline = EdgePipeline::with_driver(config, mock);
+
+        let compressed = CompressedSdf::SvoChunks {
+            chunks: vec![
+                SvoChunkData {
+                    chunk_id: 0,
+                    data: vec![1, 2, 3, 4],
+                    node_count: 10,
+                    bounds_min: [-1.0, -1.0, -1.0],
+                    bounds_max: [1.0, 1.0, 1.0],
+                },
+                SvoChunkData {
+                    chunk_id: 1,
+                    data: vec![5, 6, 7, 8],
+                    node_count: 5,
+                    bounds_min: [0.0, 0.0, 0.0],
+                    bounds_max: [2.0, 2.0, 2.0],
+                },
+            ],
+            total_nodes: 15,
+        };
+        let points = vec![[0.0, 0.0, 0.0]];
+        let result = pipeline.classify_compressed(&compressed, &points);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0, 0);
+        assert_eq!(result[1].0, 1);
+    }
+
+    #[test]
+    fn test_compute_bounds_size_empty() {
+        let bounds = compute_bounds_size(&[]);
+        assert_eq!(bounds, [1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn test_voxel_grid_negative_size() {
+        let points = vec![[0.0, 0.0, 0.0]];
+        let result = voxel_grid_downsample(&points, -1.0);
+        assert_eq!(result.len(), 1);
     }
 }

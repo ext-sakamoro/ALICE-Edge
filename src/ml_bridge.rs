@@ -3,9 +3,20 @@
 //!
 //! Edge sensor data → ternary ML inference for anomaly classification.
 //!
+//! Architecture: 4 → 16 → 4 (2-layer MLP, ~80 bytes)
+//!
 //! Author: Moroya Sakamoto
 
-use alice_ml::{TernaryWeight, ternary_matvec};
+use alice_ml::{ternary_matvec_kernel, TernaryWeightKernel};
+
+/// Input feature dimension (slope, intercept, residual, `sample_count`)
+const INPUT_DIM: usize = 4;
+
+/// Hidden layer dimension
+const HIDDEN_DIM: usize = 16;
+
+/// Number of output classes
+const NUM_CLASSES: usize = 4;
 
 /// Sensor features extracted from edge linear model coefficients
 #[derive(Debug, Clone, Copy)]
@@ -27,52 +38,58 @@ pub enum EdgeClassification {
 }
 
 /// Ternary classifier for edge sensor data
+///
+/// 2-layer MLP using ALICE-ML bit-parallel ternary inference.
+/// All computation is zero-allocation (stack buffers only).
 pub struct EdgeClassifier {
-    /// Input → hidden weights (4 inputs × 16 hidden)
-    w_hidden: Vec<TernaryWeight>,
-    /// Hidden → output weights (16 hidden × 4 classes)
-    w_output: Vec<TernaryWeight>,
+    /// Input → hidden weights (4 → 16)
+    w_hidden: TernaryWeightKernel,
+    /// Hidden → output weights (16 → 4)
+    w_output: TernaryWeightKernel,
     /// Hidden bias
-    bias_hidden: Vec<f32>,
+    bias_hidden: [f32; HIDDEN_DIM],
     /// Output bias
-    bias_output: Vec<f32>,
+    bias_output: [f32; NUM_CLASSES],
     /// Classification count
     pub total_classified: u64,
 }
 
 impl EdgeClassifier {
     /// Create classifier with deterministic pseudo-random ternary weights.
-    /// Model size: ~64 bytes (ternary weights pack 16 values per u32).
+    ///
+    /// Model size: ~80 bytes (ternary weights pack 32 values per u32).
+    #[must_use]
     pub fn new() -> Self {
-        // Deterministic initialization via hash-based ternary weights
-        let mut w_hidden = Vec::with_capacity(4 * 16);
-        for i in 0..(4 * 16) {
-            let hash = ((i as u64).wrapping_mul(0x9E3779B97F4A7C15)) >> 62;
-            w_hidden.push(match hash {
-                0 => TernaryWeight::Neg,
-                1 => TernaryWeight::Zero,
-                _ => TernaryWeight::Pos,
-            });
+        // 決定論的初期化: ハッシュベースの三値重み
+        let mut w_hidden_i8 = vec![0i8; HIDDEN_DIM * INPUT_DIM];
+        for (i, w) in w_hidden_i8.iter_mut().enumerate() {
+            let hash = ((i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)) >> 62;
+            *w = match hash {
+                0 => -1,
+                1 => 0,
+                _ => 1,
+            };
         }
-        let mut w_output = Vec::with_capacity(16 * 4);
-        for i in 0..(16 * 4) {
-            let hash = ((i as u64 + 100).wrapping_mul(0x517CC1B727220A95)) >> 62;
-            w_output.push(match hash {
-                0 => TernaryWeight::Neg,
-                1 => TernaryWeight::Zero,
-                _ => TernaryWeight::Pos,
-            });
+        let mut w_output_i8 = vec![0i8; NUM_CLASSES * HIDDEN_DIM];
+        for (i, w) in w_output_i8.iter_mut().enumerate() {
+            let hash = ((i as u64 + 100).wrapping_mul(0x517C_C1B7_2722_0A95)) >> 62;
+            *w = match hash {
+                0 => -1,
+                1 => 0,
+                _ => 1,
+            };
         }
         Self {
-            w_hidden,
-            w_output,
-            bias_hidden: vec![0.0; 16],
-            bias_output: vec![0.0; 4],
+            w_hidden: TernaryWeightKernel::from_ternary(&w_hidden_i8, HIDDEN_DIM, INPUT_DIM),
+            w_output: TernaryWeightKernel::from_ternary(&w_output_i8, NUM_CLASSES, HIDDEN_DIM),
+            bias_hidden: [0.0; HIDDEN_DIM],
+            bias_output: [0.0; NUM_CLASSES],
             total_classified: 0,
         }
     }
 
     /// Classify a single sensor reading
+    #[must_use]
     pub fn classify_sensor(&mut self, features: &SensorFeatures) -> EdgeClassification {
         let input = [
             features.slope,
@@ -81,14 +98,16 @@ impl EdgeClassifier {
             features.sample_count as f32 * (1.0 / 1000.0),
         ];
 
-        // Hidden layer: ternary matvec + ReLU
-        let mut hidden = ternary_matvec(&self.w_hidden, &input, 16, 4);
+        // Hidden layer: ternary matvec + bias + ReLU
+        let mut hidden = [0.0f32; HIDDEN_DIM];
+        ternary_matvec_kernel(&input, &self.w_hidden, &mut hidden);
         for (h, b) in hidden.iter_mut().zip(self.bias_hidden.iter()) {
             *h = (*h + b).max(0.0); // ReLU
         }
 
-        // Output layer: ternary matvec
-        let mut output = ternary_matvec(&self.w_output, &hidden, 4, 16);
+        // Output layer: ternary matvec + bias
+        let mut output = [0.0f32; NUM_CLASSES];
+        ternary_matvec_kernel(&hidden, &self.w_output, &mut output);
         for (o, b) in output.iter_mut().zip(self.bias_output.iter()) {
             *o += b;
         }
@@ -116,6 +135,37 @@ impl EdgeClassifier {
     /// Batch classify multiple sensor readings
     pub fn classify_batch(&mut self, features: &[SensorFeatures]) -> Vec<EdgeClassification> {
         features.iter().map(|f| self.classify_sensor(f)).collect()
+    }
+
+    /// Memory footprint of model weights in bytes
+    #[must_use]
+    pub fn memory_bytes(&self) -> usize {
+        self.w_hidden.memory_bytes() + self.w_output.memory_bytes()
+    }
+}
+
+impl Default for EdgeClassifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl crate::EdgeInference for EdgeClassifier {
+    type Output = EdgeClassification;
+
+    fn infer(&mut self, features: &[f32]) -> (usize, f32) {
+        let sf = SensorFeatures {
+            slope: features.first().copied().unwrap_or(0.0),
+            intercept: features.get(1).copied().unwrap_or(0.0),
+            residual: features.get(2).copied().unwrap_or(0.0),
+            sample_count: features.get(3).copied().map_or(0, |v| v as u16),
+        };
+        let class = self.classify_sensor(&sf);
+        (class as usize, 1.0) // EdgeClassifier は信頼度を返さないため 1.0
+    }
+
+    fn model_size_bytes(&self) -> usize {
+        self.memory_bytes()
     }
 }
 
@@ -147,9 +197,24 @@ mod tests {
     fn test_classify_batch() {
         let mut classifier = EdgeClassifier::new();
         let batch = vec![
-            SensorFeatures { slope: 0.01, intercept: 20.0, residual: 0.001, sample_count: 100 },
-            SensorFeatures { slope: 5.0, intercept: -100.0, residual: 50.0, sample_count: 10 },
-            SensorFeatures { slope: 0.0, intercept: 0.0, residual: 0.0, sample_count: 0 },
+            SensorFeatures {
+                slope: 0.01,
+                intercept: 20.0,
+                residual: 0.001,
+                sample_count: 100,
+            },
+            SensorFeatures {
+                slope: 5.0,
+                intercept: -100.0,
+                residual: 50.0,
+                sample_count: 10,
+            },
+            SensorFeatures {
+                slope: 0.0,
+                intercept: 0.0,
+                residual: 0.0,
+                sample_count: 0,
+            },
         ];
         let results = classifier.classify_batch(&batch);
         assert_eq!(results.len(), 3);
@@ -160,7 +225,87 @@ mod tests {
     fn test_deterministic() {
         let mut c1 = EdgeClassifier::new();
         let mut c2 = EdgeClassifier::new();
-        let f = SensorFeatures { slope: 1.0, intercept: 2.0, residual: 0.5, sample_count: 50 };
+        let f = SensorFeatures {
+            slope: 1.0,
+            intercept: 2.0,
+            residual: 0.5,
+            sample_count: 50,
+        };
         assert_eq!(c1.classify_sensor(&f), c2.classify_sensor(&f));
+    }
+
+    #[test]
+    fn test_edge_inference_trait() {
+        let mut classifier = EdgeClassifier::new();
+        use crate::EdgeInference;
+        let features = vec![0.01, 20.0, 0.001, 100.0];
+        let (class_id, confidence) = classifier.infer(&features);
+        assert!(class_id < 4);
+        assert!((confidence - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_model_size_bytes() {
+        let classifier = EdgeClassifier::new();
+        let size = classifier.memory_bytes();
+        assert!(size > 0);
+        assert!(size < 1000); // 極めて小さいモデル
+    }
+
+    #[test]
+    fn test_extreme_values_stability() {
+        let mut classifier = EdgeClassifier::new();
+        let extreme = SensorFeatures {
+            slope: f32::MAX,
+            intercept: f32::MIN,
+            residual: f32::INFINITY,
+            sample_count: u16::MAX,
+        };
+        // パニックしないことを確認
+        let result = classifier.classify_sensor(&extreme);
+        assert!(matches!(
+            result,
+            EdgeClassification::Normal
+                | EdgeClassification::Anomaly
+                | EdgeClassification::Drift
+                | EdgeClassification::Saturated
+        ));
+    }
+
+    #[test]
+    fn test_zero_input_stability() {
+        let mut classifier = EdgeClassifier::new();
+        let zero = SensorFeatures {
+            slope: 0.0,
+            intercept: 0.0,
+            residual: 0.0,
+            sample_count: 0,
+        };
+        let result = classifier.classify_sensor(&zero);
+        assert!(matches!(
+            result,
+            EdgeClassification::Normal
+                | EdgeClassification::Anomaly
+                | EdgeClassification::Drift
+                | EdgeClassification::Saturated
+        ));
+    }
+
+    #[test]
+    fn test_classify_batch_empty() {
+        let mut classifier = EdgeClassifier::new();
+        let results = classifier.classify_batch(&[]);
+        assert!(results.is_empty());
+        assert_eq!(classifier.total_classified, 0);
+    }
+
+    #[test]
+    fn test_infer_short_features() {
+        // INPUT_DIM より短い入力でもパニックしないことを確認
+        let mut classifier = EdgeClassifier::new();
+        use crate::EdgeInference;
+        let short = vec![1.0, 2.0]; // 4 要素未満
+        let (class_id, _) = classifier.infer(&short);
+        assert!(class_id < 4);
     }
 }

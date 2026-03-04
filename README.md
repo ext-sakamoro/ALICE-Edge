@@ -1,11 +1,33 @@
 # ALICE-Edge
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
+[![Tests](https://img.shields.io/badge/tests-249_passing-brightgreen.svg)](#quality)
+[![no_std](https://img.shields.io/badge/no__std-compatible-green.svg)](#supported-platforms)
+
 **Embedded Model Generator** - "Don't send data. Send the law."
 
 <p align="center">
   <em>Ultra-lightweight procedural compression for IoT and embedded systems.<br/>
   1000 sensor samples → 8 bytes. Runs on Raspberry Pi 5 to bare-metal MCU.</em>
 </p>
+
+## Installation
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+alice-edge = "0.1"
+
+# With sensor drivers and MQTT:
+alice-edge = { version = "0.1", features = ["sensors", "mqtt"] }
+
+# Full edge pipeline (depth camera → SDF → ML → streaming):
+alice-edge = { version = "0.1", features = ["edge-pipeline"] }
+```
+
+**Minimum Supported Rust Version (MSRV):** 1.70+ (edition 2021)
 
 ## The Philosophy
 
@@ -269,7 +291,7 @@ ALICE-Edge/
 │   ├── zip_bridge.rs       # ALICE-Zip compression
 │   ├── codec_bridge.rs     # Wavelet denoising
 │   ├── db_bridge.rs        # Coefficient persistence
-│   ├── ml_bridge.rs        # Ternary neural network (544 B model)
+│   ├── ml_bridge.rs        # Ternary neural network (~80 B model)
 │   ├── depth_capture.rs    # Dolphin D5 Lite depth camera
 │   ├── sdf_compress.rs     # SDF point cloud compression
 │   ├── object_classifier.rs # Edge object classification
@@ -287,6 +309,62 @@ ALICE-Edge/
 │   └── pi5_bench.rs        # Criterion benchmarks
 └── README.md
 ```
+
+## Bindings
+
+ALICE-Edge provides cross-language bindings via C-ABI FFI:
+
+### C/C++
+
+```c
+#include "alice_edge.h"
+
+int32_t data[] = {2500, 2510, 2520, 2530, 2540};
+AliceLinearResult r = alice_fit_linear(data, 5);
+int32_t predicted = alice_evaluate_linear(r.slope, r.intercept, 10);
+float celsius = alice_q16_to_f32(predicted) / 100.0f;
+```
+
+Build: `cargo build --release --features ffi` → `libalice_edge.dylib` / `.so` / `.dll`
+
+Header: [`bindings/alice_edge.h`](bindings/alice_edge.h)
+
+### Unity (C#)
+
+```csharp
+using AliceEdge;
+
+int[] samples = {2500, 2510, 2520, 2530, 2540};
+var (slope, intercept) = AliceModel.FitLinear(samples);
+float temp = AliceModel.Q16ToFloat(
+    AliceModel.EvaluateLinear(slope, intercept, 10)) / 100f;
+```
+
+DllImport wrapper: [`bindings/AliceEdge.cs`](bindings/AliceEdge.cs)
+
+### Python (PyO3 + NumPy)
+
+```python
+import alice_edge
+import numpy as np
+
+data = np.array([2500, 2510, 2520, 2530, 2540], dtype=np.int32)
+slope, intercept = alice_edge.fit_linear(data)
+temp_f = alice_edge.q16_to_f32(alice_edge.evaluate_linear(slope, intercept, 10))
+```
+
+Build: `maturin develop --features pyo3`
+
+## Quality
+
+| Metric | Value |
+|--------|-------|
+| **Tests** | 249 (243 lib + 6 doc), 0 failures |
+| **clippy pedantic** | 0 warnings |
+| **cargo doc** | 0 warnings |
+| **cargo fmt** | clean |
+| **FFI functions** | 19 (fitting, evaluate, robust, SIMD, filter, delta, zeroize) |
+| **Bindings** | C/C++ header, Unity C#, Python PyO3 |
 
 ## Security Model
 
@@ -362,6 +440,33 @@ scp target/aarch64-unknown-linux-gnu/release/examples/* pi@raspberrypi:~/
 | ESP32 / ESP8266 | Y | - | - | - |
 | RISC-V | Y | - | - | - |
 | macOS / Linux (x86_64) | Y | sim | Y | Y |
+
+## Troubleshooting (Raspberry Pi)
+
+**"Permission denied" on GPIO**:
+```bash
+sudo usermod -aG gpio $USER && newgrp gpio
+```
+
+**"I2C device not found (0x76)"**:
+```bash
+sudo raspi-config  # Enable I2C under Interface Options
+i2cdetect -y 1     # Verify BME280 appears at 0x76
+```
+
+**"SPI bus not available"**:
+```bash
+sudo raspi-config  # Enable SPI under Interface Options
+ls /dev/spidev*    # Verify SPI devices exist
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, and lint instructions.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## License
 

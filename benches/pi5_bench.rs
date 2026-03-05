@@ -1,3 +1,9 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::semicolon_if_nothing_returned,
+    clippy::doc_markdown
+)]
 //! ALICE-Edge benchmarks for Raspberry Pi 5 (Cortex-A76)
 //!
 //! Run on Pi 5:
@@ -10,7 +16,7 @@
 
 use alice_edge::{
     compute_residual_error, evaluate_linear_fixed, fit_constant_fixed, fit_linear_fixed,
-    int_to_q16, q16_to_int, should_use_linear, Q16_SHIFT,
+    int_to_q16, q16_to_int, should_use_linear,
 };
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
@@ -53,8 +59,8 @@ fn bench_fit_constant(c: &mut Criterion) {
 }
 
 fn bench_evaluate(c: &mut Criterion) {
-    let slope = 655360; // 10.0 in Q16.16
-    let intercept = 163840000; // 2500.0 in Q16.16
+    let slope = 655_360; // 10.0 in Q16.16
+    let intercept = 163_840_000; // 2500.0 in Q16.16
 
     c.bench_function("evaluate_linear_fixed", |b| {
         b.iter(|| {

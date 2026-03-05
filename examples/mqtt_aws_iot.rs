@@ -1,3 +1,4 @@
+#![allow(clippy::doc_markdown)]
 //! MQTT AWS IoT Core publish — send coefficients to AWS cloud
 //!
 //! Prerequisites:

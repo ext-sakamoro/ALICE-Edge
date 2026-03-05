@@ -27,7 +27,7 @@ impl SensorHub {
             sensors: vec![
                 ("bme280-temp", SimulatedSensor::new(2500, 5)), // 25.00°C ±0.05
                 ("bme280-humi", SimulatedSensor::new(6000, 20)), // 60.00% ±0.20
-                ("bme280-pres", SimulatedSensor::new(101325, 50)), // 1013.25 hPa ±0.50
+                ("bme280-pres", SimulatedSensor::new(101_325, 50)), // 1013.25 hPa ±0.50
                 ("dht22-temp", SimulatedSensor::new(2200, 10)), // 22.00°C ±0.10
                 ("dht22-humi", SimulatedSensor::new(4500, 30)), // 45.00% ±0.30
                 ("adxl345-x", SimulatedSensor::new(0, 100)),    // 0g ±1.00 accel

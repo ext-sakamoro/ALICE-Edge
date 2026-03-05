@@ -74,7 +74,7 @@ impl Watchdog {
 
     /// 設定されたタイムアウト値
     #[must_use]
-    pub fn timeout(&self) -> Duration {
+    pub const fn timeout(&self) -> Duration {
         self.timeout
     }
 

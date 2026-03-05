@@ -1,3 +1,4 @@
+#![allow(clippy::doc_markdown)]
 //! Dashboard demo — ALICE-Analytics metrics for edge processing
 //!
 //! Shows real-time monitoring of sensor compression using

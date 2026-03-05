@@ -38,7 +38,7 @@ impl<T: Copy, const N: usize> RingBuffer<T, N> {
 
     /// 要素を追加（満杯時は最古を上書き）
     #[inline(always)]
-    pub fn push(&mut self, value: T) {
+    pub const fn push(&mut self, value: T) {
         let idx = (self.head + self.len) % N;
         self.buf[idx] = MaybeUninit::new(value);
         if self.len < N {
@@ -74,7 +74,7 @@ impl<T: Copy, const N: usize> RingBuffer<T, N> {
 
     /// インデックスでアクセス（0 = 最古の要素）
     #[inline(always)]
-    pub fn get(&self, index: usize) -> Option<&T> {
+    pub const fn get(&self, index: usize) -> Option<&T> {
         if index >= self.len {
             return None;
         }
@@ -85,7 +85,7 @@ impl<T: Copy, const N: usize> RingBuffer<T, N> {
 
     /// 最新の要素を取得
     #[inline(always)]
-    pub fn last(&self) -> Option<&T> {
+    pub const fn last(&self) -> Option<&T> {
         if self.len == 0 {
             return None;
         }
@@ -94,18 +94,18 @@ impl<T: Copy, const N: usize> RingBuffer<T, N> {
 
     /// 最古の要素を取得
     #[inline(always)]
-    pub fn first(&self) -> Option<&T> {
+    pub const fn first(&self) -> Option<&T> {
         self.get(0)
     }
 
     /// バッファをクリア
-    pub fn clear(&mut self) {
+    pub const fn clear(&mut self) {
         self.head = 0;
         self.len = 0;
     }
 
     /// イテレータ（最古→最新の順）
-    pub fn iter(&self) -> RingBufferIter<'_, T, N> {
+    pub const fn iter(&self) -> RingBufferIter<'_, T, N> {
         RingBufferIter {
             buf: self,
             index: 0,
@@ -233,5 +233,117 @@ mod tests {
         rb.push(2);
         assert_eq!(rb.len(), 1);
         assert_eq!(*rb.get(0).unwrap(), 2);
+    }
+
+    #[test]
+    fn test_default_is_empty() {
+        let rb: RingBuffer<i32, 8> = RingBuffer::default();
+        assert!(rb.is_empty());
+        assert_eq!(rb.len(), 0);
+        assert_eq!(rb.capacity(), 8);
+    }
+
+    #[test]
+    fn test_capacity_preserved_after_wrap() {
+        let mut rb: RingBuffer<i32, 4> = RingBuffer::new();
+        for i in 0..10 {
+            rb.push(i);
+        }
+        assert_eq!(rb.capacity(), 4);
+        assert_eq!(rb.len(), 4);
+    }
+
+    #[test]
+    fn test_iter_into_iter() {
+        let mut rb: RingBuffer<i32, 4> = RingBuffer::new();
+        rb.push(10);
+        rb.push(20);
+        rb.push(30);
+        let values: Vec<i32> = (&rb).into_iter().copied().collect();
+        assert_eq!(values, vec![10, 20, 30]);
+    }
+
+    #[test]
+    fn test_iter_size_hint() {
+        let mut rb: RingBuffer<i32, 4> = RingBuffer::new();
+        rb.push(1);
+        rb.push(2);
+        rb.push(3);
+        let mut iter = rb.iter();
+        assert_eq!(iter.size_hint(), (3, Some(3)));
+        iter.next();
+        assert_eq!(iter.size_hint(), (2, Some(2)));
+    }
+
+    #[test]
+    fn test_push_fill_then_overwrite_ordering() {
+        let mut rb: RingBuffer<i32, 5> = RingBuffer::new();
+        // 満杯にする
+        for i in 0..5 {
+            rb.push(i * 10);
+        }
+        // 3要素を上書き
+        rb.push(100);
+        rb.push(200);
+        rb.push(300);
+        // 最古は元の i=3 → 30
+        assert_eq!(*rb.first().unwrap(), 30);
+        assert_eq!(*rb.last().unwrap(), 300);
+    }
+
+    #[test]
+    fn test_clear_then_reuse() {
+        let mut rb: RingBuffer<i32, 4> = RingBuffer::new();
+        rb.push(1);
+        rb.push(2);
+        rb.clear();
+        assert!(rb.is_empty());
+        rb.push(99);
+        assert_eq!(rb.len(), 1);
+        assert_eq!(*rb.get(0).unwrap(), 99);
+    }
+
+    #[test]
+    fn test_get_all_indices() {
+        let mut rb: RingBuffer<i32, 4> = RingBuffer::new();
+        rb.push(10);
+        rb.push(20);
+        rb.push(30);
+        rb.push(40);
+        for i in 0..4 {
+            assert!(rb.get(i).is_some(), "index {i} should be valid");
+        }
+        assert!(rb.get(4).is_none());
+    }
+
+    #[test]
+    fn test_iter_empty_buffer() {
+        let rb: RingBuffer<i32, 4> = RingBuffer::new();
+        let count = rb.iter().count();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_sensor_window_simulation() {
+        // センサーウィンドウ: 8要素のスライディングウィンドウ
+        let mut rb: RingBuffer<i32, 8> = RingBuffer::new();
+        // 10サンプル投入 (先頭2個は上書きされる)
+        for i in 0..10i32 {
+            rb.push(i * 100);
+        }
+        assert_eq!(rb.len(), 8);
+        // 最古 = サンプル2 (200), 最新 = サンプル9 (900)
+        assert_eq!(*rb.first().unwrap(), 200);
+        assert_eq!(*rb.last().unwrap(), 900);
+    }
+
+    #[test]
+    fn test_ring_buffer_u8() {
+        // 型汎用性: u8 でも動作
+        let mut rb: RingBuffer<u8, 4> = RingBuffer::new();
+        rb.push(1u8);
+        rb.push(255u8);
+        assert_eq!(*rb.get(0).unwrap(), 1u8);
+        assert_eq!(*rb.get(1).unwrap(), 255u8);
     }
 }

@@ -1,3 +1,4 @@
+#![allow(clippy::doc_markdown)]
 //! MQTT local publish — send compressed coefficients to local Mosquitto
 //!
 //! Prerequisites:

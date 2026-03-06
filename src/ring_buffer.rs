@@ -259,8 +259,11 @@ mod tests {
         rb.push(10);
         rb.push(20);
         rb.push(30);
-        let values: Vec<i32> = (&rb).into_iter().copied().collect();
-        assert_eq!(values, vec![10, 20, 30]);
+        let mut iter = (&rb).into_iter();
+        assert_eq!(iter.next(), Some(&10));
+        assert_eq!(iter.next(), Some(&20));
+        assert_eq!(iter.next(), Some(&30));
+        assert_eq!(iter.next(), None);
     }
 
     #[test]

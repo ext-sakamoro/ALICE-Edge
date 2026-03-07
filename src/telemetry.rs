@@ -317,7 +317,7 @@ mod tests {
     #[test]
     fn default_metrics() {
         let m = DeviceMetrics::default();
-        assert_eq!(m.cpu_usage, 0.0);
+        assert!(m.cpu_usage.abs() < f32::EPSILON);
         assert_eq!(m.uptime_secs, 0);
     }
 

@@ -3,6 +3,19 @@
 //! 複数センサー入力の融合と状態推定。
 //! `no_std` 対応。
 
+/// `no_std` 対応の平方根 (Newton法)。
+fn sqrt_f32(x: f32) -> f32 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let mut guess = x;
+    // Newton法 6回反復 (f32精度に十分)
+    for _ in 0..6 {
+        guess = 0.5 * (guess + x / guess);
+    }
+    guess
+}
+
 /// 1次元カルマンフィルタ。
 ///
 /// 単一状態変数 (例: 温度) の推定。
@@ -118,8 +131,10 @@ impl KalmanFilter2D {
 
         // 共分散遷移: P = F*P*F' + Q
         let dt = self.dt;
-        let new_p00 = dt.mul_add(dt.mul_add(self.p11, self.p01 + self.p01), self.p00) + self.q;
-        let new_p01 = dt.mul_add(self.p11, self.p01);
+        #[allow(clippy::suboptimal_flops)]
+        let new_p00 = dt * (dt * self.p11 + self.p01 + self.p01) + self.p00 + self.q;
+        #[allow(clippy::suboptimal_flops)]
+        let new_p01 = dt * self.p11 + self.p01;
         let new_p11 = self.p11 + self.q;
 
         self.p00 = new_p00;
@@ -243,7 +258,7 @@ impl FusedSensor {
         for input in inputs {
             // 外れ値検出
             let innovation = (input.value - self.filter.x).abs();
-            let std_dev = (self.filter.p + input.noise).sqrt();
+            let std_dev = sqrt_f32(self.filter.p + input.noise);
 
             if innovation > self.config.outlier_threshold * std_dev {
                 self.rejected_count += 1;
@@ -348,8 +363,8 @@ mod tests {
     #[test]
     fn fusion_config_default() {
         let config = FusionConfig::default();
-        assert_eq!(config.process_noise, 0.01);
-        assert_eq!(config.outlier_threshold, 3.0);
+        assert!((config.process_noise - 0.01).abs() < f32::EPSILON);
+        assert!((config.outlier_threshold - 3.0).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -444,6 +459,6 @@ mod tests {
         let before = kf.error();
         kf.predict();
         assert!(kf.error() > before);
-        assert_eq!(kf.estimate(), 5.0);
+        assert!((kf.estimate() - 5.0).abs() < f32::EPSILON);
     }
 }

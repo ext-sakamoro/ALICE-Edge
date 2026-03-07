@@ -815,6 +815,7 @@ pub fn fit_linear_simd(data: &[i32]) -> (i32, i32) {
             // SAFETY: SSE2 サポートを上記で確認済み。data は有効なスライス。
             return unsafe { fit_linear_sse2(data) };
         }
+        return fit_linear_fixed(data);
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -932,7 +933,7 @@ unsafe fn fit_linear_sse2(data: &[i32]) -> (i32, i32) {
 /// SSE2 有効なコンテキストから呼び出すこと。a, b は sign-extended i64。
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "sse2")]
-#[inline(always)]
+#[inline]
 unsafe fn sse2_mul_epi64(
     a: core::arch::x86_64::__m128i,
     b: core::arch::x86_64::__m128i,

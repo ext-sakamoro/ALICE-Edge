@@ -101,6 +101,34 @@ jobs:
         with:
           targets: thumbv7em-none-eabihf
 
+      - name: Create dependency stubs
+        run: |
+          for crate_info in \
+            "ALICE-Zip/libalice:alice-zip" \
+            "ALICE-Codec:alice-codec" \
+            "ALICE-DB:alice-db" \
+            "ALICE-SDF:alice-sdf" \
+            "ALICE-ML:alice-ml" \
+            "ALICE-Streaming-Protocol:libasp" \
+            "ALICE-Analytics:alice-analytics"; do
+            dir=$(echo "$crate_info" | cut -d: -f1)
+            pkg=$(echo "$crate_info" | cut -d: -f2)
+            mkdir -p "../$dir/src"
+            cat > "../$dir/Cargo.toml" << TOML
+          [package]
+          name = "$pkg"
+          version = "0.1.0"
+          edition = "2021"
+          [features]
+          default = []
+          std = []
+          svo = []
+          [lib]
+          path = "src/lib.rs"
+          TOML
+            echo "" > "../$dir/src/lib.rs"
+          done
+
       - name: Build no_std (thumbv7em-none-eabihf)
         run: cargo build --lib --target thumbv7em-none-eabihf --no-default-features
 

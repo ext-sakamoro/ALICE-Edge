@@ -10,7 +10,7 @@ Embedded Model Generator - Don't send data, send the law
 | バージョン | 0.1.0 |
 | ライセンス | MIT |
 | リポジトリ | `ext-sakamoro/ALICE-Edge` |
-| テスト数 | 249 (lib 243 + doc 6) |
+| テスト数 | 236 (lib 168 + integration/doc 68, --features std) |
 | clippy (all+pedantic+nursery, all-targets) | 0 warnings |
 | cargo doc | 0 warnings |
 | Eco-Systemブリッジ | bridge_edge.rs + bridge_edge_ext.rs |

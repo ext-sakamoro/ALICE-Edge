@@ -42,7 +42,7 @@ fn main() {
     for &n in &sample_counts {
         let batch = sensor.read_samples(n).expect("Read failed");
 
-        println!("\n--- {} samples ---", n);
+        println!("\n--- {n} samples ---");
 
         // Temperature channel
         let (t_slope, t_intercept) = fit_linear_fixed(&batch.temperature);
@@ -50,8 +50,8 @@ fn main() {
         let compressed_bytes = 8;
         println!(
             "Temperature: slope={:.4} intercept={:.2} | {} → {} bytes ({}x)",
-            t_slope as f64 / (1 << Q16_SHIFT) as f64,
-            t_intercept as f64 / (1 << Q16_SHIFT) as f64,
+            f64::from(t_slope) / f64::from(1 << Q16_SHIFT),
+            f64::from(t_intercept) / f64::from(1 << Q16_SHIFT),
             raw_bytes,
             compressed_bytes,
             raw_bytes / compressed_bytes
@@ -62,8 +62,8 @@ fn main() {
             let (h_slope, h_intercept) = fit_linear_fixed(&batch.humidity);
             println!(
                 "Humidity:    slope={:.4} intercept={:.2} | {} → {} bytes ({}x)",
-                h_slope as f64 / (1 << Q16_SHIFT) as f64,
-                h_intercept as f64 / (1 << Q16_SHIFT) as f64,
+                f64::from(h_slope) / f64::from(1 << Q16_SHIFT),
+                f64::from(h_intercept) / f64::from(1 << Q16_SHIFT),
                 raw_bytes,
                 compressed_bytes,
                 raw_bytes / compressed_bytes
@@ -75,8 +75,8 @@ fn main() {
             let (p_slope, p_intercept) = fit_linear_fixed(&batch.pressure);
             println!(
                 "Pressure:    slope={:.4} intercept={:.2} | {} → {} bytes ({}x)",
-                p_slope as f64 / (1 << Q16_SHIFT) as f64,
-                p_intercept as f64 / (1 << Q16_SHIFT) as f64,
+                f64::from(p_slope) / f64::from(1 << Q16_SHIFT),
+                f64::from(p_intercept) / f64::from(1 << Q16_SHIFT),
                 raw_bytes,
                 compressed_bytes,
                 raw_bytes / compressed_bytes

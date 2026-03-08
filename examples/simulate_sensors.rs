@@ -24,8 +24,8 @@ fn main() {
     println!("Collected {} temperature samples", temperature.len());
     println!(
         "  Range: {:.2}°C — {:.2}°C",
-        *temperature.iter().min().unwrap() as f64 / 100.0,
-        *temperature.iter().max().unwrap() as f64 / 100.0,
+        f64::from(*temperature.iter().min().unwrap()) / 100.0,
+        f64::from(*temperature.iter().max().unwrap()) / 100.0,
     );
 
     // Fit linear model
@@ -35,12 +35,12 @@ fn main() {
     println!(
         "  slope     = {} (≈ {:.4})",
         slope,
-        slope as f64 / (1 << Q16_SHIFT) as f64
+        f64::from(slope) / f64::from(1 << Q16_SHIFT)
     );
     println!(
         "  intercept = {} (≈ {:.2})",
         intercept,
-        intercept as f64 / (1 << Q16_SHIFT) as f64
+        f64::from(intercept) / f64::from(1 << Q16_SHIFT)
     );
 
     // Compression ratio
@@ -52,33 +52,23 @@ fn main() {
         raw_bytes,
         temperature.len()
     );
-    println!(
-        "  Compressed: {} bytes (slope + intercept)",
-        compressed_bytes
-    );
+    println!("  Compressed: {compressed_bytes} bytes (slope + intercept)");
     println!("  Ratio:      {}x", raw_bytes / compressed_bytes);
-    println!(
-        "  Savings:    {:.1}%",
-        (1.0 - compressed_bytes as f64 / raw_bytes as f64) * 100.0
-    );
+    #[allow(clippy::cast_precision_loss)]
+    let savings = (1.0 - compressed_bytes as f64 / raw_bytes as f64) * 100.0;
+    println!("  Savings:    {savings:.1}%");
 
     // Verify reconstruction
     println!("\nReconstruction verification (first 5 points):");
-    for i in 0..5.min(temperature.len()) {
+    for (i, &actual) in temperature.iter().enumerate().take(5) {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
         let predicted = alice_edge::evaluate_linear_fixed(slope, intercept, i as i32);
-        let actual = temperature[i];
         let predicted_val = q16_to_int(predicted);
         println!(
-            "  x={}: actual={} predicted={} error={}",
-            i,
-            actual,
-            predicted_val,
+            "  x={i}: actual={actual} predicted={predicted_val} error={}",
             (actual - predicted_val).abs()
         );
     }
 
-    println!(
-        "\nDone! Transmitted 8 bytes instead of {} bytes.",
-        raw_bytes
-    );
+    println!("\nDone! Transmitted 8 bytes instead of {raw_bytes} bytes.");
 }

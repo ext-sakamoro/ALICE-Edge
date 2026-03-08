@@ -1,6 +1,6 @@
 //! Multi-sensor hub — compress data from multiple sensors
 //!
-//! Demonstrates a realistic IoT hub scenario with multiple sensor types.
+//! Demonstrates a realistic `IoT` hub scenario with multiple sensor types.
 //! Each sensor's data is independently compressed and transmitted.
 //!
 //! ```bash
@@ -41,7 +41,7 @@ impl SensorHub {
         for (name, sensor) in &mut self.sensors {
             sensor
                 .init()
-                .unwrap_or_else(|e| panic!("Failed to init {}: {:?}", name, e));
+                .unwrap_or_else(|e| panic!("Failed to init {name}: {e:?}"));
         }
     }
 
@@ -71,32 +71,35 @@ impl SensorHub {
             total_raw += raw_bytes;
             total_compressed += compressed_bytes;
 
+            #[allow(clippy::cast_precision_loss)]
+            let ratio = raw_bytes as f64 / compressed_bytes as f64;
             println!(
                 "│ {:<12} │ {:>8} │ {:>8} │ {:>4} │ {:>7.0}x  │ {:<8} │",
                 name,
                 data.len(),
                 raw_bytes,
                 compressed_bytes,
-                raw_bytes as f64 / compressed_bytes as f64,
+                ratio,
                 model,
             );
         }
 
         println!("├──────────────┼──────────┼──────────┼──────┼───────────┼──────────┤");
+        #[allow(clippy::cast_precision_loss)]
+        let total_ratio = total_raw as f64 / total_compressed as f64;
         println!(
             "│ TOTAL        │ {:>8} │ {:>8} │ {:>4} │ {:>7.0}x  │          │",
             samples_per_sensor * self.sensors.len(),
             total_raw,
             total_compressed,
-            total_raw as f64 / total_compressed as f64,
+            total_ratio,
         );
         println!("└──────────────┴──────────┴──────────┴──────┴───────────┴──────────┘");
 
+        #[allow(clippy::cast_precision_loss)]
+        let reduction = (1.0 - total_compressed as f64 / total_raw as f64) * 100.0;
         println!(
-            "\nBandwidth savings: {} bytes → {} bytes ({:.1}% reduction)",
-            total_raw,
-            total_compressed,
-            (1.0 - total_compressed as f64 / total_raw as f64) * 100.0,
+            "\nBandwidth savings: {total_raw} bytes → {total_compressed} bytes ({reduction:.1}% reduction)"
         );
     }
 }
@@ -108,7 +111,7 @@ fn main() {
     hub.init_all();
 
     for &n in &[100, 1000] {
-        println!("\n--- {} samples per sensor ---\n", n);
+        println!("\n--- {n} samples per sensor ---\n");
         hub.collect_and_compress(n);
     }
 }

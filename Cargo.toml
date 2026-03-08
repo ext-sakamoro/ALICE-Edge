@@ -12,7 +12,7 @@ readme = "README.md"
 
 [lib]
 name = "alice_edge"
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
 
 [features]
 default = []
@@ -69,6 +69,30 @@ tempfile = "3"
 [[bench]]
 name = "pi5_bench"
 harness = false
+
+[[example]]
+name = "bme280_compress"
+required-features = ["sensors", "std"]
+
+[[example]]
+name = "simulate_sensors"
+required-features = ["sensors", "std"]
+
+[[example]]
+name = "multi_sensor_hub"
+required-features = ["sensors", "std"]
+
+[[example]]
+name = "dashboard_demo"
+required-features = ["sensors", "dashboard", "std"]
+
+[[example]]
+name = "mqtt_aws_iot"
+required-features = ["sensors", "mqtt", "std"]
+
+[[example]]
+name = "mqtt_local"
+required-features = ["sensors", "mqtt", "std"]
 
 [profile.bench]
 opt-level = 3

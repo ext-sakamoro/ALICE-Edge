@@ -65,7 +65,7 @@ pub struct SensorBatch {
 }
 
 impl SensorBatch {
-    fn new(sensor_id: &'static str) -> Self {
+    const fn new(sensor_id: &'static str) -> Self {
         Self {
             sensor_id: Cow::Borrowed(sensor_id),
             temperature: Vec::new(),
@@ -134,13 +134,13 @@ pub enum SensorError {
 impl std::fmt::Display for SensorError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SensorError::I2c(e) => write!(f, "I2C error: {e}"),
-            SensorError::Spi(e) => write!(f, "SPI error: {e}"),
-            SensorError::Gpio(e) => write!(f, "GPIO error: {e}"),
-            SensorError::Uart(e) => write!(f, "UART error: {e}"),
-            SensorError::NotFound(e) => write!(f, "Sensor not found: {e}"),
-            SensorError::InvalidData(e) => write!(f, "Invalid data: {e}"),
-            SensorError::Timeout => write!(f, "Sensor timeout"),
+            Self::I2c(e) => write!(f, "I2C error: {e}"),
+            Self::Spi(e) => write!(f, "SPI error: {e}"),
+            Self::Gpio(e) => write!(f, "GPIO error: {e}"),
+            Self::Uart(e) => write!(f, "UART error: {e}"),
+            Self::NotFound(e) => write!(f, "Sensor not found: {e}"),
+            Self::InvalidData(e) => write!(f, "Invalid data: {e}"),
+            Self::Timeout => write!(f, "Sensor timeout"),
         }
     }
 }
@@ -197,7 +197,7 @@ impl Bme280Sensor {
     /// * `bus` - I2C bus number (1 on Pi 5)
     /// * `address` - I2C address (0x76 default, 0x77 alternate)
     #[must_use]
-    pub fn new(_bus: u8, address: u16) -> Self {
+    pub const fn new(_bus: u8, address: u16) -> Self {
         Self {
             address,
             #[cfg(feature = "sensors-hw")]
@@ -279,7 +279,7 @@ impl Bme280Sensor {
 
     /// Compensate raw temperature to °C × 100 (integer)
     #[allow(dead_code)]
-    fn compensate_temperature(&self, adc_t: i32) -> (i32, i32) {
+    const fn compensate_temperature(&self, adc_t: i32) -> (i32, i32) {
         let var1 = (((adc_t >> 3) - ((self.dig_t1 as i32) << 1)) * (self.dig_t2 as i32)) >> 11;
         let var2 = (((((adc_t >> 4) - (self.dig_t1 as i32))
             * ((adc_t >> 4) - (self.dig_t1 as i32)))
@@ -317,7 +317,7 @@ impl Bme280Sensor {
     /// Compensate raw pressure to hPa × 10 (integer)
     #[allow(dead_code)]
     #[inline(always)]
-    fn compensate_pressure(&self, adc_p: i32, t_fine: i32) -> i32 {
+    const fn compensate_pressure(&self, adc_p: i32, t_fine: i32) -> i32 {
         let mut var1 = (t_fine as i64) - 128_000;
         let mut var2 = var1 * var1 * (self.dig_p6 as i64);
         var2 += (var1 * (self.dig_p5 as i64)) << 17;
@@ -461,7 +461,7 @@ pub struct Dht22Sensor {
 
 impl Dht22Sensor {
     #[must_use]
-    pub fn new(gpio_pin: u8) -> Self {
+    pub const fn new(gpio_pin: u8) -> Self {
         Self {
             gpio_pin,
             initialized: false,
@@ -616,7 +616,7 @@ impl Default for Adxl345Sensor {
 
 impl Adxl345Sensor {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { initialized: false }
     }
 }
@@ -765,7 +765,7 @@ impl GpsSensor {
         // Latitude: ddmm.mmmm
         let lat_raw = parts[2].parse::<f64>().ok()?;
         let lat_deg = (lat_raw * INV_100).floor();
-        let lat_min = lat_raw - lat_deg * 100.0;
+        let lat_min = lat_deg.mul_add(-100.0, lat_raw);
         let mut lat = ((lat_deg + lat_min * INV_60) * 1_000_000.0) as i32;
         if parts[3] == "S" {
             lat = -lat;
@@ -774,7 +774,7 @@ impl GpsSensor {
         // Longitude: dddmm.mmmm
         let lon_raw = parts[4].parse::<f64>().ok()?;
         let lon_deg = (lon_raw * INV_100).floor();
-        let lon_min = lon_raw - lon_deg * 100.0;
+        let lon_min = lon_deg.mul_add(-100.0, lon_raw);
         let mut lon = ((lon_deg + lon_min * INV_60) * 1_000_000.0) as i32;
         if parts[5] == "W" {
             lon = -lon;
@@ -892,7 +892,7 @@ pub struct Bno055Sensor {
 impl Bno055Sensor {
     /// Create a new BNO055 sensor (default address 0x28, alternate 0x29)
     #[must_use]
-    pub fn new(address: u16) -> Self {
+    pub const fn new(address: u16) -> Self {
         Self {
             address,
             initialized: false,
@@ -1032,7 +1032,7 @@ pub struct Max30102Sensor {
 impl Max30102Sensor {
     /// Create a new MAX30102 sensor (default address 0x57)
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             address: 0x57,
             initialized: false,
@@ -1168,7 +1168,7 @@ impl SimulatedSensor {
     /// * `base_temp` - Base temperature in °C × 100 (e.g., 2500 = 25.00°C)
     /// * `noise_amplitude` - Maximum noise amplitude (e.g., 5 = ±0.05°C)
     #[must_use]
-    pub fn new(base_temp: i32, noise_amplitude: i32) -> Self {
+    pub const fn new(base_temp: i32, noise_amplitude: i32) -> Self {
         Self {
             noise_amplitude,
             base_temp,
@@ -1178,7 +1178,7 @@ impl SimulatedSensor {
 
     /// Simple deterministic pseudo-random noise
     #[inline(always)]
-    fn noise(seed: u64) -> i32 {
+    const fn noise(seed: u64) -> i32 {
         let hash = seed
             .wrapping_mul(0x9E37_79B9_7F4A_7C15)
             .wrapping_add(0x6A09_E667);
@@ -1265,7 +1265,7 @@ mod tests {
         sensor.dig_p7 = 15500;
         sensor.dig_p8 = -14600;
         sensor.dig_p9 = 6000;
-        let (temp, _t_fine) = sensor.compensate_temperature(519888);
+        let (temp, _t_fine) = sensor.compensate_temperature(519_888);
         assert!(temp > 2000 && temp < 3500); // ~20-35°C range
     }
 
@@ -1301,43 +1301,43 @@ mod tests {
     #[test]
     fn test_sensor_error_display_i2c() {
         let err = SensorError::I2c("bus error".into());
-        assert_eq!(format!("{}", err), "I2C error: bus error");
+        assert_eq!(format!("{err}"), "I2C error: bus error");
     }
 
     #[test]
     fn test_sensor_error_display_spi() {
         let err = SensorError::Spi("clock error".into());
-        assert_eq!(format!("{}", err), "SPI error: clock error");
+        assert_eq!(format!("{err}"), "SPI error: clock error");
     }
 
     #[test]
     fn test_sensor_error_display_gpio() {
         let err = SensorError::Gpio("pin busy".into());
-        assert_eq!(format!("{}", err), "GPIO error: pin busy");
+        assert_eq!(format!("{err}"), "GPIO error: pin busy");
     }
 
     #[test]
     fn test_sensor_error_display_uart() {
         let err = SensorError::Uart("framing error".into());
-        assert_eq!(format!("{}", err), "UART error: framing error");
+        assert_eq!(format!("{err}"), "UART error: framing error");
     }
 
     #[test]
     fn test_sensor_error_display_not_found() {
         let err = SensorError::NotFound("BME280 missing".into());
-        assert_eq!(format!("{}", err), "Sensor not found: BME280 missing");
+        assert_eq!(format!("{err}"), "Sensor not found: BME280 missing");
     }
 
     #[test]
     fn test_sensor_error_display_invalid_data() {
         let err = SensorError::InvalidData("checksum fail".into());
-        assert_eq!(format!("{}", err), "Invalid data: checksum fail");
+        assert_eq!(format!("{err}"), "Invalid data: checksum fail");
     }
 
     #[test]
     fn test_sensor_error_display_timeout() {
         let err = SensorError::Timeout;
-        assert_eq!(format!("{}", err), "Sensor timeout");
+        assert_eq!(format!("{err}"), "Sensor timeout");
     }
 
     #[test]
@@ -1455,7 +1455,7 @@ mod tests {
         // dig_p1 = 0 causes var1 = 0, function returns 0 early
         let mut sensor = Bme280Sensor::new(1, 0x76);
         sensor.dig_p1 = 0;
-        let result = sensor.compensate_pressure(500000, 10000);
+        let result = sensor.compensate_pressure(500_000, 10_000);
         assert_eq!(result, 0);
     }
 

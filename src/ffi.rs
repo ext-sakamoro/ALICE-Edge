@@ -68,7 +68,7 @@ pub unsafe extern "C" fn alice_fit_linear(data: *const i32, len: usize) -> Alice
 
 /// Evaluate a linear model at point x.
 #[no_mangle]
-pub extern "C" fn alice_evaluate_linear(slope: i32, intercept: i32, x: i32) -> i32 {
+pub const extern "C" fn alice_evaluate_linear(slope: i32, intercept: i32, x: i32) -> i32 {
     evaluate_linear_fixed(slope, intercept, x)
 }
 
@@ -92,7 +92,7 @@ pub unsafe extern "C" fn alice_fit_quadratic(data: *const i32, len: usize) -> Al
 
 /// Evaluate a quadratic model at point x.
 #[no_mangle]
-pub extern "C" fn alice_evaluate_quadratic(a: i32, b: i32, c: i32, x: i32) -> i32 {
+pub const extern "C" fn alice_evaluate_quadratic(a: i32, b: i32, c: i32, x: i32) -> i32 {
     evaluate_quadratic_fixed(a, b, c, x)
 }
 
@@ -121,7 +121,7 @@ pub unsafe extern "C" fn alice_fit_cubic(data: *const i32, len: usize) -> AliceC
 
 /// Evaluate a cubic model at point x.
 #[no_mangle]
-pub extern "C" fn alice_evaluate_cubic(a: i32, b: i32, c: i32, d: i32, x: i32) -> i32 {
+pub const extern "C" fn alice_evaluate_cubic(a: i32, b: i32, c: i32, d: i32, x: i32) -> i32 {
     evaluate_cubic_fixed(a, b, c, d, x)
 }
 
@@ -133,7 +133,7 @@ pub extern "C" fn alice_evaluate_cubic(a: i32, b: i32, c: i32, d: i32, x: i32) -
 ///
 /// `data` must be non-null, pointing to at least `len` contiguous `i32` values.
 #[no_mangle]
-pub unsafe extern "C" fn alice_fit_constant(data: *const i32, len: usize) -> i32 {
+pub const unsafe extern "C" fn alice_fit_constant(data: *const i32, len: usize) -> i32 {
     if data.is_null() || len == 0 {
         return 0;
     }
@@ -146,13 +146,13 @@ pub unsafe extern "C" fn alice_fit_constant(data: *const i32, len: usize) -> i32
 
 /// Convert integer to Q16.16 fixed-point.
 #[no_mangle]
-pub extern "C" fn alice_int_to_q16(i: i32) -> i32 {
+pub const extern "C" fn alice_int_to_q16(i: i32) -> i32 {
     int_to_q16(i)
 }
 
 /// Convert Q16.16 fixed-point to integer (truncates).
 #[no_mangle]
-pub extern "C" fn alice_q16_to_int(q: i32) -> i32 {
+pub const extern "C" fn alice_q16_to_int(q: i32) -> i32 {
     q16_to_int(q)
 }
 
@@ -183,7 +183,7 @@ pub unsafe extern "C" fn alice_should_use_linear(data: *const i32, len: usize) -
 ///
 /// `data` must be non-null, pointing to at least `len` contiguous `i32` values.
 #[no_mangle]
-pub unsafe extern "C" fn alice_residual_error(
+pub const unsafe extern "C" fn alice_residual_error(
     data: *const i32,
     len: usize,
     slope: i32,
@@ -350,7 +350,7 @@ pub unsafe extern "C" fn alice_zeroize(buf: *mut i32, len: usize) {
 ///
 /// The returned pointer is valid for the lifetime of the process (static).
 #[no_mangle]
-pub extern "C" fn alice_edge_version() -> *const u8 {
+pub const extern "C" fn alice_edge_version() -> *const u8 {
     c"0.1.0".as_ptr().cast()
 }
 
@@ -441,7 +441,7 @@ mod tests {
         let ptr = alice_edge_version();
         assert!(!ptr.is_null());
         // SAFETY: alice_edge_version returns a valid static string.
-        let cstr = unsafe { core::ffi::CStr::from_ptr(ptr as *const core::ffi::c_char) };
+        let cstr = unsafe { core::ffi::CStr::from_ptr(ptr.cast::<core::ffi::c_char>()) };
         assert_eq!(cstr.to_str().unwrap(), "0.1.0");
     }
 

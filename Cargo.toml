@@ -2,7 +2,7 @@
 name = "alice-edge"
 version = "0.1.0"
 edition = "2021"
-authors = ["Moroya Sakamoto"]
+authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
 description = "Embedded Model Generator - Don't send data, send the law"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ext-sakamoro/ALICE-Edge"

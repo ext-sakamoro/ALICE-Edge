@@ -5,6 +5,8 @@
 [![Tests](https://img.shields.io/badge/tests-249_passing-brightgreen.svg)](#quality)
 [![no_std](https://img.shields.io/badge/no__std-compatible-green.svg)](#supported-platforms)
 
+> Part of **[ALICE-Eco-System](https://github.com/ext-sakamoro/ALICE-Eco-System)** — 260+ crate Edge-to-Cloud data pipeline (SDF / Physics / LLM / Motion / Font / TTS)
+
 **Embedded Model Generator** - "Don't send data. Send the law."
 
 <p align="center">

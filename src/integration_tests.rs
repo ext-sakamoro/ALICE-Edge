@@ -27,7 +27,6 @@ use crate::adaptive_polyfit::*;
 use crate::constant_fit::*;
 #[cfg(feature = "std")]
 use crate::delta::*;
-use crate::piecewise::*;
 use crate::q16_linear::*;
 #[cfg(feature = "std")]
 use crate::robust::*;

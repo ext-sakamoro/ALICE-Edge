@@ -1,8 +1,5 @@
 //! Piecewise linear fitting (`PiecewiseSegment` / `fit_piecewise_linear`).
 
-use crate::constant_fit::compute_residual_error;
-use crate::q16_linear::{evaluate_linear_fixed, fit_linear_fixed, int_to_q16};
-
 pub struct PiecewiseSegment {
     /// セグメント開始インデックス
     pub start: usize,

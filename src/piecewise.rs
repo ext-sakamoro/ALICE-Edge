@@ -1,5 +1,14 @@
 //! Piecewise linear fitting (`PiecewiseSegment` / `fit_piecewise_linear`).
 
+// These imports are only consumed by `fit_piecewise_linear`, which itself is
+// gated on `feature = "std"` (it needs `Vec`). Match the gate so the default
+// no-std build does not warn on them, while the CI std build still resolves
+// the symbols.
+#[cfg(feature = "std")]
+use crate::constant_fit::compute_residual_error;
+#[cfg(feature = "std")]
+use crate::q16_linear::{evaluate_linear_fixed, fit_linear_fixed, int_to_q16};
+
 pub struct PiecewiseSegment {
     /// セグメント開始インデックス
     pub start: usize,

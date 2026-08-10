@@ -27,6 +27,10 @@ use crate::adaptive_polyfit::*;
 use crate::constant_fit::*;
 #[cfg(feature = "std")]
 use crate::delta::*;
+// `fit_piecewise_linear` is used by tests that only compile under `feature = "std"`;
+// cargo fix removed this import under default features, breaking the std-feature build.
+#[cfg(feature = "std")]
+use crate::piecewise::*;
 use crate::q16_linear::*;
 #[cfg(feature = "std")]
 use crate::robust::*;

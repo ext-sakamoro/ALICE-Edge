@@ -62,8 +62,9 @@
 )]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(feature = "asp")]
-pub mod asp_bridge;
+// asp_bridge 一時 disable (libasp crates.io 未 publish、0.2.0 で復活予定)
+// #[cfg(feature = "asp")]
+// pub mod asp_bridge;
 #[cfg(feature = "codec")]
 pub mod codec_bridge;
 #[cfg(feature = "dashboard")]

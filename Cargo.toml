@@ -41,7 +41,9 @@ pyo3 = { version = "0.27", features = ["extension-module"], optional = true }
 numpy = { version = "0.27", optional = true }
 alice_core = { package = "alice-zip", version = "0.5", optional = true, default-features = false, features = ["std", "lzma"] }
 alice-codec = { path = "../ALICE-Codec", version = "0.1", optional = true, default-features = false, features = ["std"] }
-alice-db = { path = "../ALICE-DB", version = "0.2.0-beta.1", optional = true, default-features = false }
+# crates.io (0.2.0-beta.2 = ALICE-DB main); the CI sibling stub carried version 0.1.0
+# and could never satisfy `^0.2.0-beta.1`, so every job that resolved deps was red
+alice-db = { version = "0.2.0-beta.2", optional = true, default-features = false }
 rusb = { version = "0.9", optional = true }
 alice-sdf = { path = "../ALICE-SDF", version = "1.9", optional = true, default-features = false, features = ["svo"] }
 alice-ml = { path = "../ALICE-ML", version = "0.2", optional = true, default-features = false, features = ["std"] }

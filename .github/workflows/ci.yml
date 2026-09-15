@@ -30,7 +30,6 @@ jobs:
         run: |
           for crate_info in \
             "ALICE-Codec:alice-codec" \
-            "ALICE-DB:alice-db" \
             "ALICE-SDF:alice-sdf" \
             "ALICE-ML:alice-ml" \
             "ALICE-Streaming-Protocol:libasp" \
@@ -109,7 +108,6 @@ jobs:
         run: |
           for crate_info in \
             "ALICE-Codec:alice-codec" \
-            "ALICE-DB:alice-db" \
             "ALICE-SDF:alice-sdf" \
             "ALICE-ML:alice-ml" \
             "ALICE-Streaming-Protocol:libasp" \
@@ -152,7 +150,6 @@ jobs:
         run: |
           for crate_info in \
             "ALICE-Codec:alice-codec" \
-            "ALICE-DB:alice-db" \
             "ALICE-SDF:alice-sdf" \
             "ALICE-ML:alice-ml" \
             "ALICE-Streaming-Protocol:libasp" \
@@ -205,7 +202,6 @@ jobs:
         run: |
           for crate_info in \
             "ALICE-Codec:alice-codec" \
-            "ALICE-DB:alice-db" \
             "ALICE-SDF:alice-sdf" \
             "ALICE-ML:alice-ml" \
             "ALICE-Streaming-Protocol:libasp" \

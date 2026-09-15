@@ -2,6 +2,11 @@
 
 All notable changes to ALICE-Edge will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- `zip` feature: `zip_bridge` uses `compress_residual_quantized` / `decompress_residual_quantized`, which the crates.io `alice-zip` crate did not provide until 0.5.0 (they only existed in the `libalice` CLI crate); the feature compiled in CI solely because the sibling was stubbed. Now `alice-zip = "0.5"` with the `lzma` feature, the CI stub is removed and `cargo test --features std,zip` runs in CI
+
 ## [0.1.0] - 2026-02-23
 
 ### Added

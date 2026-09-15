@@ -25,32 +25,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Create dependency stubs
-        shell: bash
-        run: |
-          for crate_info in \
-            "ALICE-Codec:alice-codec" \
-            "ALICE-SDF:alice-sdf" \
-            "ALICE-ML:alice-ml" \
-            "ALICE-Streaming-Protocol:libasp" \
-            "ALICE-Analytics:alice-analytics"; do
-            dir=$(echo "$crate_info" | cut -d: -f1)
-            pkg=$(echo "$crate_info" | cut -d: -f2)
-            mkdir -p "../$dir/src"
-            cat > "../$dir/Cargo.toml" << TOML
-          [package]
-          name = "$pkg"
-          version = "0.1.0"
-          edition = "2021"
-          [features]
-          default = []
-          std = []
-          svo = []
-          [lib]
-          path = "src/lib.rs"
-          TOML
-            echo "" > "../$dir/src/lib.rs"
-          done
 
       - name: Check (no default features) [T0]
         run: cargo check --lib --no-default-features
@@ -104,31 +78,6 @@ jobs:
         with:
           targets: thumbv7em-none-eabihf
 
-      - name: Create dependency stubs
-        run: |
-          for crate_info in \
-            "ALICE-Codec:alice-codec" \
-            "ALICE-SDF:alice-sdf" \
-            "ALICE-ML:alice-ml" \
-            "ALICE-Streaming-Protocol:libasp" \
-            "ALICE-Analytics:alice-analytics"; do
-            dir=$(echo "$crate_info" | cut -d: -f1)
-            pkg=$(echo "$crate_info" | cut -d: -f2)
-            mkdir -p "../$dir/src"
-            cat > "../$dir/Cargo.toml" << TOML
-          [package]
-          name = "$pkg"
-          version = "0.1.0"
-          edition = "2021"
-          [features]
-          default = []
-          std = []
-          svo = []
-          [lib]
-          path = "src/lib.rs"
-          TOML
-            echo "" > "../$dir/src/lib.rs"
-          done
 
       - name: Build no_std (thumbv7em-none-eabihf)
         run: cargo build --lib --target thumbv7em-none-eabihf --no-default-features
@@ -146,31 +95,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Create dependency stubs
-        run: |
-          for crate_info in \
-            "ALICE-Codec:alice-codec" \
-            "ALICE-SDF:alice-sdf" \
-            "ALICE-ML:alice-ml" \
-            "ALICE-Streaming-Protocol:libasp" \
-            "ALICE-Analytics:alice-analytics"; do
-            dir=$(echo "$crate_info" | cut -d: -f1)
-            pkg=$(echo "$crate_info" | cut -d: -f2)
-            mkdir -p "../$dir/src"
-            cat > "../$dir/Cargo.toml" << TOML
-          [package]
-          name = "$pkg"
-          version = "0.1.0"
-          edition = "2021"
-          [features]
-          default = []
-          std = []
-          svo = []
-          [lib]
-          path = "src/lib.rs"
-          TOML
-            echo "" > "../$dir/src/lib.rs"
-          done
 
       - name: Clippy
         run: cargo clippy --lib -- --cap-lints warn
@@ -198,31 +122,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - name: Create dependency stubs
-        run: |
-          for crate_info in \
-            "ALICE-Codec:alice-codec" \
-            "ALICE-SDF:alice-sdf" \
-            "ALICE-ML:alice-ml" \
-            "ALICE-Streaming-Protocol:libasp" \
-            "ALICE-Analytics:alice-analytics"; do
-            dir=$(echo "$crate_info" | cut -d: -f1)
-            pkg=$(echo "$crate_info" | cut -d: -f2)
-            mkdir -p "../$dir/src"
-            cat > "../$dir/Cargo.toml" << TOML
-          [package]
-          name = "$pkg"
-          version = "0.1.0"
-          edition = "2021"
-          [features]
-          default = []
-          std = []
-          svo = []
-          [lib]
-          path = "src/lib.rs"
-          TOML
-            echo "" > "../$dir/src/lib.rs"
-          done
 
       - name: cargo doc (lib, no-deps)
         run: cargo doc --lib --no-deps --features "std"

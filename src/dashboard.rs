@@ -13,7 +13,7 @@
 //!
 //! Author: Moroya Sakamoto
 
-use alice_analytics::{CountMinSketch, HyperLogLog};
+use alice_analytics::sketch::{CountMinSketch, HyperLogLog};
 use std::time::Instant;
 
 /// Edge dashboard collecting processing metrics

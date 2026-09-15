@@ -9,9 +9,7 @@
 use std::time::{Duration, Instant};
 
 use crate::asp_bridge::{AspEdgePacket, EdgeStreamEncoder};
-use crate::depth_capture::{
-    CameraConfig, DepthCameraDriver, DepthFrame, DolphinD5Driver, PointNormal,
-};
+use crate::depth_capture::{CameraConfig, DepthCameraDriver, DolphinD5Driver};
 use crate::object_classifier::{ObjectClass, SdfFeatures, TernaryClassifier, DEFAULT_NUM_CLASSES};
 use crate::sdf_compress::{compress_point_cloud, CompressConfig, CompressStats, CompressedSdf};
 
@@ -398,6 +396,7 @@ fn compute_bounds_size(points: &[[f32; 3]]) -> [f32; 3] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::depth_capture::{DepthFrame, PointNormal};
 
     /// Mock depth camera for testing
     struct MockCamera {

@@ -7,7 +7,7 @@
 //! Author: Moroya Sakamoto
 
 use crate::object_classifier::ObjectClass;
-use crate::sdf_compress::{svo_diff_hash, CompressedSdf, SvoChunkData};
+use crate::sdf_compress::{svo_diff_hash, CompressedSdf};
 use libasp::scene::{SdfSceneDelta, SdfSceneDescriptor};
 
 /// Edge stream encoder — manages keyframe/delta state for ASP transmission
@@ -220,6 +220,7 @@ fn extract_delta_data(compressed: &CompressedSdf) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sdf_compress::SvoChunkData;
 
     #[test]
     fn test_encoder_first_frame_is_keyframe() {

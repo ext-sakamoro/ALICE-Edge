@@ -682,7 +682,7 @@ impl SensorDriver for Adxl345Sensor {
 
         // A5: SPI接続をループ外で1度だけ開く（毎サンプルで再オープンしない）
         #[cfg(feature = "sensors-hw")]
-        let mut spi = rppal::spi::Spi::new(
+        let spi = rppal::spi::Spi::new(
             rppal::spi::Bus::Spi0,
             rppal::spi::SlaveSelect::Ss0,
             5_000_000,
@@ -968,6 +968,9 @@ impl SensorDriver for Bno055Sensor {
         let start = Instant::now();
 
         for i in 0..count {
+            // `i` only drives the simulated waveform below
+            #[cfg(feature = "sensors-hw")]
+            let _ = i;
             let ts = start.elapsed().as_millis() as u64;
 
             #[cfg(not(feature = "sensors-hw"))]
@@ -1120,6 +1123,9 @@ impl SensorDriver for Max30102Sensor {
         let start = Instant::now();
 
         for i in 0..count {
+            // `i` only drives the simulated waveform below
+            #[cfg(feature = "sensors-hw")]
+            let _ = i;
             let ts = start.elapsed().as_millis() as u64;
 
             #[cfg(not(feature = "sensors-hw"))]

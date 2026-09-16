@@ -78,9 +78,9 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev
 
-      - name: Check (std + sensors-hw, Linux only)
+      - name: Clippy (std + sensors-hw, Linux only)
         if: matrix.os == 'ubuntu-latest'
-        run: cargo check --lib --features "std,sensors-hw"
+        run: cargo clippy --lib --features "std,sensors-hw" -- -D warnings
 
   no-std-cross:
     name: no_std cross-compile (thumbv7em)

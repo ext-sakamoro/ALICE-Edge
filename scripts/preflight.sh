@@ -39,6 +39,13 @@ rustup target list --installed | grep -q thumbv7em-none-eabihf || rustup target 
 cargo build --lib --target thumbv7em-none-eabihf --no-default-features
 cargo build --lib --target thumbv7em-none-eabihf --no-default-features --features "ffi"
 
+step "sensors-hw clippy (Linux + libudev only; on macOS this is verified on the RasPi / CI)"
+if [[ "$(uname -s)" == "Linux" ]]; then
+  cargo clippy --lib --features "std,sensors-hw" -- -D warnings
+else
+  echo "skip: sensors-hw needs Linux (rppal + libudev); run on the RasPi or rely on the ubuntu CI job" >&2
+fi
+
 step "MSRV $MSRV (lib, no_std + full feature set)"
 if rustup toolchain list | grep -q "^$MSRV"; then
   cargo "+$MSRV" check --lib --no-default-features

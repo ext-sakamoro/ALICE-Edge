@@ -532,7 +532,7 @@ impl SensorDriver for Dht22Sensor {
                 let mut data = [0u8; 5];
                 std::thread::sleep(Duration::from_micros(80)); // Wait for response
 
-                for byte in 0..5 {
+                for slot in &mut data {
                     for bit in (0..8).rev() {
                         // Wait for high
                         let start_wait = Instant::now();
@@ -549,7 +549,7 @@ impl SensorDriver for Dht22Sensor {
                             }
                         }
                         if high_start.elapsed() > Duration::from_micros(40) {
-                            data[byte] |= 1 << bit;
+                            *slot |= 1 << bit;
                         }
                     }
                 }
@@ -646,7 +646,7 @@ impl SensorDriver for Adxl345Sensor {
             .map_err(|e| SensorError::Spi(format!("SPI init: {}", e)))?;
 
             // Read device ID (should be 0xE5)
-            let cmd = [0x80 | 0x00, 0x00]; // Read reg 0x00
+            let cmd = [0x80, 0x00]; // Read bit | reg 0x00 (DEVID)
             let mut buf = [0u8; 2];
             spi.transfer(&mut buf, &cmd)
                 .map_err(|e| SensorError::Spi(format!("SPI transfer: {}", e)))?;
@@ -841,29 +841,26 @@ impl SensorDriver for GpsSensor {
 
             while samples_read < count {
                 let mut byte = [0u8; 1];
-                match port.read(&mut byte) {
-                    Ok(1) => {
-                        if byte[0] == b'\n' {
-                            if let Some((lat, lon, alt)) = Self::parse_gga(&line_buf) {
-                                let now = Instant::now();
-                                if now < next_accept {
-                                    line_buf.clear();
-                                    continue;
-                                }
-                                next_accept = now + interval;
-                                let ts = start.elapsed().as_millis() as u64;
-                                batch.latitude.push(lat);
-                                batch.longitude.push(lon);
-                                batch.altitude.push(alt);
-                                batch.timestamps.push(ts);
-                                samples_read += 1;
+                if let Ok(1) = port.read(&mut byte) {
+                    if byte[0] == b'\n' {
+                        if let Some((lat, lon, alt)) = Self::parse_gga(&line_buf) {
+                            let now = Instant::now();
+                            if now < next_accept {
+                                line_buf.clear();
+                                continue;
                             }
-                            line_buf.clear();
-                        } else if byte[0] != b'\r' {
-                            line_buf.push(byte[0] as char);
+                            next_accept = now + interval;
+                            let ts = start.elapsed().as_millis() as u64;
+                            batch.latitude.push(lat);
+                            batch.longitude.push(lon);
+                            batch.altitude.push(alt);
+                            batch.timestamps.push(ts);
+                            samples_read += 1;
                         }
+                        line_buf.clear();
+                    } else if byte[0] != b'\r' {
+                        line_buf.push(byte[0] as char);
                     }
-                    _ => {}
                 }
             }
         }

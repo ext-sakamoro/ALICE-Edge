@@ -167,8 +167,10 @@ impl std::error::Error for SensorError {}
 #[allow(dead_code)]
 pub struct Bme280Sensor {
     address: u16,
+    bus: u8,
+    /// Opened in [`SensorDriver::init`]; `None` until then.
     #[cfg(feature = "sensors-hw")]
-    i2c: rppal::i2c::I2c,
+    i2c: Option<rppal::i2c::I2c>,
     // Calibration data (used by compensate_* methods with sensors-hw)
     dig_t1: u16,
     dig_t2: i16,
@@ -197,11 +199,12 @@ impl Bme280Sensor {
     /// * `bus` - I2C bus number (1 on Pi 5)
     /// * `address` - I2C address (0x76 default, 0x77 alternate)
     #[must_use]
-    pub const fn new(_bus: u8, address: u16) -> Self {
+    pub const fn new(bus: u8, address: u16) -> Self {
         Self {
             address,
+            bus,
             #[cfg(feature = "sensors-hw")]
-            i2c: rppal::i2c::I2c::with_bus(_bus).expect("Failed to open I2C bus"),
+            i2c: None,
             dig_t1: 0,
             dig_t2: 0,
             dig_t3: 0,
@@ -226,19 +229,25 @@ impl Bme280Sensor {
 
     /// Read raw registers from BME280
     #[cfg(feature = "sensors-hw")]
+    fn i2c(&mut self) -> Result<&mut rppal::i2c::I2c, SensorError> {
+        self.i2c
+            .as_mut()
+            .ok_or_else(|| SensorError::I2c("I2C bus not opened (call init first)".into()))
+    }
+
+    #[cfg(feature = "sensors-hw")]
     fn read_register(&mut self, reg: u8, buf: &mut [u8]) -> Result<(), SensorError> {
-        self.i2c
-            .write(&[reg])
+        let i2c = self.i2c()?;
+        i2c.write(&[reg])
             .map_err(|e| SensorError::I2c(format!("Write reg 0x{:02X}: {}", reg, e)))?;
-        self.i2c
-            .read(buf)
+        i2c.read(buf)
             .map_err(|e| SensorError::I2c(format!("Read reg 0x{:02X}: {}", reg, e)))?;
         Ok(())
     }
 
     #[cfg(feature = "sensors-hw")]
     fn write_register(&mut self, reg: u8, value: u8) -> Result<(), SensorError> {
-        self.i2c
+        self.i2c()?
             .write(&[reg, value])
             .map_err(|e| SensorError::I2c(format!("Write 0x{:02X}=0x{:02X}: {}", reg, value, e)))?;
         Ok(())
@@ -340,9 +349,12 @@ impl SensorDriver for Bme280Sensor {
     fn init(&mut self) -> Result<(), SensorError> {
         #[cfg(feature = "sensors-hw")]
         {
-            self.i2c.set_slave_address(self.address).map_err(|e| {
+            let mut i2c = rppal::i2c::I2c::with_bus(self.bus)
+                .map_err(|e| SensorError::I2c(format!("Open I2C bus {}: {}", self.bus, e)))?;
+            i2c.set_slave_address(self.address).map_err(|e| {
                 SensorError::I2c(format!("Set address 0x{:02X}: {}", self.address, e))
             })?;
+            self.i2c = Some(i2c);
 
             // Check chip ID
             let mut id = [0u8; 1];
@@ -634,8 +646,9 @@ impl SensorDriver for Adxl345Sensor {
             .map_err(|e| SensorError::Spi(format!("SPI init: {}", e)))?;
 
             // Read device ID (should be 0xE5)
-            let mut buf = [0x80 | 0x00, 0x00]; // Read reg 0x00
-            spi.transfer(&mut buf)
+            let cmd = [0x80 | 0x00, 0x00]; // Read reg 0x00
+            let mut buf = [0u8; 2];
+            spi.transfer(&mut buf, &cmd)
                 .map_err(|e| SensorError::Spi(format!("SPI transfer: {}", e)))?;
             if buf[1] != 0xE5 {
                 return Err(SensorError::NotFound(format!(
@@ -683,9 +696,10 @@ impl SensorDriver for Adxl345Sensor {
             #[cfg(feature = "sensors-hw")]
             {
                 // Read 6 bytes from DATAX0 (0x32) with multi-byte flag
+                let mut cmd = [0u8; 7];
+                cmd[0] = 0x80 | 0x40 | 0x32; // Read + multi-byte + DATAX0
                 let mut buf = [0u8; 7];
-                buf[0] = 0x80 | 0x40 | 0x32; // Read + multi-byte + DATAX0
-                spi.transfer(&mut buf)
+                spi.transfer(&mut buf, &cmd)
                     .map_err(|e| SensorError::Spi(format!("{}", e)))?;
 
                 let x = i16::from_le_bytes([buf[1], buf[2]]) as i32 * 4; // milli-g
@@ -821,6 +835,9 @@ impl SensorDriver for GpsSensor {
 
             let mut line_buf = String::new();
             let mut samples_read = 0;
+            // NMEA sentences arrive at the receiver's own rate (typically 1 Hz);
+            // `interval` is honoured as the minimum spacing between accepted fixes.
+            let mut next_accept = start;
 
             while samples_read < count {
                 let mut byte = [0u8; 1];
@@ -828,6 +845,12 @@ impl SensorDriver for GpsSensor {
                     Ok(1) => {
                         if byte[0] == b'\n' {
                             if let Some((lat, lon, alt)) = Self::parse_gga(&line_buf) {
+                                let now = Instant::now();
+                                if now < next_accept {
+                                    line_buf.clear();
+                                    continue;
+                                }
+                                next_accept = now + interval;
                                 let ts = start.elapsed().as_millis() as u64;
                                 batch.latitude.push(lat);
                                 batch.longitude.push(lon);

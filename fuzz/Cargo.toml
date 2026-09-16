@@ -1,0 +1,47 @@
+[package]
+name = "alice-edge-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+[dependencies.alice-edge]
+path = ".."
+features = ["std"]
+
+[package.metadata.cargo-machete]
+ignored = ["libfuzzer-sys"]
+
+[[bin]]
+name = "fuzz_fit_linear"
+path = "fuzz_targets/fuzz_fit_linear.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_polyfit"
+path = "fuzz_targets/fuzz_polyfit.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_piecewise"
+path = "fuzz_targets/fuzz_piecewise.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_delta_roundtrip"
+path = "fuzz_targets/fuzz_delta_roundtrip.rs"
+test = false
+doc = false
+bench = false

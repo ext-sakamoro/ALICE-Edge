@@ -475,8 +475,8 @@ impl OtaModelUpdate {
 
     /// Serialize to extended binary format with `sensor_id/channel`
     ///
-    /// Format: [`slope_q16:i32`][intercept_q16:i32][version:u64][timestamp:u64]
-    ///         [`sensor_id_len:u16`][sensor_id:bytes][`channel_len:u16`][channel:bytes]
+    /// Format: `[slope_q16:i32][intercept_q16:i32][version:u64][timestamp:u64]`
+    ///         `[sensor_id_len:u16][sensor_id:bytes][channel_len:u16][channel:bytes]`
     #[must_use]
     pub fn to_binary_ext(&self) -> Vec<u8> {
         let sid = self.sensor_id.as_bytes();

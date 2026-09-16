@@ -1,13 +1,29 @@
 name: CI
 
+# Every step is a gate: there is no `continue-on-error` in this file. A step
+# that must not block belongs in security-audit.yml (coverage) or fuzz.yml
+# (time-boxed exploration), never here.
+#
+# Local reproduction before push: scripts/preflight.sh [--quick]
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: "5"
+  CARGO_HTTP_MULTIPLEXING: "false"
+  # docs.rs feature set (Cargo.toml [package.metadata.docs.rs]). pyo3 needs a
+  # Python runtime and sensors-hw needs Linux GPIO / libudev, both handled in
+  # dedicated steps below.
+  FULL_FEATURES: "std,zip,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi"
 
 jobs:
   test:
@@ -18,75 +34,78 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
+      # rust-toolchain.toml pins the exact version; the action installs it.
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
 
-
-      - name: Check (no default features) [T0]
+      - name: Check (no default features, no_std)
         run: cargo check --lib --no-default-features
-        continue-on-error: true
 
-      - name: Build (std) [T1]
+      - name: Test (no default features, no_std core)
+        run: cargo test --lib --no-default-features
+
+      - name: Build (std)
         run: cargo build --lib --features "std"
 
-      - name: Test (std) [T1]
+      - name: Test (std)
         run: cargo test --lib --features "std"
 
-      - name: Build (std + sensors) [T3]
-        run: cargo build --lib --features "std,sensors"
-        continue-on-error: true
-
-      - name: Build (std + all bridges) [T3]
-        run: cargo build --lib --features "std,zip,codec,db,ml"
-        continue-on-error: true
-
-      - name: Build (std + telemetry) [T3]
-        run: cargo build --lib --features "std,mqtt,dashboard"
-        continue-on-error: true
-
-      - name: Build (edge-pipeline) [T2]
-        run: cargo build --lib --features "edge-pipeline"
-        continue-on-error: true
-
-      - name: Test (edge-pipeline) [T2]
-        run: cargo test --lib --features "edge-pipeline"
-        continue-on-error: true
-
-      - name: Test (std + ml) [T2]
-        run: cargo test --lib --features "std,ml"
-
-      # zip: alice-zip 0.5 from crates.io (lzma feature) — no sibling stub, real tests
-      - name: Test (std + zip)
-        run: cargo test --lib --features "std,zip"
-        continue-on-error: true
-
-      - name: Doc tests
+      - name: Doc tests (std)
         run: cargo test --doc --features "std"
+
+      # One build + one test run with every optional bridge on: the crates.io
+      # siblings (alice-zip / codec / db / sdf / ml / analytics / libasp) are
+      # real dependencies here, not stubs.
+      - name: Build (full feature set)
+        run: cargo build --lib --features "$FULL_FEATURES"
+
+      - name: Test (full feature set)
+        run: cargo test --lib --features "$FULL_FEATURES"
+
+      - name: Test (edge-pipeline)
+        run: cargo test --lib --features "edge-pipeline"
+
+      - name: Build examples (sensors + dashboard + mqtt)
+        run: cargo build --examples --features "std,sensors,dashboard,mqtt"
+
+      # Real GPIO / I2C / SPI / UART drivers only compile on Linux
+      # (rppal + serialport, which needs libudev).
+      - name: Install libudev (sensors-hw)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libudev-dev
+
+      - name: Check (std + sensors-hw, Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo check --lib --features "std,sensors-hw"
 
   no-std-cross:
     name: no_std cross-compile (thumbv7em)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain + target
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: thumbv7em-none-eabihf
 
+      - uses: Swatinem/rust-cache@v2
 
       - name: Build no_std (thumbv7em-none-eabihf)
         run: cargo build --lib --target thumbv7em-none-eabihf --no-default-features
 
+      - name: Build no_std + ffi (thumbv7em-none-eabihf)
+        run: cargo build --lib --target thumbv7em-none-eabihf --no-default-features --features "ffi"
+
   clippy:
-    name: Clippy
+    name: Clippy (-D warnings)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -95,16 +114,58 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Clippy (no_std, lib)
+        run: cargo clippy --lib --no-default-features -- -D warnings
 
-      - name: Clippy
-        run: cargo clippy --lib -- --cap-lints warn
-        continue-on-error: true
+      - name: Clippy (std, lib + all targets)
+        run: cargo clippy --lib --all-targets --features "std" -- -D warnings
+
+      - name: Clippy (full feature set, lib + all targets)
+        run: cargo clippy --lib --all-targets --features "$FULL_FEATURES" -- -D warnings
+
+  msrv:
+    name: MSRV (rust-version = 1.87)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Must match `rust-version` in Cargo.toml; bump both in the same commit.
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@1.87
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo check on MSRV (lib, no_std)
+        run: cargo +1.87 check --lib --no-default-features
+
+      - name: cargo check on MSRV (lib, full feature set)
+        run: cargo +1.87 check --lib --features "$FULL_FEATURES"
+
+  feature-powerset:
+    name: Feature powerset (cargo-hack, depth 2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+
+      # Every feature alone and every pair (80 combinations). Excluded:
+      # pyo3 (Python runtime), sensors-hw (Linux libudev, checked in `test`),
+      # edge-pipeline (a pure alias of depth-camera+sdf+ml+asp, tested in `test`).
+      - name: cargo hack check --feature-powerset
+        run: >-
+          cargo hack check --lib --feature-powerset --depth 2
+          --exclude-features pyo3,sensors-hw,edge-pipeline
+          --no-dev-deps
 
   fmt:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -118,21 +179,25 @@ jobs:
     name: Doc (RUSTDOCFLAGS=-Dwarnings)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-
-      - name: cargo doc (lib, no-deps)
+      - name: cargo doc (lib, no-deps, std)
         run: cargo doc --lib --no-deps --features "std"
         env:
           RUSTDOCFLAGS: "-Dwarnings"
 
+      - name: cargo doc (lib, no-deps, docs.rs feature set)
+        run: cargo doc --lib --no-deps --features "$FULL_FEATURES"
+        env:
+          RUSTDOCFLAGS: "-Dwarnings"
+
   actionlint:
-    name: actionlint (workflow YAML 検証)
+    name: actionlint (workflow YAML)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Run actionlint
         uses: reviewdog/action-actionlint@v1
         with:

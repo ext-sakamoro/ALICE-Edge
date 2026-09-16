@@ -2,6 +2,13 @@
 name = "alice-edge"
 version = "0.1.0"
 edition = "2021"
+# MSRV: `u64::is_multiple_of` (1.87) and the crates.io siblings alice-zip /
+# alice-codec / alice-db all declare 1.87. CI `msrv` job compiles on exactly
+# this toolchain; bump the job's `@1.87` together with this field.
+rust-version = "1.87"
+# MSRV-aware dependency resolution (cargo 1.84+): `cargo update` never picks a
+# dep whose rust-version exceeds the one declared above.
+resolver = "3"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
 description = "Embedded Model Generator - Don't send data, send the law"
 license = "MIT OR Apache-2.0"
@@ -14,6 +21,11 @@ readme = "README.md"
 name = "alice_edge"
 crate-type = ["rlib"]
 
+# The feature set docs.rs builds with. CI clippy / doc / msrv use the same
+# list (pyo3 needs a Python runtime, sensors-hw needs Linux GPIO crates).
+[package.metadata.docs.rs]
+features = ["std", "zip", "codec", "db", "ml", "sdf", "depth-camera", "asp", "sensors", "mqtt", "dashboard", "ffi"]
+
 [features]
 default = []
 # Enable std for testing on host
@@ -25,9 +37,9 @@ db = ["dep:alice-db", "std"]  # ALICE-DB persistence for model coefficients
 depth-camera = ["dep:rusb", "std"]  # Dolphin D5 Lite depth camera driver
 sdf = ["dep:alice-sdf", "std"]  # SDF compression for point clouds
 ml = ["dep:alice-ml", "std"]  # 1.58bit ternary object classification
-asp = ["dep:libasp", "std", "sdf"]  # ALICE Streaming Protocol bridge (libasp 1.0 on crates.io; asp_bridge uses sdf_compress)
+asp = ["dep:libasp", "std", "sdf", "ml"]  # ALICE Streaming Protocol bridge (libasp 1.0 on crates.io; asp_bridge uses sdf_compress + object_classifier::ObjectClass)
 edge-pipeline = ["depth-camera", "sdf", "ml", "asp"]  # Full edge pipeline
-sensors = ["dep:serde", "dep:serde_json", "std"]  # Sensor drivers (simulated)
+sensors = ["dep:serde", "std"]  # Sensor drivers (simulated)
 sensors-hw = ["sensors", "dep:rppal", "dep:serialport"]  # Real GPIO/I2C/SPI/UART
 mqtt = ["dep:rumqttc", "std"]  # MQTT publish to AWS IoT / Azure / local
 dashboard = ["dep:alice-analytics", "std"]  # ALICE-Analytics dashboard
@@ -35,8 +47,8 @@ ffi = []  # C-ABI FFI exports (extern "C" functions)
 
 [dependencies]
 # No dependencies - pure no_std (except optional Python bindings)
-pyo3 = { version = "0.27", features = ["extension-module"], optional = true }
-numpy = { version = "0.27", optional = true }
+pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
+numpy = { version = "0.29", optional = true }
 alice_core = { package = "alice-zip", version = "0.5", optional = true, default-features = false, features = ["std", "lzma"] }
 alice-codec = { version = "0.1", optional = true, default-features = false, features = ["std"] }
 # crates.io (0.2.0-beta.2 = ALICE-DB main); the CI sibling stub carried version 0.1.0
@@ -50,9 +62,8 @@ libasp = { version = "1.0", optional = true, default-features = false }
 rppal = { version = "0.19", optional = true }
 serialport = { version = "4.6", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
-serde_json = { version = "1", optional = true }
 # MQTT bridge
-rumqttc = { version = "0.24", optional = true }
+rumqttc = { version = "0.25", optional = true }
 # Dashboard
 alice-analytics = { version = "0.1", optional = true }
 

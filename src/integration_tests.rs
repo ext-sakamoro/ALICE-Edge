@@ -395,6 +395,74 @@ fn test_fit_cubic_fallback_3pts() {
     assert_eq!(a, 0);
 }
 
+// fuzz_polyfit (2026-09-16): the fraction-free elimination in the cubic fit
+// multiplied i128 entries by the running product of pivots and overflowed on
+// long windows with large samples; the quadratic accumulators were i64.
+// Both now use checked arithmetic and degrade one order on overflow.
+#[cfg(feature = "std")]
+#[test]
+fn test_fit_cubic_exact_integer_polynomial() {
+    // y = 2x³ - 3x² + 5x + 7 on 0..12: every coefficient is exactly
+    // representable in Q16.16, and the normal equations are consistent, so
+    // the solve must reproduce them to integer-division rounding.
+    let data: Vec<i32> = (0..12)
+        .map(|x| 2 * x * x * x - 3 * x * x + 5 * x + 7)
+        .collect();
+    let (a, b, c, d) = fit_cubic_fixed(&data);
+    for (got, want) in [(a, 2), (b, -3), (c, 5), (d, 7)] {
+        assert!(
+            (got - int_to_q16(want)).abs() <= 1,
+            "coefficient {got} != {} (Q16.16 of {want})",
+            int_to_q16(want)
+        );
+    }
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_fit_quadratic_exact_integer_polynomial() {
+    // y = 3x² - 4x + 9 on 0..20
+    let data: Vec<i32> = (0..20).map(|x| 3 * x * x - 4 * x + 9).collect();
+    let (a, b, c) = fit_quadratic_fixed(&data);
+    for (got, want) in [(a, 3), (b, -4), (c, 9)] {
+        assert!(
+            (got - int_to_q16(want)).abs() <= 1,
+            "coefficient {got} != Q16.16 of {want}"
+        );
+    }
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_fit_polynomial_extreme_inputs_do_not_panic() {
+    // 4096 samples alternating at the i32 limits: Σx⁶·y exceeds i128, so the
+    // cubic degrades to quadratic (a = 0) and, if that overflows too, to the
+    // linear fit. The contract is "never panic, never wrap silently".
+    let data: Vec<i32> = (0..4096)
+        .map(|i| if i % 2 == 0 { i32::MAX } else { i32::MIN })
+        .collect();
+    let (a, _b, _c, _d) = fit_cubic_fixed(&data);
+    assert_eq!(a, 0, "cubic must degrade, not return a wrapped coefficient");
+    let _ = fit_quadratic_fixed(&data);
+    let _ = should_use_linear(&data);
+
+    // Exact-integer capacity measured 2026-09-16 (probe over |y| ≤ 1e3..2^31):
+    // cubic ≤ 64 samples (32 at full i32 range), quadratic ≤ 4096. A window
+    // at that size still gets a real cubic; beyond it the fit degrades.
+    let data: Vec<i32> = (0..64i64).map(|x| (x * x * x / 10 + x) as i32).collect();
+    let (a, _b, _c, _d) = fit_cubic_fixed(&data);
+    assert!(
+        a > 0,
+        "cubic coefficient of a cubic trend must be positive, got {a}"
+    );
+    let data: Vec<i32> = (0..4096i64).map(|x| (x * x / 10 + x) as i32).collect();
+    let (a, _b, _c) = fit_quadratic_fixed(&data);
+    assert!(
+        a > 0,
+        "quadratic coefficient of a quadratic trend must be positive, got {a}"
+    );
+}
+
 #[test]
 fn test_evaluate_cubic() {
     let a = int_to_q16(1);
@@ -482,6 +550,38 @@ fn test_fit_linear_robust() {
     let (slope, _intercept) = fit_linear_robust(&data, 3);
     // 外れ値除去後、slope ≈ 10
     assert!((slope - int_to_q16(10)).abs() < 20000, "slope = {slope}");
+}
+
+// fuzz_fit_linear (2026-09-16): `(x - median).abs()` overflowed i32 for
+// full-range inputs and the threshold `k * MAD` was truncated to i32.
+#[cfg(feature = "std")]
+#[test]
+fn test_filter_outliers_full_i32_range_no_overflow() {
+    let data = [i32::MIN, i32::MAX, 0, i32::MIN, i32::MAX, 1, -1];
+    let filtered = filter_outliers_mad(&data, 3);
+    assert_eq!(filtered.len(), data.len());
+    let mut sorted = data;
+    sorted.sort_unstable();
+    let median = sorted[data.len() / 2];
+    for (&before, &after) in data.iter().zip(&filtered) {
+        assert!(after == before || after == median);
+    }
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_filter_outliers_huge_k_keeps_everything() {
+    // median 11, MAD = 1, largest deviation 9988: k * MAD saturates instead
+    // of wrapping to a negative threshold (which replaced every sample by
+    // the median).
+    let data = [10, 11, 10, 11, 10, 12, 9999];
+    let filtered = filter_outliers_mad(&data, i32::MAX);
+    assert_eq!(filtered, data);
+    let filtered = filter_outliers_mad(&data, 20_000);
+    assert_eq!(filtered, data);
+    // and a threshold below the deviation still replaces the outlier
+    let filtered = filter_outliers_mad(&data, 3);
+    assert_eq!(filtered, [10, 11, 10, 11, 10, 12, 11]);
 }
 
 // ── E5: SIMD テスト ───────────────────────────────────────────────

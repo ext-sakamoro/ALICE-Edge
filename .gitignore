@@ -17,3 +17,9 @@ Cargo.lock
 # OS
 .DS_Store
 Thumbs.db
+
+# cargo-fuzz (fuzz/ is its own crate; root /target/ does not cover it)
+fuzz/target/
+fuzz/corpus/
+fuzz/artifacts/
+fuzz/Cargo.lock

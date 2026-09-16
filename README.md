@@ -1,8 +1,11 @@
 # ALICE-Edge
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
-[![Tests](https://img.shields.io/badge/tests-249_passing-brightgreen.svg)](#quality)
+[![Rust](https://img.shields.io/badge/rust-1.87%2B-orange.svg)](https://www.rust-lang.org)
+[![CI](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/ci.yml/badge.svg)](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/ci.yml)
+[![Security](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/security-audit.yml/badge.svg)](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/security-audit.yml)
+[![Fuzz](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/fuzz.yml/badge.svg)](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/fuzz.yml)
+[![Tests](https://img.shields.io/badge/tests-350_passing-brightgreen.svg)](#quality)
 [![no_std](https://img.shields.io/badge/no__std-compatible-green.svg)](#supported-platforms)
 
 > Part of **[ALICE-Eco-System](https://github.com/ext-sakamoro/ALICE-Eco-System)** — 260+ crate Edge-to-Cloud data pipeline (SDF / Physics / LLM / Motion / Font / TTS)
@@ -29,7 +32,7 @@ alice-edge = { version = "0.1", features = ["sensors", "mqtt"] }
 alice-edge = { version = "0.1", features = ["edge-pipeline"] }
 ```
 
-**Minimum Supported Rust Version (MSRV):** 1.70+ (edition 2021)
+**Minimum Supported Rust Version (MSRV):** 1.87 (`rust-version` in Cargo.toml, compiled on that exact toolchain in CI)
 
 ## The Philosophy
 
@@ -242,7 +245,7 @@ let json = dashboard.to_json();  // JSON for API
 | Feature | Dependencies | Description |
 |---------|-------------|-------------|
 | *(default)* | None | `no_std` core: fit/evaluate/Q16.16 |
-| `sensors` | serde, serde_json | Sensor drivers (simulated) |
+| `sensors` | serde | Sensor drivers (simulated) |
 | `sensors-hw` | rppal, serialport | Real GPIO/I2C/SPI/UART on Pi |
 | `mqtt` | rumqttc | MQTT publish to cloud |
 | `dashboard` | alice-analytics | HLL/CMS/latency dashboard |
@@ -253,7 +256,7 @@ let json = dashboard.to_json();  // JSON for API
 | `ml` | alice-ml | 1.58-bit ternary classification |
 | `depth-camera` | rusb | Dolphin D5 Lite depth camera |
 | `sdf` | alice-sdf | SDF point cloud compression |
-| `asp` | libasp | ALICE Streaming Protocol bridge |
+| `asp` | libasp (implies `sdf`, `ml`) | ALICE Streaming Protocol bridge |
 | `edge-pipeline` | (all above) | Full depth → SDF → ML pipeline |
 
 ## Q16.16 Fixed-Point Format
@@ -361,10 +364,15 @@ Build: `maturin develop --features pyo3`
 
 | Metric | Value |
 |--------|-------|
-| **Tests** | 249 (243 lib + 6 doc), 0 failures |
-| **clippy pedantic** | 0 warnings |
-| **cargo doc** | 0 warnings |
+| **Tests** | 350 (348 lib with the full feature set + 2 doc; 98 in `no_std`), 0 failures |
+| **clippy** | `-D warnings` on `no_std`, `std` and the full feature set (CI gate) |
+| **cargo doc** | `-D warnings` on `std` and the docs.rs feature set (CI gate) |
 | **cargo fmt** | clean |
+| **MSRV** | 1.87, compiled on that toolchain in CI |
+| **Feature powerset** | every feature alone and every pair (80 combinations, `cargo hack`) |
+| **Fuzz** | 4 libFuzzer targets (linear / SIMD parity, polynomial fits, piecewise, delta roundtrip), 60 s per push + daily |
+| **Security** | `cargo audit` + `cargo deny` (license allowlist) + `cargo machete` + stub guard + `cargo semver-checks`, weekly |
+| **Local gate** | `scripts/preflight.sh [--quick]` reproduces every CI step before push |
 | **FFI functions** | 19 (fitting, evaluate, robust, SIMD, filter, delta, zeroize) |
 | **Bindings** | C/C++ header, Unity C#, Python PyO3 |
 

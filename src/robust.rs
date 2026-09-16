@@ -5,6 +5,13 @@ use alloc::vec::Vec;
 
 use crate::q16_linear::fit_linear_fixed;
 
+/// Replace outliers by the median using the MAD (median absolute deviation)
+/// rule: a sample `x` is an outlier when `|x - median| > k * MAD`.
+///
+/// Deviations are computed in `i64`, so the full `i32` input range is valid
+/// (`i32::MIN - median` and `|i32::MIN|` do not overflow), and the threshold
+/// `k * MAD` saturates instead of wrapping; a huge `k` therefore keeps every
+/// sample rather than silently discarding all of them.
 pub fn filter_outliers_mad(data: &[i32], k: i32) -> Vec<i32> {
     let n = data.len();
     if n < 3 {
@@ -15,9 +22,10 @@ pub fn filter_outliers_mad(data: &[i32], k: i32) -> Vec<i32> {
     let mut sorted = data.to_vec();
     sorted.sort_unstable();
     let median = sorted[n / 2];
+    let deviation = |x: i32| (i64::from(x) - i64::from(median)).abs();
 
     // MAD = median(|x_i - median|)
-    let mut abs_devs: Vec<i32> = sorted.iter().map(|&x| (x - median).abs()).collect();
+    let mut abs_devs: Vec<i64> = sorted.iter().map(|&x| deviation(x)).collect();
     abs_devs.sort_unstable();
     let mad = abs_devs[n / 2];
 
@@ -25,15 +33,9 @@ pub fn filter_outliers_mad(data: &[i32], k: i32) -> Vec<i32> {
         return data.to_vec();
     }
 
-    let threshold = (k as i64 * mad as i64) as i32;
+    let threshold = i64::from(k).saturating_mul(mad);
     data.iter()
-        .map(|&x| {
-            if (x - median).abs() > threshold {
-                median
-            } else {
-                x
-            }
-        })
+        .map(|&x| if deviation(x) > threshold { median } else { x })
         .collect()
 }
 

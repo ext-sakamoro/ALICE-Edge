@@ -193,8 +193,7 @@ pub const fn int_to_q16(i: i32) -> i32 {
     i << Q16_SHIFT
 }
 
-/// Convert Q16.16 to float (for debugging, requires std)
-#[cfg(feature = "std")]
+/// Convert Q16.16 to float (plain `f32` arithmetic, available in `no_std`)
 #[inline(always)]
 #[must_use]
 pub fn q16_to_f32(q: i32) -> f32 {

@@ -58,8 +58,10 @@ impl EdgeStreamEncoder {
     ) -> AspEdgePacket {
         self.frame_count += 1;
 
-        let is_keyframe =
-            self.frame_count == 1 || (self.frame_count % self.keyframe_interval as u64) == 0;
+        let is_keyframe = self.frame_count == 1
+            || self
+                .frame_count
+                .is_multiple_of(u64::from(self.keyframe_interval));
 
         if is_keyframe {
             self.encode_keyframe(compressed, classifications)

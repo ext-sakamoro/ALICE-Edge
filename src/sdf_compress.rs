@@ -409,8 +409,10 @@ mod tests {
     #[test]
     fn test_svo_node_count_depth1() {
         // depth=1: 1 root + 8 leaves = 9 nodes × 4 bytes = 36 + 32 header = 68
-        let mut config = SvoBuildConfig::default();
-        config.max_depth = 1;
+        let config = SvoBuildConfig {
+            max_depth: 1,
+            ..Default::default()
+        };
         let data = build_svo_from_bounds(&config, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let node_bytes = data.len() - 32; // ヘッダ除く
         assert_eq!(node_bytes, 9 * 4); // 9ノード × 4バイト
@@ -446,8 +448,10 @@ mod tests {
     #[test]
     fn test_svo_node_count_depth0() {
         // depth=0: ルートがリーフ → 1ノード × 4バイト + 32ヘッダ = 36
-        let mut config = SvoBuildConfig::default();
-        config.max_depth = 0;
+        let config = SvoBuildConfig {
+            max_depth: 0,
+            ..Default::default()
+        };
         let data = build_svo_from_bounds(&config, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let node_bytes = data.len() - 32;
         assert_eq!(node_bytes, 4); // 1リーフノード

@@ -236,7 +236,7 @@ impl TernaryClassifier {
 
     /// 重みをファイルに保存
     ///
-    /// Format: [`num_classes:u32`][w1_len:u32][w1:bytes][w2_len:u32][w2:bytes][w3_len:u32][w3:bytes]
+    /// Format: `[num_classes:u32][w1_len:u32][w1:bytes][w2_len:u32][w2:bytes][w3_len:u32][w3:bytes]`
     ///
     /// # Errors
     ///
@@ -416,7 +416,7 @@ mod tests {
 
         let (class, confidence) = classifier.classify(&features);
         // Confidence should be valid probability
-        assert!(confidence >= 0.0 && confidence <= 1.0);
+        assert!((0.0..=1.0).contains(&confidence));
         // Class should be a valid variant
         let _ = class.label();
     }
@@ -469,7 +469,7 @@ mod tests {
         let features = vec![1.0f32; FEATURE_DIM];
         let (class_id, confidence) = classifier.infer(&features);
         assert!(class_id < DEFAULT_NUM_CLASSES);
-        assert!(confidence >= 0.0 && confidence <= 1.0);
+        assert!((0.0..=1.0).contains(&confidence));
         assert!(classifier.model_size_bytes() > 0);
     }
 }

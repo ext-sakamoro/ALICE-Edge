@@ -298,7 +298,7 @@ impl Default for EdgeDashboard {
     }
 }
 
-/// Dashboard snapshot for WebSocket/HTTP streaming [E10]
+/// Dashboard snapshot for WebSocket/HTTP streaming (E10)
 ///
 /// Lightweight, serializable struct containing all dashboard metrics.
 /// Push to browsers via WebSocket at configurable interval (e.g., 1Hz).

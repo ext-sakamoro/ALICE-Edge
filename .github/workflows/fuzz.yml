@@ -1,0 +1,128 @@
+name: Fuzz
+
+# Purpose:
+# - time-boxed fuzzing of the no_std fitting core (linear / SIMD parity,
+#   polynomial fits, piecewise segmentation, delta coding roundtrip)
+# - every push / PR gets 60 s per target; the daily cron is the long lane
+#
+# Notes:
+# - cargo-fuzz needs nightly (rust-toolchain.toml pins stable, overridden here)
+# - fuzz/ is its own crate, not a workspace member
+# - the build step is blocking; only the exploration run is informational
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'fuzz/**'
+      - '.github/workflows/fuzz.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'fuzz/**'
+      - '.github/workflows/fuzz.yml'
+  schedule:
+    # 03:00 UTC daily = 12:00 JST
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      duration_seconds:
+        description: 'Per-target fuzz duration (seconds)'
+        required: false
+        default: '60'
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: Fuzz — ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - fuzz_fit_linear
+          - fuzz_polyfit
+          - fuzz_piecewise
+          - fuzz_delta_roundtrip
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      # Blocking: a compile error in a fuzz target is a red job.
+      - name: Build fuzz target
+        run: |
+          cd fuzz
+          cargo +nightly fuzz build "${{ matrix.target }}"
+
+      - name: Set fuzz duration
+        id: dur
+        run: |
+          DURATION="${{ github.event.inputs.duration_seconds }}"
+          if [ -z "$DURATION" ]; then
+            DURATION=60
+          fi
+          echo "seconds=$DURATION" >> "$GITHUB_OUTPUT"
+
+      # Crashes found earlier are committed under fuzz/seeds/<target>/ and
+      # replayed as a hard gate (a regression of a known finding is red).
+      - name: Replay committed seeds (blocking)
+        run: |
+          cd fuzz
+          seeds="seeds/${{ matrix.target }}"
+          if [ -d "$seeds" ] && [ -n "$(ls -A "$seeds")" ]; then
+            for f in "$seeds"/*; do
+              echo "replay: $f"
+              cargo +nightly fuzz run "${{ matrix.target }}" "$f"
+            done
+          else
+            echo "no committed seeds for ${{ matrix.target }}"
+          fi
+
+      # Informational: a *new* crash uploads its input for triage; once it is
+      # committed to fuzz/seeds/ it becomes part of the blocking replay above.
+      - name: Run fuzz target (time-boxed)
+        id: run
+        continue-on-error: true
+        run: |
+          cd fuzz
+          seeds="seeds/${{ matrix.target }}"
+          if [ -d "$seeds" ]; then
+            cargo +nightly fuzz run "${{ matrix.target }}" "corpus/${{ matrix.target }}" "$seeds" -- \
+              -max_total_time=${{ steps.dur.outputs.seconds }}
+          else
+            cargo +nightly fuzz run "${{ matrix.target }}" -- \
+              -max_total_time=${{ steps.dur.outputs.seconds }}
+          fi
+
+      - name: Upload crash artifacts (if any)
+        if: steps.run.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Report crash (informational)
+        if: steps.run.outcome == 'failure'
+        run: echo "::warning::fuzz target ${{ matrix.target }} found a crash — see fuzz-crash-${{ matrix.target }} artifact"

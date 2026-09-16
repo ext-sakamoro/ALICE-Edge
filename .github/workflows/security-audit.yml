@@ -1,0 +1,203 @@
+name: Security & Hygiene
+
+# Purpose:
+# - weekly RustSec advisory (CVE) detection
+# - block license drift in the dependency tree (GPL entering etc.)
+# - unused dependency detection
+# - CI gate for placeholder implementations (todo! / unimplemented! / panic!(STUB) / dbg!)
+# - API compatibility against the crates.io release (semver-checks)
+#
+# ci.yml stays focused on build / test / clippy / doc; this workflow is the
+# security + hygiene lane, triggered on push + PR + weekly cron.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'src/**'
+      - 'deny.toml'
+      - '.github/workflows/security-audit.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'src/**'
+      - 'deny.toml'
+      - '.github/workflows/security-audit.yml'
+  schedule:
+    # Monday 09:00 UTC = 18:00 JST; catches advisories published between commits
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: "5"
+  CARGO_HTTP_MULTIPLEXING: "false"
+  # docs.rs feature set (Cargo.toml [package.metadata.docs.rs]); pyo3 needs a
+  # Python runtime and sensors-hw needs Linux GPIO crates, both excluded.
+  FULL_FEATURES: "std,zip,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi"
+
+jobs:
+  audit:
+    name: cargo audit (RustSec CVE scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
+      # Cargo.lock is not committed (library crate); generate it with the full
+      # feature set so every optional dependency is scanned.
+      - name: Generate lockfile
+        run: cargo generate-lockfile
+
+      # The ignore list mirrors deny.toml [advisories].ignore with the reason
+      # for each entry; keep the two in sync.
+      - name: Run cargo audit
+        run: |
+          cargo audit \
+            --deny yanked \
+            --ignore RUSTSEC-2026-0049 \
+            --ignore RUSTSEC-2026-0098 \
+            --ignore RUSTSEC-2026-0099 \
+            --ignore RUSTSEC-2026-0104 \
+            --ignore RUSTSEC-2026-0235 \
+            --ignore RUSTSEC-2025-0141 \
+            --ignore RUSTSEC-2025-0134
+
+  deny:
+    name: cargo-deny (license + advisories + bans + sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: Run cargo deny check all
+        run: cargo deny --features "$FULL_FEATURES" check all
+
+  unused-deps:
+    name: cargo-machete (unused dependencies)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Static Cargo.toml analysis; false positives go into
+      # [package.metadata.cargo-machete] ignored = [...] (none today).
+      - uses: bnjbvr/cargo-machete@main
+
+  coverage:
+    name: Coverage (cargo-llvm-cov, informational)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      # Informational: the number is watched, no threshold is enforced. The
+      # build itself must succeed (no continue-on-error, so a compile error is
+      # still red); `|| true` only softens the summary print.
+      - name: Run coverage
+        run: |
+          set -o pipefail
+          cargo llvm-cov --lib --summary-only --features "$FULL_FEATURES" 2>&1 | tee coverage-summary.txt
+
+      - name: Upload coverage summary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-summary
+          path: coverage-summary.txt
+          retention-days: 30
+
+  semver-checks:
+    name: cargo-semver-checks (API compat vs crates.io)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Pinned: `@latest` tracks rustc MSRV faster than rust-toolchain.toml.
+      - name: Install cargo-semver-checks
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-semver-checks@0.50.0
+
+      # Compares HEAD against the latest crates.io release (0.1.0). A breaking
+      # change must ship with a version bump, which makes this job green again.
+      #
+      # `dashboard` is excluded until the next publish: 0.1.0 imports
+      # `alice_analytics::{CountMinSketch, HyperLogLog}` from the crate root,
+      # which alice-analytics 0.1.0 does not export, so the baseline cannot be
+      # documented with that feature (fixed on main, see CHANGELOG).
+      - name: Run cargo semver-checks
+        run: |
+          feats=$(echo "$FULL_FEATURES" | tr ',' '\n' | grep -vx dashboard | paste -sd, -)
+          echo "features: $feats"
+          cargo semver-checks check-release --package alice-edge \
+            --only-explicit-features --features "$feats"
+
+  stub-guard:
+    name: Stub / mock / dbg guard (grep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Production path (src/) must not carry todo! / unimplemented! /
+      # panic!("...STUB...") placeholders. src/bin/ (CLI) is excluded.
+      - name: Detect todo! / unimplemented! / panic!(STUB) in src/**
+        run: |
+          set -eo pipefail
+          hits=$(grep -rnE 'todo!\(|unimplemented!\(|panic!\([^)]*STUB' \
+            src/ --include="*.rs" \
+            --exclude-dir=bin \
+            || true)
+          if [ -n "$hits" ]; then
+            echo "Stub / unimplemented / STUB panic detected in src/ (production path):"
+            echo "$hits"
+            echo ""
+            echo "Fix: use ? operator, Result<T, E>, or remove the stub."
+            exit 1
+          fi
+          echo "OK: no todo! / unimplemented! / panic!(STUB) in src/ (excluding src/bin/)"
+
+      - name: Detect dbg!() residual in src/**
+        run: |
+          set -eo pipefail
+          hits=$(grep -rn 'dbg!(' src/ --include="*.rs" || true)
+          if [ -n "$hits" ]; then
+            echo "dbg!() macro left in src/:"
+            echo "$hits"
+            exit 1
+          fi
+          echo "OK: no dbg!() in src/"
+
+      # TODO / FIXME / XXX / HACK are informational (visible to the reviewer,
+      # not blocking).
+      - name: Detect TODO / FIXME / XXX / HACK (informational)
+        run: |
+          set -eo pipefail
+          hits=$(grep -rnE 'TODO|FIXME|XXX|HACK' src/ --include="*.rs" || true)
+          if [ -n "$hits" ]; then
+            echo "::warning::TODO/FIXME/XXX/HACK found in src/ (informational, not blocking):"
+            echo "$hits" | head -50
+          else
+            echo "OK: no TODO/FIXME/XXX/HACK in src/"
+          fi

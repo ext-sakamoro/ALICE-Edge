@@ -1,6 +1,10 @@
 //! SIMD-accelerated linear fitting (`fit_linear_simd`).
 
-use crate::q16_linear::{fit_linear_fixed, Q16_SHIFT};
+use crate::q16_linear::fit_linear_fixed;
+// Only the x86_64 / aarch64 kernels shift into Q16.16; the scalar fallback
+// on other targets (thumbv7em etc.) delegates to `fit_linear_fixed`.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+use crate::q16_linear::Q16_SHIFT;
 
 pub fn fit_linear_simd(data: &[i32]) -> (i32, i32) {
     #[cfg(target_arch = "x86_64")]

@@ -9,6 +9,7 @@ use crate::constant_fit::compute_residual_error;
 #[cfg(feature = "std")]
 use crate::q16_linear::{evaluate_linear_fixed, fit_linear_fixed, int_to_q16};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PiecewiseSegment {
     /// セグメント開始インデックス
     pub start: usize,

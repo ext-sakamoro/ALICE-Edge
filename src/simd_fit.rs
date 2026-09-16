@@ -9,11 +9,19 @@ use crate::q16_linear::Q16_SHIFT;
 pub fn fit_linear_simd(data: &[i32]) -> (i32, i32) {
     #[cfg(target_arch = "x86_64")]
     {
-        if is_x86_feature_detected!("sse2") {
+        // `is_x86_feature_detected!` lives in std; in no_std fall back to the
+        // compile-time flag (SSE2 is part of the x86_64 baseline, so this is
+        // true unless the target explicitly disables it).
+        #[cfg(feature = "std")]
+        let has_sse2 = is_x86_feature_detected!("sse2");
+        #[cfg(not(feature = "std"))]
+        let has_sse2 = cfg!(target_feature = "sse2");
+        if has_sse2 {
             // SAFETY: SSE2 サポートを上記で確認済み。data は有効なスライス。
-            return unsafe { fit_linear_sse2(data) };
+            unsafe { fit_linear_sse2(data) }
+        } else {
+            fit_linear_fixed(data)
         }
-        return fit_linear_fixed(data);
     }
 
     #[cfg(target_arch = "aarch64")]

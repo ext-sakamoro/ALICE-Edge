@@ -27,6 +27,12 @@ cargo clippy --lib --no-default-features -- -D warnings
 cargo clippy --lib --all-targets --features "std" -- -D warnings
 cargo clippy --lib --all-targets --features "$FULL" -- -D warnings
 
+step "x86_64 no_std / std clippy (CI runs on x86_64; is_x86_feature_detected! is std-only)"
+rustup target list --installed | grep -q x86_64-unknown-linux-gnu || rustup target add x86_64-unknown-linux-gnu
+cargo clippy --lib --no-default-features --target x86_64-unknown-linux-gnu -- -D warnings
+cargo clippy --lib --no-default-features --features "ffi" --target x86_64-unknown-linux-gnu -- -D warnings
+cargo clippy --lib --all-targets --features "std" --target x86_64-unknown-linux-gnu -- -D warnings
+
 step "no_std check + thumbv7em cross build (with and without ffi)"
 cargo check --lib --no-default-features
 rustup target list --installed | grep -q thumbv7em-none-eabihf || rustup target add thumbv7em-none-eabihf

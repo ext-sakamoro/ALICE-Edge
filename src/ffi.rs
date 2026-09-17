@@ -20,6 +20,7 @@ use crate::{
     fit_constant_fixed, fit_cubic_fixed, fit_linear_fixed, fit_quadratic_fixed, int_to_q16,
     q16_to_f32, q16_to_int, should_use_linear,
 };
+use core::ptr;
 
 /// Result of linear fitting: slope + intercept in Q16.16
 #[repr(C)]
@@ -54,16 +55,24 @@ pub struct AliceCubicResult {
 /// `data` must be non-null, pointing to at least `len` contiguous `i32` values.
 #[no_mangle]
 pub unsafe extern "C" fn alice_fit_linear(data: *const i32, len: usize) -> AliceLinearResult {
-    if data.is_null() || len == 0 {
-        return AliceLinearResult {
+    ffi_guard(
+        AliceLinearResult {
             slope: 0,
             intercept: 0,
-        };
-    }
-    // SAFETY: Caller guarantees data points to len contiguous i32 values.
-    let slice = core::slice::from_raw_parts(data, len);
-    let (slope, intercept) = fit_linear_fixed(slice);
-    AliceLinearResult { slope, intercept }
+        },
+        || {
+            if data.is_null() || len == 0 {
+                return AliceLinearResult {
+                    slope: 0,
+                    intercept: 0,
+                };
+            }
+            // SAFETY: Caller guarantees data points to len contiguous i32 values.
+            let slice = core::slice::from_raw_parts(data, len);
+            let (slope, intercept) = fit_linear_fixed(slice);
+            AliceLinearResult { slope, intercept }
+        },
+    )
 }
 
 /// Evaluate a linear model at point x.
@@ -81,13 +90,15 @@ pub const extern "C" fn alice_evaluate_linear(slope: i32, intercept: i32, x: i32
 /// `data` must be non-null, pointing to at least `len` contiguous `i32` values.
 #[no_mangle]
 pub unsafe extern "C" fn alice_fit_quadratic(data: *const i32, len: usize) -> AliceQuadraticResult {
-    if data.is_null() || len == 0 {
-        return AliceQuadraticResult { a: 0, b: 0, c: 0 };
-    }
-    // SAFETY: Caller guarantees data points to len contiguous i32 values.
-    let slice = core::slice::from_raw_parts(data, len);
-    let (a, b, c) = fit_quadratic_fixed(slice);
-    AliceQuadraticResult { a, b, c }
+    ffi_guard(AliceQuadraticResult { a: 0, b: 0, c: 0 }, || {
+        if data.is_null() || len == 0 {
+            return AliceQuadraticResult { a: 0, b: 0, c: 0 };
+        }
+        // SAFETY: Caller guarantees data points to len contiguous i32 values.
+        let slice = core::slice::from_raw_parts(data, len);
+        let (a, b, c) = fit_quadratic_fixed(slice);
+        AliceQuadraticResult { a, b, c }
+    })
 }
 
 /// Evaluate a quadratic model at point x.
@@ -105,18 +116,28 @@ pub const extern "C" fn alice_evaluate_quadratic(a: i32, b: i32, c: i32, x: i32)
 /// `data` must be non-null, pointing to at least `len` contiguous `i32` values.
 #[no_mangle]
 pub unsafe extern "C" fn alice_fit_cubic(data: *const i32, len: usize) -> AliceCubicResult {
-    if data.is_null() || len == 0 {
-        return AliceCubicResult {
+    ffi_guard(
+        AliceCubicResult {
             a: 0,
             b: 0,
             c: 0,
             d: 0,
-        };
-    }
-    // SAFETY: Caller guarantees data points to len contiguous i32 values.
-    let slice = core::slice::from_raw_parts(data, len);
-    let (a, b, c, d) = fit_cubic_fixed(slice);
-    AliceCubicResult { a, b, c, d }
+        },
+        || {
+            if data.is_null() || len == 0 {
+                return AliceCubicResult {
+                    a: 0,
+                    b: 0,
+                    c: 0,
+                    d: 0,
+                };
+            }
+            // SAFETY: Caller guarantees data points to len contiguous i32 values.
+            let slice = core::slice::from_raw_parts(data, len);
+            let (a, b, c, d) = fit_cubic_fixed(slice);
+            AliceCubicResult { a, b, c, d }
+        },
+    )
 }
 
 /// Evaluate a cubic model at point x.
@@ -159,7 +180,7 @@ pub const extern "C" fn alice_q16_to_int(q: i32) -> i32 {
 /// Convert Q16.16 fixed-point to f32.
 #[no_mangle]
 pub extern "C" fn alice_q16_to_f32(q: i32) -> f32 {
-    q16_to_f32(q)
+    ffi_guard(f32::NAN, || q16_to_f32(q))
 }
 
 /// Check if data benefits from linear model vs constant.
@@ -169,12 +190,14 @@ pub extern "C" fn alice_q16_to_f32(q: i32) -> f32 {
 /// `data` must be non-null, pointing to at least `len` contiguous `i32` values.
 #[no_mangle]
 pub unsafe extern "C" fn alice_should_use_linear(data: *const i32, len: usize) -> bool {
-    if data.is_null() || len == 0 {
-        return false;
-    }
-    // SAFETY: Caller guarantees data points to len contiguous i32 values.
-    let slice = core::slice::from_raw_parts(data, len);
-    should_use_linear(slice)
+    ffi_guard(false, || {
+        if data.is_null() || len == 0 {
+            return false;
+        }
+        // SAFETY: Caller guarantees data points to len contiguous i32 values.
+        let slice = core::slice::from_raw_parts(data, len);
+        should_use_linear(slice)
+    })
 }
 
 /// Compute residual error of a linear fit.
@@ -213,16 +236,24 @@ pub unsafe extern "C" fn alice_fit_linear_robust(
     len: usize,
     mad_k: i32,
 ) -> AliceLinearResult {
-    if data.is_null() || len == 0 {
-        return AliceLinearResult {
+    ffi_guard(
+        AliceLinearResult {
             slope: 0,
             intercept: 0,
-        };
-    }
-    // SAFETY: Caller guarantees data points to len contiguous i32 values.
-    let slice = core::slice::from_raw_parts(data, len);
-    let (slope, intercept) = crate::fit_linear_robust(slice, mad_k);
-    AliceLinearResult { slope, intercept }
+        },
+        || {
+            if data.is_null() || len == 0 {
+                return AliceLinearResult {
+                    slope: 0,
+                    intercept: 0,
+                };
+            }
+            // SAFETY: Caller guarantees data points to len contiguous i32 values.
+            let slice = core::slice::from_raw_parts(data, len);
+            let (slope, intercept) = crate::fit_linear_robust(slice, mad_k);
+            AliceLinearResult { slope, intercept }
+        },
+    )
 }
 
 /// Fit a linear model using SIMD acceleration (auto-fallback on small data).
@@ -232,16 +263,24 @@ pub unsafe extern "C" fn alice_fit_linear_robust(
 /// `data` must be non-null, pointing to at least `len` contiguous `i32` values.
 #[no_mangle]
 pub unsafe extern "C" fn alice_fit_linear_simd(data: *const i32, len: usize) -> AliceLinearResult {
-    if data.is_null() || len == 0 {
-        return AliceLinearResult {
+    ffi_guard(
+        AliceLinearResult {
             slope: 0,
             intercept: 0,
-        };
-    }
-    // SAFETY: Caller guarantees data points to len contiguous i32 values.
-    let slice = core::slice::from_raw_parts(data, len);
-    let (slope, intercept) = crate::fit_linear_simd(slice);
-    AliceLinearResult { slope, intercept }
+        },
+        || {
+            if data.is_null() || len == 0 {
+                return AliceLinearResult {
+                    slope: 0,
+                    intercept: 0,
+                };
+            }
+            // SAFETY: Caller guarantees data points to len contiguous i32 values.
+            let slice = core::slice::from_raw_parts(data, len);
+            let (slope, intercept) = crate::fit_linear_simd(slice);
+            AliceLinearResult { slope, intercept }
+        },
+    )
 }
 
 // ── Filter / Delta encoding ────────────────────────────────────────────
@@ -264,15 +303,17 @@ pub unsafe extern "C" fn alice_filter_outliers_mad(
     out: *mut i32,
     out_capacity: usize,
 ) -> usize {
-    if data.is_null() || out.is_null() || len == 0 || out_capacity == 0 {
-        return 0;
-    }
-    // SAFETY: Caller guarantees pointers and sizes.
-    let slice = core::slice::from_raw_parts(data, len);
-    let filtered = crate::filter_outliers_mad(slice, k);
-    let count = filtered.len().min(out_capacity);
-    core::ptr::copy_nonoverlapping(filtered.as_ptr(), out, count);
-    count
+    ffi_guard(0, || {
+        if data.is_null() || out.is_null() || len == 0 || out_capacity == 0 {
+            return 0;
+        }
+        // SAFETY: Caller guarantees pointers and sizes.
+        let slice = core::slice::from_raw_parts(data, len);
+        let filtered = crate::filter_outliers_mad(slice, k);
+        let count = filtered.len().min(out_capacity);
+        core::ptr::copy_nonoverlapping(filtered.as_ptr(), out, count);
+        count
+    })
 }
 
 /// Delta-encode coefficient pairs in-place.
@@ -285,22 +326,24 @@ pub unsafe extern "C" fn alice_filter_outliers_mad(
 /// `pairs` must point to at least `num_pairs * 2` contiguous `i32` values.
 #[no_mangle]
 pub unsafe extern "C" fn alice_delta_encode(pairs: *mut i32, num_pairs: usize) -> usize {
-    if pairs.is_null() || num_pairs < 2 {
-        return num_pairs;
-    }
-    // SAFETY: Caller guarantees pairs points to num_pairs * 2 i32 values.
-    let mut prev_s = *pairs;
-    let mut prev_i = *pairs.add(1);
-    for idx in 1..num_pairs {
-        let offset = idx * 2;
-        let cur_s = *pairs.add(offset);
-        let cur_i = *pairs.add(offset + 1);
-        *pairs.add(offset) = cur_s - prev_s;
-        *pairs.add(offset + 1) = cur_i - prev_i;
-        prev_s = cur_s;
-        prev_i = cur_i;
-    }
-    num_pairs
+    ffi_guard(0, || {
+        if pairs.is_null() || num_pairs < 2 {
+            return num_pairs;
+        }
+        // SAFETY: Caller guarantees pairs points to num_pairs * 2 i32 values.
+        let mut prev_s = *pairs;
+        let mut prev_i = *pairs.add(1);
+        for idx in 1..num_pairs {
+            let offset = idx * 2;
+            let cur_s = *pairs.add(offset);
+            let cur_i = *pairs.add(offset + 1);
+            *pairs.add(offset) = cur_s - prev_s;
+            *pairs.add(offset + 1) = cur_i - prev_i;
+            prev_s = cur_s;
+            prev_i = cur_i;
+        }
+        num_pairs
+    })
 }
 
 /// Delta-decode coefficient pairs in-place.
@@ -310,16 +353,18 @@ pub unsafe extern "C" fn alice_delta_encode(pairs: *mut i32, num_pairs: usize) -
 /// `pairs` must point to at least `num_pairs * 2` contiguous `i32` values.
 #[no_mangle]
 pub unsafe extern "C" fn alice_delta_decode(pairs: *mut i32, num_pairs: usize) -> usize {
-    if pairs.is_null() || num_pairs < 2 {
-        return num_pairs;
-    }
-    // SAFETY: Caller guarantees pairs points to num_pairs * 2 i32 values.
-    for idx in 1..num_pairs {
-        let offset = idx * 2;
-        *pairs.add(offset) += *pairs.add(offset - 2);
-        *pairs.add(offset + 1) += *pairs.add(offset - 1);
-    }
-    num_pairs
+    ffi_guard(0, || {
+        if pairs.is_null() || num_pairs < 2 {
+            return num_pairs;
+        }
+        // SAFETY: Caller guarantees pairs points to num_pairs * 2 i32 values.
+        for idx in 1..num_pairs {
+            let offset = idx * 2;
+            *pairs.add(offset) += *pairs.add(offset - 2);
+            *pairs.add(offset + 1) += *pairs.add(offset - 1);
+        }
+        num_pairs
+    })
 }
 
 // ── Security: zeroize ───────────────────────────────────────────────────
@@ -334,16 +379,18 @@ pub unsafe extern "C" fn alice_delta_decode(pairs: *mut i32, num_pairs: usize) -
 /// `buf` must be non-null and point to at least `len` contiguous writable `i32` values.
 #[no_mangle]
 pub unsafe extern "C" fn alice_zeroize(buf: *mut i32, len: usize) {
-    if buf.is_null() || len == 0 {
-        return;
-    }
-    // SAFETY: Caller guarantees buf points to len writable i32 values.
-    // Volatile write prevents compiler from optimizing away the zeroing.
-    for i in 0..len {
-        core::ptr::write_volatile(buf.add(i), 0);
-    }
-    // Compiler fence to prevent reordering
-    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    ffi_guard((), || {
+        if buf.is_null() || len == 0 {
+            return;
+        }
+        // SAFETY: Caller guarantees buf points to len writable i32 values.
+        // Volatile write prevents compiler from optimizing away the zeroing.
+        for i in 0..len {
+            core::ptr::write_volatile(buf.add(i), 0);
+        }
+        // Compiler fence to prevent reordering
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    });
 }
 
 /// Return the ALICE-Edge library version as a null-terminated C string.
@@ -529,5 +576,177 @@ mod tests {
     fn test_ffi_zeroize_null_safe() {
         // null ポインタでパニックしない
         unsafe { alice_zeroize(core::ptr::null_mut(), 0) };
+    }
+}
+
+// ============================================================================
+// Panic isolation (see `guard`)
+// ============================================================================
+
+/// Message of the most recent panic caught at the FFI boundary on this thread
+/// (NUL-terminated, owned by the callee — release with
+/// `alice_edge_free_error_string`), or null if none Always null without the
+/// `std` feature (bare-metal has no unwinding: a panic reaches the panic
+/// handler instead of this slot).
+#[no_mangle]
+pub extern "C" fn alice_edge_last_error() -> *mut core::ffi::c_char {
+    ffi_guard(ptr::null_mut(), || {
+        #[cfg(feature = "std")]
+        {
+            match guard::take_last_error() {
+                Some(msg) => {
+                    std::ffi::CString::new(msg).map_or(ptr::null_mut(), std::ffi::CString::into_raw)
+                }
+                None => ptr::null_mut(),
+            }
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            ptr::null_mut()
+        }
+    })
+}
+
+/// Clear the most recent FFI error message (no-op without `std`).
+#[no_mangle]
+pub extern "C" fn alice_edge_clear_last_error() {
+    ffi_guard((), guard::clear_last_error);
+}
+
+/// Release a string returned by `alice_edge_last_error`.
+///
+/// # Safety
+/// `s` must be null or a pointer returned by `alice_edge_last_error` (freed once).
+#[no_mangle]
+pub unsafe extern "C" fn alice_edge_free_error_string(s: *mut core::ffi::c_char) {
+    ffi_guard((), || {
+        #[cfg(feature = "std")]
+        if !s.is_null() {
+            drop(std::ffi::CString::from_raw(s));
+        }
+        #[cfg(not(feature = "std"))]
+        let _ = s;
+    });
+}
+
+/// Panic isolation for the C ABI.
+///
+/// With `std`: a panic that reaches an `extern "C"` boundary aborts the whole
+/// process (Rust 1.81+), taking the host down with it Every exported function
+/// therefore runs its body through [`guard::ffi_guard`]: a panic is caught
+/// inside the function, its message is stored in a thread-local slot the host
+/// reads with `alice_edge_last_error`, and the function returns the caller's
+/// sentinel Requires `panic = "unwind"` (the default)
+///
+/// Without `std` (bare-metal firmware): there is no unwinding runtime, so
+/// `ffi_guard` simply runs the body and a panic goes to the crate's panic
+/// handler (halt / reset), which is the embedded contract anyway
+pub(crate) mod guard {
+    #[cfg(feature = "std")]
+    use std::cell::RefCell;
+    #[cfg(feature = "std")]
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    #[cfg(feature = "std")]
+    thread_local! {
+        static LAST_ERROR: RefCell<Option<String>> = const { RefCell::new(None) };
+    }
+
+    /// Record an error message for `alice_edge_last_error`.
+    #[cfg(feature = "std")]
+    pub fn set_last_error(msg: impl Into<String>) {
+        LAST_ERROR.with(|slot| *slot.borrow_mut() = Some(msg.into()));
+    }
+
+    /// Take the most recent error message (leaves the slot empty).
+    #[cfg(feature = "std")]
+    pub fn take_last_error() -> Option<String> {
+        LAST_ERROR.with(|slot| slot.borrow_mut().take())
+    }
+
+    /// Clear the most recent error message.
+    #[cfg(feature = "std")]
+    pub fn clear_last_error() {
+        LAST_ERROR.with(|slot| *slot.borrow_mut() = None);
+    }
+
+    /// Clear the most recent error message (no slot without `std`).
+    #[cfg(not(feature = "std"))]
+    pub fn clear_last_error() {}
+
+    /// Run `body`, converting a panic into `default` plus a recorded message.
+    ///
+    /// The closure is treated as unwind-safe: every FFI body only touches its
+    /// arguments and caller-owned buffers, so no partially-updated shared state
+    /// is observable afterwards.
+    #[cfg(feature = "std")]
+    #[inline]
+    pub fn ffi_guard<T>(default: T, body: impl FnOnce() -> T) -> T {
+        match catch_unwind(AssertUnwindSafe(body)) {
+            Ok(v) => v,
+            Err(payload) => {
+                let msg = payload
+                    .downcast_ref::<&str>()
+                    .map(|s| (*s).to_string())
+                    .or_else(|| payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "panic with non-string payload".to_string());
+                set_last_error(format!("alice_edge FFI panic: {msg}"));
+                default
+            }
+        }
+    }
+
+    /// Without `std` there is nothing to catch: run the body directly.
+    #[cfg(not(feature = "std"))]
+    #[inline]
+    pub fn ffi_guard<T>(_default: T, body: impl FnOnce() -> T) -> T {
+        body()
+    }
+
+    #[cfg(all(test, feature = "std"))]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn panic_becomes_default_and_message() {
+            clear_last_error();
+            let v = ffi_guard(-1i32, || -> i32 { panic!("boom {}", 42) });
+            assert_eq!(v, -1);
+            let msg = take_last_error().expect("message recorded");
+            assert!(msg.contains("boom 42"), "{msg}");
+            assert!(take_last_error().is_none(), "take clears the slot");
+        }
+
+        #[test]
+        fn success_leaves_slot_untouched() {
+            clear_last_error();
+            assert_eq!(ffi_guard(0, || 5), 5);
+            assert!(take_last_error().is_none());
+        }
+    }
+}
+
+use guard::ffi_guard;
+
+#[cfg(all(test, feature = "std"))]
+mod guard_ffi_tests {
+    use super::*;
+
+    /// panic が sentinel + `alice_edge_last_error` の message に変換され、host が
+    /// 文字列を取得 / 解放できること (extern "C" 3 本の end-to-end)
+    #[test]
+    fn last_error_roundtrip_through_c_abi() {
+        alice_edge_clear_last_error();
+        assert!(alice_edge_last_error().is_null(), "初期状態は null");
+        let v = ffi_guard(0usize, || -> usize { panic!("ffi test panic") });
+        assert_eq!(v, 0);
+        let s = alice_edge_last_error();
+        assert!(!s.is_null());
+        let msg = unsafe { std::ffi::CStr::from_ptr(s) }
+            .to_string_lossy()
+            .into_owned();
+        assert!(msg.contains("ffi test panic"), "{msg}");
+        unsafe { alice_edge_free_error_string(s) };
+        assert!(alice_edge_last_error().is_null(), "take で slot は空になる");
     }
 }

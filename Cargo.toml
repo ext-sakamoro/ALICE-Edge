@@ -43,7 +43,7 @@ sensors = ["dep:serde", "std"]  # Sensor drivers (simulated)
 sensors-hw = ["sensors", "dep:rppal", "dep:serialport"]  # Real GPIO/I2C/SPI/UART
 mqtt = ["dep:rumqttc", "std"]  # MQTT publish to AWS IoT / Azure / local
 dashboard = ["dep:alice-analytics", "std"]  # ALICE-Analytics dashboard
-ffi = []  # C-ABI FFI exports (extern "C" functions)
+ffi = []  # C-ABI FFI exports (extern "C" functions)、panic 隔離は std 時のみ (bare-metal は unwinding なし)
 
 [dependencies]
 # No dependencies - pure no_std (except optional Python bindings)
@@ -71,7 +71,8 @@ alice-analytics = { version = "0.1", optional = true }
 opt-level = 3
 lto = "fat"
 codegen-units = 1
-panic = "abort"
+# panic = "abort" は撤去 (2026-09-17): FFI の catch_unwind (src/ffi.rs guard) は
+# unwind でしか機能せず、abort だと host process ごと落ちる
 strip = true
 
 [dev-dependencies]

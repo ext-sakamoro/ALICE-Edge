@@ -7,7 +7,7 @@
 #[cfg(feature = "std")]
 use crate::constant_fit::compute_residual_error;
 #[cfg(feature = "std")]
-use crate::q16_linear::{evaluate_linear_fixed, fit_linear_fixed, int_to_q16};
+use crate::q16_linear::fit_linear_fixed;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PiecewiseSegment {
@@ -60,26 +60,28 @@ pub fn fit_piecewise_linear(
             return;
         }
 
-        // 最大残差地点で分割
-        let mut max_residual = 0i64;
-        let mut split_at = data.len() / 2;
-        for (i, &val) in data.iter().enumerate() {
-            let predicted = evaluate_linear_fixed(slope, intercept, i as i32);
-            let actual = int_to_q16(val);
-            let diff = (predicted as i64 - actual as i64).abs();
-            if diff > max_residual {
-                max_residual = diff;
-                split_at = i;
+        // 分割点 = 左右 2 本の直線の残差和が最小になる k (optimal single break)
+        //
+        // History (2026-09-17, oracle `tests/analytic_oracle.rs`): 「1 本の直線
+        // fit の最大残差地点で分割」していたが、2 本の直線を 1 本で fit した残差は
+        // 端点で最大になるので折れ点では切れず、exact な 2 直線を 5 segment 以上に
+        // 刻んでいた 残差和最小の k は exact な折れ線ならその折れ点 (SSE 0) に一致する
+        let n = data.len();
+        let mut best_k = n / 2;
+        let mut best_err = i64::MAX;
+        let mut k = min_len;
+        while k + min_len <= n {
+            let (sl, il) = fit_linear_fixed(&data[..k]);
+            let (sr, ir) = fit_linear_fixed(&data[k..]);
+            let err = compute_residual_error(&data[..k], sl, il)
+                .saturating_add(compute_residual_error(&data[k..], sr, ir));
+            if err < best_err {
+                best_err = err;
+                best_k = k;
             }
+            k += 1;
         }
-
-        // 分割点が端に寄りすぎないよう調整
-        if split_at < min_len {
-            split_at = min_len;
-        }
-        if split_at > data.len() - min_len {
-            split_at = data.len() - min_len;
-        }
+        let split_at = best_k;
 
         split_recursive(&data[..split_at], offset, max_err, min_len, out);
         split_recursive(&data[split_at..], offset + split_at, max_err, min_len, out);

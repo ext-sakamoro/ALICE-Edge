@@ -57,6 +57,12 @@ jobs:
       - name: Doc tests (std)
         run: cargo test --doc --features "std"
 
+      # 解析解 oracle (tests/analytic_oracle.rs): 上の step は --lib なので tests/ が走らない
+      # (CLAUDE.md § 解析解突合テスト規律 (5)、strict-eval 16)  sdf feature の球 primitive
+      # oracle は crates.io alice-sdf 1.9 で実行
+      - name: Test — analytic oracles (std + sdf)
+        run: cargo test --test analytic_oracle --features "std,sdf"
+
       # One build + one test run with every optional bridge on: the crates.io
       # siblings (alice-zip / codec / db / sdf / ml / analytics / libasp) are
       # real dependencies here, not stubs.

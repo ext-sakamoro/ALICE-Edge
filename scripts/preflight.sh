@@ -97,6 +97,9 @@ step "cargo test --lib + --doc (std)"
 cargo test --lib --features "std"
 cargo test --doc --features "std"
 
+step "analytic oracles (tests/analytic_oracle.rs, std + sdf) — same as the ci.yml step"
+cargo test --test analytic_oracle --features "std,sdf"
+
 step "cargo test --lib (full feature set)"
 cargo test --lib --features "$FULL"
 

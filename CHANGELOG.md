@@ -4,6 +4,8 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-17
+
 ### Added
 - `tests/analytic_oracle.rs` — 閉形式 oracle 9 本 (CLAUDE.md § 解析解突合テスト規律、2026-09-17): 整数直線 / 2 次 / 3 次多項式の exact 復元 (Q16 dyadic、SIMD path bit 一致、f64 正規方程式との一致)、折れ線 2 本の exact 分割、robust fit の外れ値耐性 (1 %)、delta coding 往復、Kalman 1D の Riccati 漸化式逐語 + 定常解 P* = (−Q + √(Q²+4QR))/2、Kalman 2D の等速復元 (dt 独立)、逆分散重み融合 + 10σ 外れ値棄却、ring buffer FIFO、`sdf` feature: 球面点群 → 球 primitive (中心 / 半径 2 cm 以内) CI に oracle step (既存 test step は `--lib` で tests/ が走っていなかった)
 

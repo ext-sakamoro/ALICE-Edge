@@ -137,7 +137,7 @@ jobs:
 
       # Must match `rust-version` in Cargo.toml; bump both in the same commit.
       - name: Install MSRV toolchain
-        uses: dtolnay/rust-toolchain@1.87
+        uses: dtolnay/rust-toolchain@1.120
 
       - uses: Swatinem/rust-cache@v2
 

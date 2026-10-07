@@ -10,7 +10,10 @@
 
 整数のセンサー sample の窓を、デバイス上で数個の Q16.16 固定小数点係数
 (直線 / 定数 / 2 次・3 次 / 折れ線 / 外れ値に強い直線) に縮約し、係数だけを送る
-コアは `#![no_std]` で依存を持たず FPU も要らない optional feature で
+コアは `#![no_std]` で FPU も要らない 依存は
+[`alice-det-math`](https://crates.io/crates/alice-det-math) 1 本だけで
+(それ自体も依存を持たない `no_std`)、float の超越関数を target 間で bit 一致
+させるためにある ([決定論](#決定論) 参照) optional feature で
 センサードライバ、MQTT、ダッシュボード、C ABI、Python バインディング、
 他の ALICE crate へのブリッジを足せる
 
@@ -28,6 +31,7 @@ License: MIT OR Apache-2.0
 - [fit を法則として扱う (`law` feature)](#fit-を法則として扱う-law-feature)
 - [Feature](#feature)
 - [Q16.16 形式](#q1616-形式)
+- [決定論](#決定論)
 - [プラットフォーム](#プラットフォーム)
 - [バインディング](#バインディング)
 - [最小対応 Rust バージョン](#最小対応-rust-バージョン)
@@ -150,6 +154,46 @@ assert!(matches!(law.ingest(&sample_points(&[0, 1, 4, 9, 16]), &policy), Verdict
 `evaluate_linear_fixed(slope, intercept, x)` は `x` を整数の sample index として受け取り
 Q16.16 を返す
 
+## 決定論
+
+デバイスから出ていくのは係数なので、同じ sample を当てはめた 2 台は
+同じ bit を出す必要がある 成立する範囲と、しない範囲:
+
+| 経路 | 演算 | target 間で bit 一致 |
+|------|------|---------------------|
+| `fit_linear_fixed` / `fit_linear_simd` / `fit_constant_fixed` / `fit_quadratic_fixed` / `fit_cubic_fixed` / 各 evaluator / `piecewise` / `robust` / `delta` / `ring_buffer` | 整数 `i64` / `i128`、wrapping / checked を明示 | する (float を 1 つも使わない) |
+| `sensor_fusion` (Kalman 1D / 2D、逆分散重み融合) / `q16_to_f32` / `law` (`f64` の係数と残差) | IEEE 754 の `+ - * /` と `sqrt` のみ | する (IEEE 754 がこれらを正確丸めと規定) |
+| 擬似センサー / 深度カメラのシミュレーションと分類器の特徴抽出が使う `sin` / `cos` / `ln` / `exp` | [`alice-det-math`](https://crates.io/crates/alice-det-math) (上の演算のみを固定した評価順で組んだ kernel) | する |
+| `object_classifier` の 3 値行列ベクトル積 kernel / `sdf_compress` | `alice-ml` / `alice-sdf` 側の責任 | 各 crate の保証に従う (ここでは言明しない) |
+
+platform の `libm` はどこからも呼ばない `clippy.toml` の
+`disallowed-methods` が `f32` / `f64` の inherent な超越関数 (結合順が
+未規定な `powi` を含む) を library / test / example / bench すべてで拒否し、
+gate は clippy を `--all-targets ... -D warnings` で走らせる `sqrt` と
+`mul_add` は**意図的に拒否していない** IEEE 754 が両方を正確丸めと
+規定しているので、どの target でも bit 一致する
+
+`tests/determinism_golden.rs` は各 module を公開入口から固定入力で駆動し、
+全出力を `to_bits()` で直列化して SHA-256 を定数と突合する CI は
+`x86_64` の Linux と Windows、`aarch64` の Linux と macOS で走らせるので、
+platform 依存の演算が入れば silent な乖離でなく test の失敗になる 各
+scenario は直列化した byte 数の下限も assert するので、module を駆動しなく
+なった scenario は空 buffer の hash で通るのでなく fail する
+
+<!-- claim-test: golden_q16_linear, golden_adaptive_polyfit, golden_constant_fit, golden_simd_fit, golden_sensor_fusion, golden_ring_buffer, golden_det_math_kernels, golden_robust, golden_piecewise, golden_delta, golden_law, golden_object_features -->
+
+保証範囲の外: `f32` をより広い register で計算して 1 度だけ丸める target
+(`i586` 等、SSE2 のない旧 x86) と、fast-math などで compiler に float の
+再結合を許す build どちらも CI では build していない
+
+退化入力は別立てで覆う `tests/panic_contract.rs` は各入口について、空の窓 /
+1 sample / 0 除算 / 範囲外・負値 / 非有限 / 整数 overflow のそれぞれで
+`Err` / 早期 return / 特定の値 / panic のどれが契約かを明示してから、その 1 つを
+assert する overflow は両 profile で assert する (Rust は
+`debug_assertions` 付きで panic、無しで wrap するため)
+
+<!-- claim-test: an_empty_window_gives_the_zero_fit_from_every_entry_point, every_division_by_a_derived_number_guards_its_zero, the_polynomial_evaluators_overflow_in_debug_and_wrap_in_release, samples_outside_the_q16_range_wrap_rather_than_saturate, the_simd_kernels_agree_with_the_scalar_fit_bit_for_bit -->
+
 ## プラットフォーム
 
 CI は `x86_64` の Linux と Windows、`aarch64` の Linux と macOS で test し、
@@ -175,6 +219,9 @@ feature なしと docs.rs の feature 集合の両方で library を compile す
 cargo test --lib --no-default-features   # no_std core
 cargo test --features std,law            # lib, oracles, doc tests
 cargo test --test edge_law --features law
+cargo test --test determinism_golden --features std,law,ml   # target 間の bit 一致
+cargo test --test panic_contract --features std,law,ml       # 退化入力
+cargo test --release --test panic_contract --features std    # overflow は release で wrap
 cargo bench --no-run                    # Criterion benches in benches/
 cargo build --lib --target thumbv7em-none-eabihf --no-default-features --features law
 scripts/preflight.sh            # every CI gate locally

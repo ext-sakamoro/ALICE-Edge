@@ -715,8 +715,8 @@ impl SensorDriver for Adxl345Sensor {
             {
                 const INV_1000: f32 = 1.0 / 1000.0;
                 let t = ts as f32 * INV_1000;
-                batch.accel_x.push((t.sin() * 100.0) as i32);
-                batch.accel_y.push((t.cos() * 100.0) as i32);
+                batch.accel_x.push((alice_det_math::sin(t) * 100.0) as i32);
+                batch.accel_y.push((alice_det_math::cos(t) * 100.0) as i32);
                 batch.accel_z.push(1000 + (t * 5.0) as i32); // ~1g + drift
             }
 
@@ -976,8 +976,8 @@ impl SensorDriver for Bno055Sensor {
                 const INV_1000: f32 = 1.0 / 1000.0;
                 let t = i as f32 * INV_1000;
                 // 加速度 (milli-g): 静止時 z≈1000
-                batch.accel_x.push((t.sin() * 50.0) as i32);
-                batch.accel_y.push((t.cos() * 50.0) as i32);
+                batch.accel_x.push((alice_det_math::sin(t) * 50.0) as i32);
+                batch.accel_y.push((alice_det_math::cos(t) * 50.0) as i32);
                 batch.accel_z.push(1000 + (t * 2.0) as i32);
                 // 温度 (°C × 100)
                 batch.temperature.push(2800 + (t * 5.0) as i32);
@@ -1240,8 +1240,12 @@ impl SensorDriver for SimulatedSensor {
                 .push(self.base_temp + (t * self.temp_drift as f32 * INV_100) as i32 + noise);
             batch.humidity.push(6500 - (t * 5.0) as i32 + noise / 2);
             batch.pressure.push(10132 + (t * 2.0) as i32 + noise / 3);
-            batch.accel_x.push(((t * 0.1).sin() * 100.0) as i32 + noise);
-            batch.accel_y.push(((t * 0.1).cos() * 100.0) as i32 + noise);
+            batch
+                .accel_x
+                .push((alice_det_math::sin(t * 0.1) * 100.0) as i32 + noise);
+            batch
+                .accel_y
+                .push((alice_det_math::cos(t * 0.1) * 100.0) as i32 + noise);
             batch.accel_z.push(1000 + noise);
             batch.timestamps.push(ts);
 

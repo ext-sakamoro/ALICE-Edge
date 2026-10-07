@@ -261,11 +261,12 @@ impl DepthCameraDriver for DolphinD5Driver {
                 for ix in 0..10 {
                     let x = (ix as f32 - 4.5) * 0.1;
                     let z = (iy as f32 - 4.5) * 0.1;
-                    // sin/cos で決定的な深度変化
+                    // sin/cos で決定的な深度変化 (platform libm は OS / CPU 間で
+                    // 最終 ulp が揃わないので alice_det_math 経由)
                     let y = 1.0
                         + 0.1
-                            * (x * core::f32::consts::PI + frame_f).sin()
-                            * (z * 2.71 + frame_f).cos();
+                            * alice_det_math::sin(x * core::f32::consts::PI + frame_f)
+                            * alice_det_math::cos(z * 2.71 + frame_f);
                     points.push(PointNormal {
                         x,
                         y,

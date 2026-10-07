@@ -11,9 +11,12 @@ Embedded model fitting for sensor data: "don't send data, send the law".
 A window of integer sensor samples is reduced on the device to a few Q16.16
 fixed-point coefficients (a line, a constant, a quadratic or cubic, a
 piecewise line, a robust line), and only the coefficients are transmitted.
-The core is `#![no_std]`, has no dependencies and needs no FPU. Optional
-features add sensor drivers, MQTT, a dashboard, a C ABI, Python bindings and
-bridges to other ALICE crates.
+The core is `#![no_std]` and needs no FPU; its only dependency is
+[`alice-det-math`](https://crates.io/crates/alice-det-math), itself
+dependency-free `no_std`, which keeps the float transcendentals bit-exact
+across targets (see [Determinism](#determinism)). Optional features add
+sensor drivers, MQTT, a dashboard, a C ABI, Python bindings and bridges to
+other ALICE crates.
 
 With the `law` feature an Edge fit is returned as an
 `alice_zip::law::SignalLaw`: the transmitted coefficients together with the
@@ -30,6 +33,7 @@ License: MIT OR Apache-2.0
 - [Fits as laws (`law` feature)](#fits-as-laws-law-feature)
 - [Features](#features)
 - [Q16.16 format](#q1616-format)
+- [Determinism](#determinism)
 - [Platforms](#platforms)
 - [Bindings](#bindings)
 - [Minimum supported Rust version](#minimum-supported-rust-version)
@@ -156,6 +160,52 @@ Sensor pin assignments are in the `sensors` module documentation.
 `evaluate_linear_fixed(slope, intercept, x)` takes `x` as an integer sample
 index and returns Q16.16.
 
+## Determinism
+
+The coefficients are what leaves the device, so two devices fitting the same
+samples have to produce the same bits. Where that holds, and where it does
+not:
+
+| path | arithmetic | bit-exact across targets |
+|------|-----------|--------------------------|
+| `fit_linear_fixed`, `fit_linear_simd`, `fit_constant_fixed`, `fit_quadratic_fixed`, `fit_cubic_fixed`, the evaluators, `piecewise`, `robust`, `delta`, `ring_buffer` | integer `i64` / `i128`, explicit wrapping or checked | yes, with no float involved at all |
+| `sensor_fusion` (Kalman 1D / 2D, inverse-variance fusion), `q16_to_f32`, `law` (`f64` coefficients and residual) | IEEE 754 `+ - * /` and `sqrt` only | yes — IEEE 754 requires these to be correctly rounded |
+| the `sin` / `cos` / `ln` / `exp` used by the simulated sensors, the depth-camera simulation and the classifier's feature extractor | [`alice-det-math`](https://crates.io/crates/alice-det-math), whose kernels are built from the operations above in a fixed evaluation order | yes |
+| `object_classifier`'s ternary matrix-vector kernel, `sdf_compress` | owned by `alice-ml` / `alice-sdf` | those crates' own guarantee, not re-stated here |
+
+Nothing in the crate calls the platform `libm`: `clippy.toml`
+`disallowed-methods` rejects the inherent `f32` / `f64` transcendentals
+(including `powi`, whose multiplication tree has an unspecified association
+order) for the library, the tests, the examples and the benches alike, and the
+gates run clippy with `--all-targets ... -D warnings`. `sqrt` and `mul_add`
+are deliberately *not* rejected: IEEE 754 requires both to be correctly
+rounded, so both are bit-identical everywhere.
+
+`tests/determinism_golden.rs` drives each module through its public entry
+points with fixed inputs, serialises every output with `to_bits()` and
+compares a SHA-256 against a constant; CI runs it on `x86_64` Linux and
+Windows and `aarch64` Linux and macOS, so a platform-dependent operation is a
+test failure rather than a silent divergence. Each scenario also asserts a
+minimum payload length, so a scenario that stopped exercising its module
+fails instead of passing with the hash of an empty buffer.
+
+<!-- claim-test: golden_q16_linear, golden_adaptive_polyfit, golden_constant_fit, golden_simd_fit, golden_sensor_fusion, golden_ring_buffer, golden_det_math_kernels, golden_robust, golden_piecewise, golden_delta, golden_law, golden_object_features -->
+
+Out of scope: targets that compute `f32` in a wider register and round once
+(`i586` and older x86 without SSE2), and builds that enable fast-math or
+otherwise let the compiler reassociate float arithmetic. Neither is built in
+CI.
+
+Degenerate inputs are covered separately. `tests/panic_contract.rs` states,
+for each entry point, which of `Err` / an early return / a specific value / a
+panic is the contract for an empty window, a single sample, a zero divisor, an
+out-of-range or negative argument, a non-finite argument and an integer
+overflow, and asserts that one. The overflow cases are asserted in both build
+profiles, because Rust panics on overflow with `debug_assertions` and wraps
+without it.
+
+<!-- claim-test: an_empty_window_gives_the_zero_fit_from_every_entry_point, every_division_by_a_derived_number_guards_its_zero, the_polynomial_evaluators_overflow_in_debug_and_wrap_in_release, samples_outside_the_q16_range_wrap_rather_than_saturate, the_simd_kernels_agree_with_the_scalar_fit_bit_for_bit -->
+
 ## Platforms
 
 CI tests on `x86_64` Linux and Windows and `aarch64` Linux and macOS, builds
@@ -183,6 +233,9 @@ that toolchain, without features and with the docs.rs feature set.
 cargo test --lib --no-default-features   # no_std core
 cargo test --features std,law            # lib, oracles, doc tests
 cargo test --test edge_law --features law
+cargo test --test determinism_golden --features std,law,ml   # cross-platform bit-exactness
+cargo test --test panic_contract --features std,law,ml       # degenerate inputs
+cargo test --release --test panic_contract --features std    # the overflow paths wrap here
 cargo bench --no-run                    # Criterion benches in benches/
 cargo build --lib --target thumbv7em-none-eabihf --no-default-features --features law
 scripts/preflight.sh            # every CI gate locally

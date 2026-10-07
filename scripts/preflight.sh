@@ -7,12 +7,15 @@
 # usage: scripts/preflight.sh [--quick]
 #   (none)   every gate: static checks, docs lint, clippy, no_std / thumbv7em
 #            builds, rustdoc, examples, the full test suites (no_std, std,
-#            law, analytic oracles, full feature set, edge-pipeline), MSRV,
-#            feature powerset, fuzz build and the security jobs (cargo audit /
-#            deny / machete)
+#            law, analytic oracles, determinism goldens, panic contract in
+#            both profiles, full feature set, edge-pipeline), MSRV, feature
+#            powerset, fuzz build and the security jobs (cargo audit / deny /
+#            machete)
 #   --quick  static checks, docs lint, clippy, no_std / thumbv7em builds,
-#            rustdoc and `cargo test --lib`; skips the other test suites,
-#            MSRV, feature powerset, fuzz build and the security jobs
+#            rustdoc, `cargo test --lib`, the determinism goldens and the
+#            debug-profile panic contract; skips the other test suites, the
+#            release-profile panic contract, MSRV, feature powerset, fuzz
+#            build and the security jobs
 #
 # Not reproduced here (CI only): the ubuntu-24.04-arm / windows-latest legs of
 # the test matrix, sensors-hw clippy off Linux, coverage, semver-checks,
@@ -101,7 +104,15 @@ if [[ $quick -eq 1 ]]; then
   cargo test --lib --no-default-features
   cargo test --lib --features "std"
   cargo test --lib --features "law"
-  echo; echo "preflight --quick OK (other test suites, MSRV, powerset, fuzz build and security jobs skipped)"; exit 0
+  # The determinism goldens and the panic contract run in milliseconds and
+  # cover the two properties that are easiest to break without noticing
+  # (cross-platform bit-exactness, degenerate-input behaviour), so --quick
+  # includes them. The remaining integration suites do not run here.
+  step "quick: determinism goldens + panic contract (std)"
+  cargo test --test determinism_golden --no-default-features
+  cargo test --test determinism_golden --features "std"
+  cargo test --test panic_contract --features "std"
+  echo; echo "preflight --quick OK (the other test suites, the release-profile panic contract, MSRV, powerset, fuzz build and security jobs are skipped)"; exit 0
 fi
 
 step "ci.yml / test: no_std core, std, doc tests"
@@ -119,6 +130,17 @@ cargo run --example edge_law --features "law"
 
 step "ci.yml / test: analytic oracles (tests/analytic_oracle.rs, std + sdf)"
 cargo test --test analytic_oracle --features "std,sdf"
+
+step "ci.yml / test: determinism goldens (no features, std, full)"
+cargo test --test determinism_golden --no-default-features
+cargo test --test determinism_golden --features "std"
+cargo test --test determinism_golden --features "$FULL"
+
+step "ci.yml / test: panic contract (std + full, debug and release)"
+cargo test --test panic_contract --features "std"
+cargo test --release --test panic_contract --features "std"
+cargo test --test panic_contract --features "$FULL"
+cargo test --release --test panic_contract --features "$FULL"
 
 step "ci.yml / test: full feature set, edge-pipeline"
 cargo build --lib --features "$FULL"

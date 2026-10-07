@@ -88,7 +88,12 @@ fn linear_fit_recovers_exact_integer_lines_and_matches_the_simd_path() {
         .enumerate()
         .map(|(x, &y)| x as f64 * f64::from(y))
         .sum();
-    let sxx: f64 = (0..data.len()).map(|x| (x as f64).powi(2)).sum();
+    let sxx: f64 = (0..data.len())
+        .map(|x| {
+            let xf = x as f64;
+            xf * xf
+        })
+        .sum();
     let a = (n * sxy - sx * sy) / (n * sxx - sx * sx);
     let b = (sy - a * sx) / n;
     assert!(
@@ -419,10 +424,13 @@ fn a_sampled_sphere_compresses_to_a_sphere_primitive_with_its_centre_and_radius(
         for j in 0..24 {
             let theta = std::f32::consts::TAU * i as f32 / 48.0;
             let phi = std::f32::consts::PI * (j as f32 + 0.5) / 24.0;
+            // deterministic kernels: the platform libm differs in the last ulp
+            let (sin_phi, cos_phi) = alice_det_math::sin_cos(phi);
+            let (sin_theta, cos_theta) = alice_det_math::sin_cos(theta);
             pts.push([
-                cx + r * phi.sin() * theta.cos(),
-                cy + r * phi.sin() * theta.sin(),
-                cz + r * phi.cos(),
+                cx + r * sin_phi * cos_theta,
+                cy + r * sin_phi * sin_theta,
+                cz + r * cos_phi,
             ]);
         }
     }

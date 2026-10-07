@@ -68,7 +68,9 @@ fn residual_is_measured_against_the_samples_including_q16_truncation() {
     // residuals of the transmitted line: 10922, −21846, 10922 (in 2⁻¹⁶)
     let r = law.residual();
     let max_abs = 21_846.0 / Q16;
-    let rms = ((2.0 * 10_922.0_f64.powi(2) + 21_846.0_f64.powi(2)) / 3.0).sqrt() / Q16;
+    // `powi` is not available: its multiplication tree has an unspecified
+    // association order (clippy.toml), so the squares are written out
+    let rms = ((2.0 * (10_922.0_f64 * 10_922.0) + 21_846.0_f64 * 21_846.0) / 3.0).sqrt() / Q16;
     assert!((r.max_abs - max_abs).abs() <= 4.0 * f64::EPSILON * max_abs);
     assert!((r.rms - rms).abs() <= 4.0 * f64::EPSILON * rms);
 

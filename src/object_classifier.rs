@@ -115,7 +115,7 @@ impl SdfFeatures {
         sorted.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         features[14] = sorted[2] / sorted[1].max(1e-6);
 
-        features[15] = (point_count as f32 + 1.0).ln();
+        features[15] = alice_det_math::ln(point_count as f32 + 1.0);
 
         SdfFeatures { features }
     }
@@ -150,7 +150,7 @@ impl SdfFeatures {
         let mut sorted = bounds_size;
         sorted.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         features[14] = sorted[2] / sorted[1].max(1e-6);
-        features[15] = (node_count as f32 + 1.0).ln();
+        features[15] = alice_det_math::ln(node_count as f32 + 1.0);
 
         SdfFeatures { features }
     }
@@ -180,9 +180,18 @@ impl TernaryClassifier {
     /// In production, weights would be loaded from a trained model file.
     ///
     /// # Panics
-    /// Panics if `num_classes` exceeds `MAX_CLASSES` (16).
+    ///
+    /// The two bounds are checked separately so that the message says which
+    /// one was broken:
+    ///
+    /// - `num_classes` is 0: a classifier with no output class has no logit
+    ///   to report, so the construction is refused here rather than failing
+    ///   inside [`TernaryClassifier::classify`]
+    /// - `num_classes` exceeds [`TernaryClassifier::MAX_CLASSES`] (16): more
+    ///   classes than the logits buffer holds
     #[must_use]
     pub fn new(num_classes: usize) -> Self {
+        assert!(num_classes >= 1, "num_classes must be at least 1, got 0");
         assert!(
             num_classes <= Self::MAX_CLASSES,
             "num_classes ({}) exceeds MAX_CLASSES ({})",
@@ -213,15 +222,48 @@ impl TernaryClassifier {
 
     /// Load classifier from packed weight bytes
     ///
+    /// The three layers are dense ternary matrices, so their lengths are
+    /// fixed by the architecture: `w1` is `HIDDEN_DIM · FEATURE_DIM` (512),
+    /// `w2` is `HIDDEN_DIM · HIDDEN_DIM` (1024) and `w3` is
+    /// `num_classes · HIDDEN_DIM`. Values outside `-1 ..= 1` are quantised to
+    /// the nearest ternary level.
+    ///
     /// # Panics
-    /// Panics if `num_classes` exceeds `MAX_CLASSES` (16).
+    ///
+    /// Each condition is checked separately so that the message says which
+    /// one was broken:
+    ///
+    /// - `num_classes` is 0: a classifier with no output class has no logit
+    ///   to report
+    /// - `num_classes` exceeds [`TernaryClassifier::MAX_CLASSES`] (16)
+    /// - a layer's length is not the product above (checked here, with the
+    ///   layer named, rather than left to the kernel constructor)
     #[must_use]
     pub fn from_weights(w1: &[i8], w2: &[i8], w3: &[i8], num_classes: usize) -> Self {
+        assert!(num_classes >= 1, "num_classes must be at least 1, got 0");
         assert!(
             num_classes <= Self::MAX_CLASSES,
             "num_classes ({}) exceeds MAX_CLASSES ({})",
             num_classes,
             Self::MAX_CLASSES
+        );
+        assert!(
+            w1.len() == HIDDEN_DIM * FEATURE_DIM,
+            "w1 has {} values, expected HIDDEN_DIM * FEATURE_DIM = {}",
+            w1.len(),
+            HIDDEN_DIM * FEATURE_DIM
+        );
+        assert!(
+            w2.len() == HIDDEN_DIM * HIDDEN_DIM,
+            "w2 has {} values, expected HIDDEN_DIM * HIDDEN_DIM = {}",
+            w2.len(),
+            HIDDEN_DIM * HIDDEN_DIM
+        );
+        assert!(
+            w3.len() == num_classes * HIDDEN_DIM,
+            "w3 has {} values, expected num_classes * HIDDEN_DIM = {}",
+            w3.len(),
+            num_classes * HIDDEN_DIM
         );
         Self {
             layer1: TernaryWeightKernel::from_ternary(w1, HIDDEN_DIM, FEATURE_DIM),
@@ -332,7 +374,7 @@ impl TernaryClassifier {
         let max_logit = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         let mut sum_exp = 0.0f32;
         for v in logits.iter_mut() {
-            *v = (*v - max_logit).exp();
+            *v = alice_det_math::exp(*v - max_logit);
             sum_exp += *v;
         }
         if sum_exp > 0.0 {

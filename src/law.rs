@@ -81,6 +81,15 @@ pub fn sample_points(samples: &[i32]) -> Vec<(f64, f64)> {
 /// in the [module documentation](self), not refitted), the valid range is
 /// `[0, n − 1]` and the residual is measured against `samples`.
 ///
+/// Because the residual is measured against the samples and not reported by
+/// the fit, it is an independent check on the fit itself: a window the fit
+/// cannot represent (samples outside the Q16 range, or a window long enough
+/// that the fixed-point arithmetic loses the slope) shows up as a residual
+/// orders of magnitude above the Q16 step, while a fit that describes its
+/// window has a residual below it. Reading [`SignalLaw::residual`] before
+/// transmitting the coefficients is the cheapest way to find out which of the
+/// two happened.
+///
 /// # Errors
 ///
 /// [`LawError::TooFewPoints`] for fewer than two samples (a line needs two

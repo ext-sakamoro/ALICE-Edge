@@ -29,7 +29,7 @@ features = ["std", "zip", "law", "codec", "db", "ml", "sdf", "depth-camera", "as
 [features]
 default = []
 # Enable std for testing on host
-std = []
+std = ["alice-det-math/std"]
 pyo3 = ["dep:pyo3", "dep:numpy", "std"]  # Python bindings
 zip = ["dep:alice_core", "alice_core/std", "alice_core/lzma", "std"]  # Compress model coefficients with ALICE-Zip
 # Edge fits as alice_zip::law::SignalLaw (evidence, measured residual, valid
@@ -49,7 +49,14 @@ dashboard = ["dep:alice-analytics", "std"]  # ALICE-Analytics dashboard
 ffi = []  # C-ABI FFI exports (extern "C" functions)、panic 隔離は std 時のみ (bare-metal は unwinding なし)
 
 [dependencies]
-# No dependencies - pure no_std (except optional Python bindings)
+# The only mandatory dependency, and itself dependency-free `no_std`: the
+# platform `libm` differs in the last ulp between macOS, glibc, MSVC and wasm,
+# so every float transcendental goes through this crate, whose kernels are
+# built from IEEE 754 basic operations in a fixed evaluation order. A fit
+# computed on one device and a fit computed on another must be the same bits,
+# because the coefficients are what gets transmitted and stored. Enforced by
+# `clippy.toml` `disallowed-methods`, pinned by tests/determinism_golden.rs.
+alice-det-math = { version = "0.3", default-features = false }
 pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 numpy = { version = "0.29", optional = true }
 # `zip` turns on alice-zip's std + lzma, `law` uses it without them (no_std)
@@ -71,6 +78,16 @@ rumqttc = { version = "0.25", optional = true }
 # Dashboard
 alice-analytics = { version = "0.1", optional = true }
 
+# The two float lints that propose re-fusing arithmetic are off as a property
+# of the crate, not case by case: every transcendental goes through
+# `alice-det-math` (see clippy.toml), and these lints propose rewriting those
+# calls back into `mul_add` or platform `libm` forms. `alice-det-math` itself
+# declares them the same way. They live in clippy's `nursery` group, which the
+# gates do not enable today, so this is a guard for the day one does.
+[lints.clippy]
+suboptimal_flops = "allow"
+imprecise_flops = "allow"
+
 [profile.release]
 opt-level = 3
 lto = "fat"
@@ -83,6 +100,8 @@ strip = true
 # For testing on host
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
+# cross-platform golden hashes (tests/determinism_golden.rs)
+sha2 = "0.10"
 
 [[bench]]
 name = "pi5_bench"

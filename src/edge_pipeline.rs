@@ -2,7 +2,7 @@
 //! Edge Pipeline Orchestrator
 //!
 //! Integrates capture → compress → classify → stream into a unified
-//! processing loop running at 10Hz on Raspberry Pi 5.
+//! processing loop running at 10Hz on a Cortex-A76 class board.
 //!
 //! Author: Moroya Sakamoto
 

@@ -4,10 +4,24 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `law` feature and `law::linear_law(samples, provenance)`: the `fit_linear_fixed` result as an `alice_zip::law::SignalLaw` (alice-zip 0.5.1, used without `std`, so the feature builds for `thumbv7em-none-eabihf`). The Q16.16 coefficients are converted without refitting to the normalised basis `u = x / (n − 1)` (`c0 = intercept_q / 2¹⁶`, `c1 = slope_q · (n − 1) / 2¹⁶`); the valid range is `[0, n − 1]`, the evidence is the samples, and the residual is measured against the samples (it includes the Q16 truncation of the fit and the wrap of samples outside the Q16 range). Fewer than two samples return `LawError::TooFewPoints`
+- `law::sample_points(samples)`: samples as `(x, y)` points, for judging a later window with `SignalLaw::ingest`; the law types are re-exported from `alice_edge::law`
+- `tests/edge_law.rs`: 10 closed-form checks (exact line, residual of a parabola, Q16 truncation in the residual, agreement with Edge's reconstruction within `4ε(|c0| + |c1|)`, valid range, out-of-range refusal, verdicts `Supports` / `Breaks` / `OutOfRange` / `NoEvidence`, degenerate and full-range inputs) and `examples/edge_law.rs`
+- `README_JP.md`
+- CI: test matrix on `ubuntu-latest` / `macos-latest` / `windows-latest` / `ubuntu-24.04-arm`, `law` in the thumbv7em build and clippy, `tests/edge_law.rs` step, docs lint job on three OS (`scripts/docs_lint.py` + `scripts/test_docs_lint.py`), `scripts/stub_guard.sh`
+
+### Changed
+- `zip` feature enables alice-zip's `std` and `lzma` features explicitly (the dependency is declared without features so that `law` can use alice-zip without `std`); the resolved feature set of `zip` is unchanged
+- `alice-zip` requirement raised from `0.5` to `0.5.1` (`alice_zip::law` is first published in 0.5.1)
+- The crate-level example passes `x` to `evaluate_linear_fixed` as an integer sample index, as documented, and asserts the reconstructed value
+- README rewritten: what the crate is not for, installation with `cargo add`, the `law` entry point, features table, platforms tested in CI; benchmark figures without a recorded measurement date are removed
+- `cargo audit` keeps its advisory database under `target/advisory-db`
+
 ## [0.1.1] - 2026-09-17
 
 ### Added
-- `tests/analytic_oracle.rs` — 閉形式 oracle 9 本 (CLAUDE.md § 解析解突合テスト規律、2026-09-17): 整数直線 / 2 次 / 3 次多項式の exact 復元 (Q16 dyadic、SIMD path bit 一致、f64 正規方程式との一致)、折れ線 2 本の exact 分割、robust fit の外れ値耐性 (1 %)、delta coding 往復、Kalman 1D の Riccati 漸化式逐語 + 定常解 P* = (−Q + √(Q²+4QR))/2、Kalman 2D の等速復元 (dt 独立)、逆分散重み融合 + 10σ 外れ値棄却、ring buffer FIFO、`sdf` feature: 球面点群 → 球 primitive (中心 / 半径 2 cm 以内) CI に oracle step (既存 test step は `--lib` で tests/ が走っていなかった)
+- `tests/analytic_oracle.rs` — 閉形式 oracle 9 本: 整数直線 / 2 次 / 3 次多項式の exact 復元 (Q16 dyadic、SIMD path bit 一致、f64 正規方程式との一致)、折れ線 2 本の exact 分割、robust fit の外れ値耐性 (1 %)、delta coding 往復、Kalman 1D の Riccati 漸化式逐語 + 定常解 P* = (−Q + √(Q²+4QR))/2、Kalman 2D の等速復元 (dt 独立)、逆分散重み融合 + 10σ 外れ値棄却、ring buffer FIFO、`sdf` feature: 球面点群 → 球 primitive (中心 / 半径 2 cm 以内) CI に oracle step (既存 test step は `--lib` で tests/ が走っていなかった)
 
 ### Fixed (oracle 先行 red 2 → 修正)
 - **`fit_piecewise_linear` が折れ点で切れない**: 「1 本の直線 fit の最大残差地点で分割」は 2 直線を 1 本で fit した残差が端点で最大になるため、exact な 2 直線 (折れ点 40) を 39 / 43 / … と 5 segment 以上に刻んでいた → 左右 2 本の残差和が最小の k (optimal single break) で分割、exact な折れ線は SSE 0 の折れ点で 2 segment
@@ -25,7 +39,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 - `asp` feature implies `ml`: `asp_bridge` uses `object_classifier::ObjectClass`, so `--features asp` alone did not compile (found by the feature powerset job)
 - `q16_to_f32` is no longer gated on `std` (it is plain `f32` arithmetic), so `--features ffi` compiles in `no_std` and on `thumbv7em-none-eabihf`
 - rustdoc: three doc comments used `[name:type]` byte-layout notation that rustdoc parsed as broken intra-doc links
-- `sensors-hw` did not compile (the feature was never built in CI): `Bme280Sensor::new` opened the I2C bus inside a `const fn` and panicked on failure (now opened in `init()` with a `SensorError`), `Spi::transfer` takes separate read / write buffers in rppal 0.19, and the GPS hardware loop ignored `interval` (now the minimum spacing between accepted NMEA fixes). Verified on a Raspberry Pi (aarch64 Linux) and gated by a `clippy -D warnings` step on the ubuntu job
+- `sensors-hw` did not compile (the feature was never built in CI): `Bme280Sensor::new` opened the I2C bus inside a `const fn` and panicked on failure (now opened in `init()` with a `SensorError`), `Spi::transfer` takes separate read / write buffers in rppal 0.19, and the GPS hardware loop ignored `interval` (now the minimum spacing between accepted NMEA fixes). Verified on an aarch64 Linux board and gated by a `clippy -D warnings` step on the ubuntu job
 - `fit_linear_simd`: `is_x86_feature_detected!` is a std macro, so `--no-default-features` did not compile on x86_64 (the old CI step was `continue-on-error`); `no_std` now uses the compile-time `cfg!(target_feature = "sse2")`
 - `zip` feature: `zip_bridge` uses `compress_residual_quantized` / `decompress_residual_quantized`, which the crates.io `alice-zip` crate did not provide until 0.5.0 (they only existed in the `libalice` CLI crate); the feature compiled in CI solely because the sibling was stubbed. Now `alice-zip = "0.5"` with the `lzma` feature, the CI stub is removed and `cargo test --features std,zip` runs in CI
 - `db` feature: `alice-db` is a crates.io dependency (0.2.0-beta.2); the CI stub declared version 0.1.0 and could not satisfy `^0.2.0-beta.1`, so dependency resolution failed in every CI job

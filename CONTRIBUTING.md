@@ -31,7 +31,7 @@ cargo build --features edge-pipeline
 # Sensor drivers (simulated)
 cargo build --features sensors
 
-# Real hardware GPIO/I2C/SPI (Raspberry Pi)
+# Real hardware GPIO/I2C/SPI (Linux boards supported by rppal)
 cargo build --features sensors-hw
 
 # MQTT bridge

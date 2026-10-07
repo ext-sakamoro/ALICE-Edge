@@ -2,14 +2,14 @@
 //! Depth Camera Driver for Dolphin D5 Lite 3D Scanner
 //!
 //! USB 3.0 depth stream capture with voxel downsampling and normal estimation.
-//! Designed for Raspberry Pi 5 edge deployment.
+//! Designed for single-board edge deployment.
 //!
 //! Author: Moroya Sakamoto
 
 use rusb::UsbContext;
 use std::time::Instant;
 
-/// Maximum points per frame (100K limit for Pi 5 memory budget)
+/// Maximum points per frame (100K limit for a single-board memory budget)
 pub const MAX_POINTS_PER_FRAME: usize = 100_000;
 
 #[inline(always)]
@@ -166,7 +166,7 @@ impl DolphinD5Driver {
     }
 
     /// Estimate normals using cross-product of nearest neighbor displacement vectors.
-    /// Simplified approach: uses axis-aligned neighbor pairs for speed on Pi 5.
+    /// Simplified approach: uses axis-aligned neighbor pairs for speed on edge CPUs.
     pub fn estimate_normals(points: &mut [PointNormal], k: usize) {
         if points.len() < 3 || k == 0 {
             return;

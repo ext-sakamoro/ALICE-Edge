@@ -1,10 +1,10 @@
-//! BME280 sensor compression — real I2C on Pi 5 or simulated
+//! BME280 sensor compression — real I2C on a Linux board or simulated
 //!
 //! Reads temperature, humidity, and pressure from BME280 (I2C),
 //! fits linear models, and outputs compressed coefficients.
 //!
 //! ```bash
-//! # On Raspberry Pi 5 (real hardware):
+//! # On a Linux board with I2C (real hardware):
 //! cargo run --example bme280_compress --features sensors-hw
 //!
 //! # On macOS/CI (simulated):

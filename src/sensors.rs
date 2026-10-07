@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-//! Raspberry Pi GPIO/I2C/SPI/UART sensor drivers for ALICE-Edge
+//! Linux GPIO/I2C/SPI/UART sensor drivers for ALICE-Edge
 //!
-//! Provides traits and drivers for common `IoT` sensors on Raspberry Pi 5.
+//! Provides traits and drivers for common `IoT` sensors on Linux boards (rppal).
 //! All drivers produce `&[i32]` slices suitable for `fit_linear_fixed()`.
 //!
 //! # Supported Sensors
@@ -156,9 +156,9 @@ impl std::error::Error for SensorError {}
 /// Bosch BME280: Temperature (-40~85°C), Humidity (0~100%), Pressure (300~1100 hPa)
 /// I2C address: 0x76 (default) or 0x77
 ///
-/// # Pi 5 Wiring
+/// # Wiring
 ///
-/// | BME280 | Pi 5 GPIO |
+/// | BME280 | GPIO header |
 /// |--------|-----------|
 /// | VCC | 3.3V (Pin 1) |
 /// | GND | GND (Pin 6) |
@@ -196,7 +196,7 @@ pub struct Bme280Sensor {
 impl Bme280Sensor {
     /// Create a new BME280 sensor
     ///
-    /// * `bus` - I2C bus number (1 on Pi 5)
+    /// * `bus` - I2C bus number (usually 1)
     /// * `address` - I2C address (0x76 default, 0x77 alternate)
     #[must_use]
     pub const fn new(bus: u8, address: u16) -> Self {
@@ -458,9 +458,9 @@ impl SensorDriver for Bme280Sensor {
 /// 連続読み取りの 10-20% がタイムアウトや CRC エラーになる可能性がある。
 /// 本番環境では複数回リトライ or ハードウェアタイマー割り込みを推奨。
 ///
-/// # Pi 5 Wiring
+/// # Wiring
 ///
-/// | DHT22 | Pi 5 GPIO |
+/// | DHT22 | GPIO header |
 /// |-------|-----------|
 /// | VCC | 3.3V (Pin 1) |
 /// | DATA | GPIO 4 (Pin 7) + 10kΩ pull-up to VCC |
@@ -606,9 +606,9 @@ impl SensorDriver for Dht22Sensor {
 ///
 /// 3-axis digital accelerometer, ±2g to ±16g range.
 ///
-/// # Pi 5 Wiring
+/// # Wiring
 ///
-/// | ADXL345 | Pi 5 GPIO |
+/// | ADXL345 | GPIO header |
 /// |---------|-----------|
 /// | VCC | 3.3V (Pin 1) |
 /// | GND | GND (Pin 6) |
@@ -740,9 +740,9 @@ impl SensorDriver for Adxl345Sensor {
 ///
 /// Reads NMEA sentences from a serial GPS module.
 ///
-/// # Pi 5 Wiring
+/// # Wiring
 ///
-/// | GPS Module | Pi 5 GPIO |
+/// | GPS Module | GPIO header |
 /// |------------|-----------|
 /// | VCC | 3.3V (Pin 1) |
 /// | GND | GND (Pin 6) |
@@ -895,9 +895,9 @@ impl SensorDriver for GpsSensor {
 /// Bosch BNO055: Accelerometer + Gyroscope + Magnetometer with on-chip fusion.
 /// Output: Euler angles, quaternions, linear acceleration, gravity vector.
 ///
-/// # Pi 5 Wiring
+/// # Wiring
 ///
-/// | BNO055 | Pi 5 GPIO |
+/// | BNO055 | GPIO header |
 /// |--------|-----------|
 /// | VCC | 3.3V (Pin 1) |
 /// | GND | GND (Pin 6) |
@@ -1037,9 +1037,9 @@ impl SensorDriver for Bno055Sensor {
 /// Maxim MAX30102: Red + IR LED, photodetector for pulse oximetry.
 /// Output: Heart rate (BPM × 10), `SpO2` (% × 100).
 ///
-/// # Pi 5 Wiring
+/// # Wiring
 ///
-/// | MAX30102 | Pi 5 GPIO |
+/// | MAX30102 | GPIO header |
 /// |----------|-----------|
 /// | VCC | 3.3V (Pin 1) |
 /// | GND | GND (Pin 6) |

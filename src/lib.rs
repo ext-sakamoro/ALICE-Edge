@@ -24,22 +24,23 @@
 //!
 //! # Example
 //!
-//! ```
-//! use alice_edge::{fit_linear_fixed, evaluate_linear_fixed, int_to_q16};
+//! ```rust
+//! use alice_edge::{evaluate_linear_fixed, fit_linear_fixed, q16_to_int};
 //!
-//! // Sensor readings (e.g., temperature * 100)
-//! let samples = [2500, 2510, 2520, 2530, 2540]; // 25.00°C rising
+//! // sensor readings (temperature × 100): 25.00 °C rising 0.10 °C per sample
+//! let samples = [2500, 2510, 2520, 2530, 2540];
 //!
-//! // Fit model on-device
+//! // on the device: two Q16.16 numbers instead of five samples
 //! let (slope, intercept) = fit_linear_fixed(&samples);
+//! assert_eq!((slope, intercept), (10 << 16, 2500 << 16));
 //!
-//! // Transmit only 8 bytes instead of 20 bytes!
-//! // transmit_coefficients(slope, intercept);
-//!
-//! // On receiver: reconstruct any point
-//! let temp_at_3 = evaluate_linear_fixed(slope, intercept, int_to_q16(3));
-//! assert!(temp_at_3 != 0); // 非ゼロの予測値
+//! // on the receiver: reconstruct the value at any sample index
+//! let y3 = evaluate_linear_fixed(slope, intercept, 3);
+//! assert_eq!(q16_to_int(y3), 2530);
 //! ```
+//!
+//! With the `law` feature, `law::linear_law` returns the same fit together
+//! with its evidence, measured residual, valid range and provenance.
 //!
 //! # Related Projects
 //!

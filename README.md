@@ -1,493 +1,202 @@
 # ALICE-Edge
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.87%2B-orange.svg)](https://www.rust-lang.org)
+[日本語](README_JP.md)
+
 [![CI](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/ci.yml/badge.svg)](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/ci.yml)
 [![Security](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/security-audit.yml/badge.svg)](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/security-audit.yml)
 [![Fuzz](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/fuzz.yml/badge.svg)](https://github.com/ext-sakamoro/ALICE-Edge/actions/workflows/fuzz.yml)
-[![Tests](https://img.shields.io/badge/tests-350_passing-brightgreen.svg)](#quality)
-[![no_std](https://img.shields.io/badge/no__std-compatible-green.svg)](#supported-platforms)
 
-> Part of **[ALICE-Eco-System](https://github.com/ext-sakamoro/ALICE-Eco-System)** — 260+ crate Edge-to-Cloud data pipeline (SDF / Physics / LLM / Motion / Font / TTS)
+Embedded model fitting for sensor data: "don't send data, send the law".
 
-**Embedded Model Generator** - "Don't send data. Send the law."
+A window of integer sensor samples is reduced on the device to a few Q16.16
+fixed-point coefficients (a line, a constant, a quadratic or cubic, a
+piecewise line, a robust line), and only the coefficients are transmitted.
+The core is `#![no_std]`, has no dependencies and needs no FPU. Optional
+features add sensor drivers, MQTT, a dashboard, a C ABI, Python bindings and
+bridges to other ALICE crates.
 
-<p align="center">
-  <em>Ultra-lightweight procedural compression for IoT and embedded systems.<br/>
-  1000 sensor samples → 8 bytes. Runs on Raspberry Pi 5 to bare-metal MCU.</em>
-</p>
+With the `law` feature an Edge fit is returned as an
+`alice_zip::law::SignalLaw`: the transmitted coefficients together with the
+samples they were fitted from, the residual measured against those samples,
+the valid range and the provenance.
+
+License: MIT OR Apache-2.0
+
+## Contents
+
+- [What it is not for](#what-it-is-not-for)
+- [Installation](#installation)
+- [Example](#example)
+- [Fits as laws (`law` feature)](#fits-as-laws-law-feature)
+- [Features](#features)
+- [Q16.16 format](#q1616-format)
+- [Platforms](#platforms)
+- [Bindings](#bindings)
+- [Minimum supported Rust version](#minimum-supported-rust-version)
+- [Building and testing](#building-and-testing)
+- [Related crates](#related-crates)
+- [License](#license)
+
+## What it is not for
+
+- General regression: the fits take samples at the implicit positions
+  `x = 0, 1, …, n − 1`, and the Q16.16 contract covers `|y| < 2¹⁵`; values
+  outside it wrap (the `law` residual makes such a wrap visible)
+- Lossless storage: the coefficients describe the trend of a window, the
+  samples themselves are not recoverable from them
+- Encryption or authentication of what is transmitted
+- A hardware abstraction layer: the `sensors-hw` drivers cover a few I2C /
+  SPI / GPIO / UART sensors on Linux through `rppal` and `serialport`
 
 ## Installation
 
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-alice-edge = "0.1"
-
-# With sensor drivers and MQTT:
-alice-edge = { version = "0.1", features = ["sensors", "mqtt"] }
-
-# Full edge pipeline (depth camera → SDF → ML → streaming):
-alice-edge = { version = "0.1", features = ["edge-pipeline"] }
-```
-
-**Minimum Supported Rust Version (MSRV):** 1.87 (`rust-version` in Cargo.toml, compiled on that exact toolchain in CI)
-
-## The Philosophy
-
-Raw sensor data **never leaves the device**. Instead, we fit a mathematical model on-device and transmit only the coefficients.
-
-```
-Traditional IoT:  1000 samples × 4 bytes = 4,000 bytes transmitted
-ALICE-Edge:       1000 samples → y = ax + b → 8 bytes transmitted
-                  Compression: 500x
-                  Privacy: raw data discarded on-device
-```
-
-## Benchmark: Raspberry Pi 5 (Cortex-A76, Criterion --release)
-
-| Operation | 10 samples | 100 samples | 1000 samples | 4096 samples |
-|-----------|-----------|-------------|-------------|-------------|
-| **fit_linear_fixed** | 20 ns | 91 ns | **751 ns** | 3.0 µs |
-| **fit_constant_fixed** | 8.4 ns | 33 ns | **218 ns** | 870 ns |
-| **full_pipeline** | — | 90 ns | **752 ns** | — |
-
-| Single Operation | Measured |
-|-----------------|----------|
-| evaluate_linear (1000-point reconstruct) | 2.1 µs |
-| compute_residual_error (1000 samples) | 619 ns |
-| should_use_linear (model selection) | 3.4 µs |
-| Q16 conversion (1000×) | 1.1 µs |
-
-| Metric | Value |
-|--------|-------|
-| **Throughput** | **1.33M models/sec** (1000 samples each) |
-| **Compression ratio** | **500x** (4000 B → 8 B per sensor) |
-| **Multi-sensor hub** (8 sensors × 1000) | **571x** (32 KB → 56 B) |
-| **Dashboard throughput** | 11,943 models/sec with HLL + CMS |
-| **Stack usage** | 48 bytes |
-| **Binary size** (no_std core) | < 1 KB |
-| **Dependencies** (no_std) | **Zero** |
-
-## Architecture
-
-```
- ┌───────────────────────────────────────────────────────────────────────┐
- │  ALICE-Edge on Raspberry Pi 5                                        │
- │                                                                       │
- │  ┌──────────┐  I2C/SPI/GPIO/UART  ┌──────────────┐                  │
- │  │ BME280   │─────────────────────▶│              │   ┌──────────┐   │
- │  │ DHT22    │                      │ fit_linear   │──▶│ 8 bytes  │   │
- │  │ ADXL345  │                      │ _fixed()     │   │ (slope,  │   │
- │  │ GPS      │                      │              │   │ intercept│   │
- │  └──────────┘                      │ Q16.16       │   └────┬─────┘   │
- │                                    │ Fixed-Point  │        │         │
- │  ┌──────────────┐                  └──────────────┘        │         │
- │  │ ALICE-       │                                          ▼         │
- │  │ Analytics    │◀──latency, compression stats    ┌──────────────┐   │
- │  │ Dashboard    │                                 │ MQTT Publish │   │
- │  │ (HLL, CMS)  │                                 │ AWS IoT Core │   │
- │  └──────────────┘                                 │ Azure IoT Hub│   │
- │                                                   │ Mosquitto    │   │
- │  Raw data → DISCARDED (privacy by design)         └──────────────┘   │
- └───────────────────────────────────────────────────────────────────────┘
-```
-
-## Quick Start
-
-### 1. Simulated Sensors (any platform)
-
 ```bash
-git clone https://github.com/ext-sakamoro/ALICE-Edge.git
-cd ALICE-Edge
-
-# Run simulated sensor demo (no hardware required)
-cargo run --example simulate_sensors --features sensors
-
-# Multi-sensor hub with compression table
-cargo run --example multi_sensor_hub --features sensors
+cargo add alice-edge
+# with the law entry point (no_std + alloc)
+cargo add alice-edge --features law
 ```
 
-### 2. Real Hardware on Raspberry Pi 5
-
-```bash
-# BME280 (I2C) + DHT22 (GPIO) + ADXL345 (SPI)
-cargo run --example bme280_compress --features sensors-hw
-```
-
-### 3. MQTT to Cloud
-
-```bash
-# Local Mosquitto
-cargo run --example mqtt_local --features "sensors,mqtt"
-
-# AWS IoT Core
-export AWS_IOT_ENDPOINT="<account>-ats.iot.<region>.amazonaws.com"
-cargo run --example mqtt_aws_iot --features "sensors,mqtt"
-```
-
-### 4. Dashboard
-
-```bash
-cargo run --example dashboard_demo --features "sensors,dashboard"
-```
-
-## Wiring Guide (Raspberry Pi 5)
-
-### BME280 (Temperature / Humidity / Pressure) — I2C
-
-```
-BME280          Pi 5
-──────          ────
-VIN  ────────── 3.3V (Pin 1)
-GND  ────────── GND  (Pin 6)
-SDA  ────────── GPIO 2 / SDA1 (Pin 3)
-SCL  ────────── GPIO 3 / SCL1 (Pin 5)
-```
-
-### DHT22 (Temperature / Humidity) — GPIO
-
-```
-DHT22           Pi 5
-──────          ────
-VCC  ────────── 3.3V (Pin 1)
-GND  ────────── GND  (Pin 9)
-DATA ────────── GPIO 4 (Pin 7)
-     (10kΩ pull-up between DATA and VCC)
-```
-
-### ADXL345 (3-Axis Accelerometer) — SPI
-
-```
-ADXL345         Pi 5
-──────          ────
-VCC  ────────── 3.3V (Pin 17)
-GND  ────────── GND  (Pin 20)
-CS   ────────── GPIO 8 / CE0 (Pin 24)
-SDO  ────────── GPIO 9 / MISO (Pin 21)
-SDA  ────────── GPIO 10 / MOSI (Pin 19)
-SCL  ────────── GPIO 11 / SCLK (Pin 23)
-```
-
-### GPS Module (NEO-6M / NEO-7M) — UART
-
-```
-GPS             Pi 5
-──────          ────
-VCC  ────────── 3.3V (Pin 1)
-GND  ────────── GND  (Pin 14)
-TX   ────────── GPIO 15 / RXD (Pin 10)
-RX   ────────── GPIO 14 / TXD (Pin 8)
-```
-
-## API
-
-### Core (no_std, zero dependencies)
+## Example
 
 ```rust
-use alice_edge::{fit_linear_fixed, evaluate_linear_fixed, q16_to_int};
+use alice_edge::{evaluate_linear_fixed, fit_linear_fixed, q16_to_int};
 
-// Sensor readings (e.g., temperature × 100)
-let samples = [2500, 2510, 2520, 2530, 2540]; // 25.00°C rising
+// sensor readings (temperature × 100): 25.00 °C rising 0.10 °C per sample
+let samples = [2500, 2510, 2520, 2530, 2540];
 
-// Fit model ON DEVICE — raw data never leaves!
+// on the device: two Q16.16 numbers instead of five samples
 let (slope, intercept) = fit_linear_fixed(&samples);
+assert_eq!((slope, intercept), (10 << 16, 2500 << 16));
 
-// Transmit only 8 bytes
-transmit(&slope.to_le_bytes());
-transmit(&intercept.to_le_bytes());
-
-// On receiver: reconstruct any point
-let temp_at_10 = evaluate_linear_fixed(slope, intercept, 10);
-let celsius = q16_to_int(temp_at_10) as f32 / 100.0;
+// on the receiver: reconstruct the value at any sample index
+let y3 = evaluate_linear_fixed(slope, intercept, 3);
+assert_eq!(q16_to_int(y3), 2530);
 ```
 
-### Sensor Drivers (feature: `sensors` / `sensors-hw`)
+## Fits as laws (`law` feature)
+
+`law::linear_law(samples, provenance)` runs `fit_linear_fixed` and returns
+the result as an `alice_zip::law::SignalLaw` (re-exported from
+`alice_edge::law`):
+
+| item | value |
+|------|-------|
+| coefficients | the Edge fit, converted without refitting (below) |
+| valid range | `[0, n − 1]`; `evaluate` outside it returns `LawError::OutOfRange` |
+| evidence | `(i, samples[i])` for every sample |
+| residual | RMS and maximum of `samples[i] − f(i)`, measured against the samples, so it includes the Q16 truncation of the fit |
+| provenance | given by the caller |
+
+`SignalLaw` stores ascending coefficients in `u = x / (n − 1)`, so the Edge
+coefficients `(slope_q, intercept_q)` become
+
+```text
+c0 = intercept_q / 2¹⁶
+c1 = slope_q · (n − 1) / 2¹⁶
+```
+
+Both are exact in `f64` for windows shorter than 2²² samples, and
+`evaluate(i)` differs from Edge's own reconstruction
+`(slope_q · i + intercept_q) / 2¹⁶` by at most `4ε(|c0| + |c1|)`
+(`ε = 2⁻⁵²`), far below one Q16 step. A later window is judged with
+`SignalLaw::ingest` (`law::sample_points` turns samples into `(x, y)`
+points): `Supports`, `ParameterUpdate`, `ResidualGrew`, `Breaks`,
+`OutOfRange` or `NoEvidence`.
 
 ```rust
-use alice_edge::sensors::{Bme280Sensor, SensorDriver};
+use alice_edge::law::{linear_law, sample_points, IngestPolicy, Provenance, Verdict};
 
-let mut sensor = Bme280Sensor::new(1, 0x76); // I2C bus 1
-sensor.init()?;
+let prov = Provenance::new("sensor 3, window 17", "fit_linear_fixed");
+let law = linear_law(&[1, 3, 5, 7, 9], prov).unwrap();
+assert_eq!(law.coefficients(), &[1.0, 8.0]); // y = 1 + 2x = 1 + 8u
+assert!(law.evaluate(4.5).is_err());          // beyond the window
 
-let batch = sensor.read_samples(1000)?;
-let (slope, intercept) = fit_linear_fixed(&batch.temperature);
-// 4000 bytes → 8 bytes (500x compression)
+let policy = IngestPolicy { abs_tolerance: 0.5, break_factor: 4.0 };
+assert!(matches!(law.ingest(&sample_points(&[1, 3, 5, 7, 9]), &policy), Verdict::Supports { .. }));
+assert!(matches!(law.ingest(&sample_points(&[0, 1, 4, 9, 16]), &policy), Verdict::Breaks { .. }));
 ```
 
-### MQTT Bridge (feature: `mqtt`)
+The module needs `alloc` but not `std`; CI builds it for
+`thumbv7em-none-eabihf`. A runnable example is `examples/edge_law.rs`
+(`cargo run --example edge_law --features law`), and the closed-form checks
+are in `tests/edge_law.rs`.
 
-```rust
-use alice_edge::mqtt_bridge::{MqttConfig, MqttPublisher, CoefficientPayload};
+## Features
 
-let config = MqttConfig::local("alice-edge-pi5");
-let mut publisher = MqttPublisher::new(config)?;
+| Feature | Default | Dependencies | Description |
+|---------|---------|--------------|-------------|
+| *(none)* | yes | none | `no_std` core: linear / constant / quadratic / cubic / piecewise fits, Q16.16 helpers, ring buffer, Kalman filters and sensor fusion |
+| `std` | no | | host builds: delta coding, robust fit, OTA, telemetry, watchdog |
+| `law` | no | alice-zip (without `std`) | fits as `SignalLaw` (`no_std` + `alloc`) |
+| `zip` | no | alice-zip (`std`, `lzma`) | residual compression bridge |
+| `codec` | no | alice-codec | wavelet denoising bridge |
+| `db` | no | alice-db | coefficient persistence bridge |
+| `ml` | no | alice-ml | 1.58-bit ternary object classification |
+| `sdf` | no | alice-sdf | point cloud to SDF compression |
+| `depth-camera` | no | rusb | USB depth camera capture |
+| `asp` | no | libasp (implies `sdf`, `ml`) | ALICE Streaming Protocol bridge |
+| `edge-pipeline` | no | | `depth-camera` + `sdf` + `ml` + `asp` |
+| `sensors` | no | serde | simulated sensor drivers |
+| `sensors-hw` | no | rppal, serialport | I2C / SPI / GPIO / UART drivers (Linux) |
+| `mqtt` | no | rumqttc | MQTT publish (AWS IoT Core, Azure IoT Hub, Mosquitto) |
+| `dashboard` | no | alice-analytics | HyperLogLog / Count-Min sketch dashboard |
+| `ffi` | no | | C ABI (22 functions), see `bindings/` |
+| `pyo3` | no | pyo3, numpy | Python bindings |
 
-publisher.publish_coefficients("bme280/temperature", &payload)?;
-publisher.publish_binary("bme280/temperature/bin", &payload)?;  // 24 bytes
+Sensor pin assignments are in the `sensors` module documentation.
+
+## Q16.16 format
+
+```text
+16 bits integer | 16 bits fraction, range −32768.0 … +32767.99998
+2550 (25.50 °C × 100) → 2550 · 65536 = 167 116 800
 ```
 
-### Dashboard (feature: `dashboard`)
+`fit_linear_fixed` returns `(slope, intercept)` in Q16.16;
+`evaluate_linear_fixed(slope, intercept, x)` takes `x` as an integer sample
+index and returns Q16.16.
 
-```rust
-use alice_edge::dashboard::EdgeDashboard;
+## Platforms
 
-let mut dashboard = EdgeDashboard::new();
-dashboard.record_compression("bme280", 4000, 8, latency_us);
-
-dashboard.print_dashboard();  // Terminal output
-let json = dashboard.to_json();  // JSON for API
-```
-
-## Feature Flags
-
-| Feature | Dependencies | Description |
-|---------|-------------|-------------|
-| *(default)* | None | `no_std` core: fit/evaluate/Q16.16 |
-| `sensors` | serde | Sensor drivers (simulated) |
-| `sensors-hw` | rppal, serialport | Real GPIO/I2C/SPI/UART on Pi |
-| `mqtt` | rumqttc | MQTT publish to cloud |
-| `dashboard` | alice-analytics | HLL/CMS/latency dashboard |
-| `pyo3` | pyo3, numpy | Python bindings (zero-copy NumPy) |
-| `zip` | alice-zip | ALICE-Zip compression bridge |
-| `codec` | alice-codec | Wavelet denoising bridge |
-| `db` | alice-db | Coefficient persistence bridge |
-| `ml` | alice-ml | 1.58-bit ternary classification |
-| `depth-camera` | rusb | Dolphin D5 Lite depth camera |
-| `sdf` | alice-sdf | SDF point cloud compression |
-| `asp` | libasp (implies `sdf`, `ml`) | ALICE Streaming Protocol bridge |
-| `edge-pipeline` | (all above) | Full depth → SDF → ML pipeline |
-
-## Q16.16 Fixed-Point Format
-
-ALICE-Edge uses Q16.16 fixed-point arithmetic (no FPU required):
-
-```
-16 bits integer | 16 bits fraction
-Range: -32768.0 to +32767.99998
-
-Value 25.50°C (as 2550 raw):
-  Q16.16 = 2550 × 65536 = 167,116,800
-
-  Convert back: 167,116,800 / 65536 = 2550 → 25.50°C
-```
-
-## Memory & Stack Usage
-
-| Function | Stack | Description |
-|----------|-------|-------------|
-| `fit_linear_fixed` | 48 B | O(N) loop, O(1) x-sums |
-| `evaluate_linear_fixed` | 16 B | Single MLA instruction |
-| `fit_constant_fixed` | 24 B | Mean value |
-| `compute_residual_error` | 32 B | Sum of squared errors |
-
-## Project Structure
-
-```
-ALICE-Edge/
-├── Cargo.toml
-├── src/
-│   ├── lib.rs              # Core: fit_linear_fixed, Q16.16 (no_std)
-│   ├── sensors.rs          # BME280, DHT22, ADXL345, GPS drivers
-│   ├── mqtt_bridge.rs      # MQTT publish (AWS IoT, Azure, Mosquitto)
-│   ├── dashboard.rs        # ALICE-Analytics dashboard (HLL, CMS)
-│   ├── python.rs           # PyO3 bindings (zero-copy NumPy)
-│   ├── zip_bridge.rs       # ALICE-Zip compression
-│   ├── codec_bridge.rs     # Wavelet denoising
-│   ├── db_bridge.rs        # Coefficient persistence
-│   ├── ml_bridge.rs        # Ternary neural network (~80 B model)
-│   ├── depth_capture.rs    # Dolphin D5 Lite depth camera
-│   ├── sdf_compress.rs     # SDF point cloud compression
-│   ├── object_classifier.rs # Edge object classification
-│   ├── asp_bridge.rs       # ALICE Streaming Protocol
-│   └── edge_pipeline.rs    # Full depth → SDF → ML pipeline
-├── examples/
-│   ├── simulate_sensors.rs # Simulated sensor demo (any platform)
-│   ├── bme280_compress.rs  # BME280 compression (Pi or simulated)
-│   ├── multi_sensor_hub.rs # Multi-sensor compression table
-│   ├── mqtt_local.rs       # MQTT to local Mosquitto
-│   ├── mqtt_aws_iot.rs     # MQTT to AWS IoT Core
-│   ├── dashboard_demo.rs   # ALICE-Analytics dashboard
-│   └── python_batch.py     # Python + NumPy batch processing
-├── benches/
-│   └── pi5_bench.rs        # Criterion benchmarks
-└── README.md
-```
+CI tests on `x86_64` Linux and Windows and `aarch64` Linux and macOS, builds
+the `no_std` core (alone, with `ffi`, and with `law`) for
+`thumbv7em-none-eabihf`, and lints `sensors-hw` on Linux. Other targets are
+not built in CI.
 
 ## Bindings
 
-ALICE-Edge provides cross-language bindings via C-ABI FFI:
+- C / C++: `bindings/alice_edge.h`, built with `cargo build --release --features ffi`
+- Unity (C#): `bindings/AliceEdge.cs` (`DllImport` wrapper)
+- Python: `maturin develop --features pyo3`
 
-### C/C++
+The C ABI catches panics (with `std`) and reports them through
+`alice_edge_last_error()`.
 
-```c
-#include "alice_edge.h"
+## Minimum supported Rust version
 
-int32_t data[] = {2500, 2510, 2520, 2530, 2540};
-AliceLinearResult r = alice_fit_linear(data, 5);
-int32_t predicted = alice_evaluate_linear(r.slope, r.intercept, 10);
-float celsius = alice_q16_to_f32(predicted) / 100.0f;
-```
+1.87 (`rust-version` in `Cargo.toml`). CI compiles the library on exactly
+that toolchain, without features and with the docs.rs feature set.
 
-Build: `cargo build --release --features ffi` → `libalice_edge.dylib` / `.so` / `.dll`
-
-Header: [`bindings/alice_edge.h`](bindings/alice_edge.h)
-
-### Unity (C#)
-
-```csharp
-using AliceEdge;
-
-int[] samples = {2500, 2510, 2520, 2530, 2540};
-var (slope, intercept) = AliceModel.FitLinear(samples);
-float temp = AliceModel.Q16ToFloat(
-    AliceModel.EvaluateLinear(slope, intercept, 10)) / 100f;
-```
-
-DllImport wrapper: [`bindings/AliceEdge.cs`](bindings/AliceEdge.cs)
-
-### Python (PyO3 + NumPy)
-
-```python
-import alice_edge
-import numpy as np
-
-data = np.array([2500, 2510, 2520, 2530, 2540], dtype=np.int32)
-slope, intercept = alice_edge.fit_linear(data)
-temp_f = alice_edge.q16_to_f32(alice_edge.evaluate_linear(slope, intercept, 10))
-```
-
-Build: `maturin develop --features pyo3`
-
-## Quality
-
-| Metric | Value |
-|--------|-------|
-| **Tests** | 350 (348 lib with the full feature set + 2 doc; 98 in `no_std`), 0 failures |
-| **clippy** | `-D warnings` on `no_std`, `std` and the full feature set (CI gate) |
-| **cargo doc** | `-D warnings` on `std` and the docs.rs feature set (CI gate) |
-| **cargo fmt** | clean |
-| **MSRV** | 1.87, compiled on that toolchain in CI |
-| **Feature powerset** | every feature alone and every pair (80 combinations, `cargo hack`) |
-| **Fuzz** | 4 libFuzzer targets (linear / SIMD parity, polynomial fits, piecewise, delta roundtrip), 60 s per push + daily |
-| **Security** | `cargo audit` + `cargo deny` (license allowlist) + `cargo machete` + stub guard + `cargo semver-checks`, weekly |
-| **Local gate** | `scripts/preflight.sh [--quick]` reproduces every CI step before push |
-| **FFI functions** | 19 (fitting, evaluate, robust, SIMD, filter, delta, zeroize) |
-| **Bindings** | C/C++ header, Unity C#, Python PyO3 |
-
-## Security Model
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                      EDGE DEVICE                                  │
-│  ┌────────────┐    ┌────────────┐    ┌──────────────┐            │
-│  │   Sensor   │───▶│ fit_linear │───▶│ Coefficients │───▶ Network│
-│  │   (raw)    │    │  _fixed()  │    │   (8 bytes)  │            │
-│  └────────────┘    └────────────┘    └──────────────┘            │
-│        │                                                          │
-│        ▼                                                          │
-│   [DISCARDED]  ← Raw data NEVER leaves device                    │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**Privacy by Design**: Raw sensor data is processed and immediately discarded. Only mathematical coefficients (8 bytes) are transmitted. Ideal for:
-
-- Medical devices (HIPAA compliance)
-- Industrial sensors (trade secrets)
-- Smart home (user privacy)
-
-## ALICE Ecosystem Integration
-
-| Bridge | Source Crate | Usage |
-|--------|-------------|-------|
-| Sensor compression | **ALICE-Edge** (core) | Q16.16 linear regression |
-| Model storage | **ALICE-DB** | Coefficient time-series |
-| Wavelet denoising | **ALICE-Codec** | Pre-processing sensor data |
-| Binary compression | **ALICE-Zip** | Artifact packaging |
-| Analytics | **ALICE-Analytics** | HLL, CMS, latency tracking |
-| Neural classification | **ALICE-ML** | 1.58-bit ternary inference |
-| SDF compression | **ALICE-SDF** | Point cloud → SDF |
-| Streaming | **ALICE-Streaming-Protocol** | Low-bandwidth video |
-
-## Build
-
-### On Raspberry Pi 5 (recommended)
+## Building and testing
 
 ```bash
-# Install Rust (one-time)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source ~/.cargo/env
-
-# Clone
-git clone https://github.com/ext-sakamoro/ALICE-Edge.git
-git clone https://github.com/ext-sakamoro/ALICE-Analytics.git
-
-# Build (release)
-cd ALICE-Edge
-cargo build --release --features sensors-hw,mqtt,dashboard
-
-# Run benchmarks
-cargo bench
+cargo test --lib --no-default-features   # no_std core
+cargo test --features std,law            # lib, oracles, doc tests
+cargo test --test edge_law --features law
+cargo bench --no-run                    # Criterion benches in benches/
+cargo build --lib --target thumbv7em-none-eabihf --no-default-features --features law
+scripts/preflight.sh            # every CI gate locally
+scripts/preflight.sh --quick    # static checks, clippy, builds, docs, cargo test --lib
 ```
 
-### Cross-compile (macOS → aarch64 Linux)
+## Related crates
 
-```bash
-rustup target add aarch64-unknown-linux-gnu
-cargo build --release --target aarch64-unknown-linux-gnu --features sensors,mqtt,dashboard
-scp target/aarch64-unknown-linux-gnu/release/examples/* pi@raspberrypi:~/
-```
-
-## Supported Platforms
-
-| Platform | no_std Core | Sensors (HW) | MQTT | Dashboard |
-|----------|:-----------:|:------------:|:----:|:---------:|
-| **Raspberry Pi 5** | Y | Y | Y | Y |
-| **Raspberry Pi 4/3** | Y | Y | Y | Y |
-| Raspberry Pi Pico (RP2040) | Y | - | - | - |
-| ARM Cortex-M (M0/M3/M4/M7) | Y | - | - | - |
-| ESP32 / ESP8266 | Y | - | - | - |
-| RISC-V | Y | - | - | - |
-| macOS / Linux (x86_64) | Y | sim | Y | Y |
-
-## Troubleshooting (Raspberry Pi)
-
-**"Permission denied" on GPIO**:
-```bash
-sudo usermod -aG gpio $USER && newgrp gpio
-```
-
-**"I2C device not found (0x76)"**:
-```bash
-sudo raspi-config  # Enable I2C under Interface Options
-i2cdetect -y 1     # Verify BME280 appears at 0x76
-```
-
-**"SPI bus not available"**:
-```bash
-sudo raspi-config  # Enable SPI under Interface Options
-ls /dev/spidev*    # Verify SPI devices exist
-```
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, and lint instructions.
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+- [ALICE-Zip](https://github.com/ext-sakamoro/ALICE-Zip) — `SignalLaw` and residual compression
+- [ALICE-DB](https://github.com/ext-sakamoro/ALICE-DB) — model-based storage
+- [ALICE-Codec](https://github.com/ext-sakamoro/ALICE-Codec) — wavelet coding
+- [ALICE-Analytics](https://github.com/ext-sakamoro/ALICE-Analytics) — sketches for the dashboard
+- [ALICE-Streaming-Protocol](https://github.com/ext-sakamoro/ALICE-Streaming-Protocol) — streaming bridge
 
 ## License
 
-MIT (Core)
-
-*Note: The core `no_std` library is licensed under MIT. However, enabling certain feature flags (e.g., `dashboard`, `db`, `ml`) links against AGPL-3.0 components from the broader ALICE ecosystem. Binaries built with these features enabled are subject to the terms of the AGPL-3.0 license.*
-
-## Author
-
-Moroya Sakamoto
-
----
-
-*"The best sensor network is one where data never travels."*
+MIT OR Apache-2.0 ([LICENSE](LICENSE), [LICENSE-APACHE](LICENSE-APACHE))

@@ -1,4 +1,4 @@
-//! Simulated sensor demo — runs on any platform (macOS/Linux/Pi)
+//! Simulated sensor demo — runs on any platform (macOS / Linux)
 //!
 //! Demonstrates ALICE-Edge compression without real hardware.
 //!

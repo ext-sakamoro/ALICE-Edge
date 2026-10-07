@@ -86,7 +86,7 @@ impl Default for CompressConfig {
     fn default() -> Self {
         Self {
             fitting: FittingConfig::default(),
-            svo_depth: 6, // Adaptive depth for Pi 5 memory budget
+            svo_depth: 6, // Adaptive depth for a single-board memory budget
             primitive_mse_threshold: 0.01,
             min_inlier_ratio: 0.8,
             svo_distance_threshold: 1.5,

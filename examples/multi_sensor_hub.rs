@@ -7,7 +7,7 @@
 //! # Simulated (any platform):
 //! cargo run --example multi_sensor_hub --features sensors
 //!
-//! # Real hardware (Pi 5):
+//! # Real hardware (Linux board with a GPIO header):
 //! cargo run --example multi_sensor_hub --features sensors-hw
 //! ```
 //!

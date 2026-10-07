@@ -1,5 +1,5 @@
 //! Analytic oracles — closed-form checks for the fitting / filtering laws in
-//! ALICE-Edge (CLAUDE.md § 解析解突合テスト規律, 2026-09-17).
+//! ALICE-Edge.
 //!
 //! Expected values come from closed forms or f64 references written in this
 //! file, never from the crate function under test.  `FusionConfig::default()`
@@ -105,7 +105,7 @@ fn linear_fit_recovers_exact_integer_lines_and_matches_the_simd_path() {
 
 #[test]
 fn quadratic_and_cubic_fits_recover_exact_integer_polynomials() {
-    // capacities measured in the fuzz campaign (Backlog): cubic ≤ 64 samples,
+    // capacities measured in the fuzz campaign: cubic ≤ 64 samples,
     // quadratic ≤ 4096 — inside them the Bareiss solve is exact
     for (a, b, c) in [(1i64, 0i64, 0i64), (2, -3, 5), (-1, 4, -100), (0, 7, 1)] {
         // Q16 i32 holds |y| < 2¹⁵: keep a·n² inside that range

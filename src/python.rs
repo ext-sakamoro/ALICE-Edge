@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! `PyO3` Python Bindings for ALICE-Edge
 //!
-//! Embedded Model Generator for IoT/Raspberry Pi.
+//! Embedded Model Generator for IoT / embedded Linux.
 //! Fixed-point least squares fitting exposed to Python + `NumPy`.
 
 use numpy::ndarray::Array2;

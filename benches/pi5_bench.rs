@@ -4,9 +4,9 @@
     clippy::semicolon_if_nothing_returned,
     clippy::doc_markdown
 )]
-//! ALICE-Edge benchmarks for Raspberry Pi 5 (Cortex-A76)
+//! ALICE-Edge benchmarks for a Cortex-A76 Linux board
 //!
-//! Run on Pi 5:
+//! Run on the target board:
 //!   cargo bench
 //!
 //! Run on any host:

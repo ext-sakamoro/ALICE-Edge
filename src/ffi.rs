@@ -718,7 +718,7 @@ pub(crate) mod guard {
         }
 
         #[test]
-        fn success_leaves_slot_untouched() {
+        fn ok_call_leaves_slot_untouched() {
             clear_last_error();
             assert_eq!(ffi_guard(0, || 5), 5);
             assert!(take_last_error().is_none());

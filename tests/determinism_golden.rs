@@ -642,7 +642,7 @@ fn golden_law() {
 
 #[cfg(feature = "ml")]
 const GOLDEN_OBJECT_FEATURES: &str =
-    "21729bd788fb8c700e52293bb627b28d491e983c570abe10a00d2eec7c33c997";
+    "1e4d836d63f7395d22b5d5a7b07e97340709e8a6b158e875f7442b44612c261a";
 
 #[cfg(feature = "ml")]
 #[test]
@@ -673,6 +673,27 @@ fn golden_object_features() {
             }
         }
     }
+    // degenerate bounds, so the `max(1e-6)` floors in the ratio features are
+    // the value that is actually divided by rather than being bypassed
+    for bounds in [
+        [0.0f32, 0.0, 0.0],
+        [0.0, 1.0, 2.0],
+        [1.0, 0.0, 0.0],
+        [1e-9, 1e-9, 1.0],
+        [f32::MIN_POSITIVE, 1.0, 1.0],
+    ] {
+        for count in [0usize, 1, 1_000_000] {
+            let f = SdfFeatures::from_primitive(2, &[0.0, 0.0, 0.0], bounds, count);
+            for v in f.features {
+                s.f32(v);
+            }
+        }
+        let g = SdfFeatures::from_svo_stats(0, 0, 0, bounds);
+        for v in g.features {
+            s.f32(v);
+        }
+    }
+
     for id in 0u8..8 {
         s.i32(ObjectClass::from_id(id) as i32);
     }
@@ -695,7 +716,7 @@ fn golden_object_features() {
         }
     }
 
-    assert_golden("object_features", s, 10_500, GOLDEN_OBJECT_FEATURES);
+    assert_golden("object_features", s, 11_800, GOLDEN_OBJECT_FEATURES);
 }
 
 // ---------------------------------------------------------------------------

@@ -200,12 +200,25 @@ fn every_division_by_a_derived_number_guards_its_zero() {
     assert_eq!(filter_outliers_mad(&flat, 3), flat.to_vec());
     assert_eq!(fit_linear_robust(&flat, 3), (0, int_to_q16(7)));
 
-    // the threshold `k · MAD` saturates rather than wrapping: a huge `k`
-    // keeps every sample instead of flipping negative and rejecting all of
-    // them (this is the assertion the `mad == 0` branches do not give)
+    // a huge `k` keeps every sample instead of flipping negative and
+    // rejecting all of them.
+    //
+    // Measured: the `saturating_mul` that computes the threshold can never
+    // actually saturate. `k` is at most `2³¹ − 1` and a deviation between two
+    // `i32` values is at most `2³² − 1`, so the product is at most
+    // `(2³¹ − 1)(2³² − 1) = 9223372030412324865`, which is below
+    // `i64::MAX = 9223372036854775807`. Replacing it with `wrapping_mul` or a
+    // plain `*` gives the same answer for every input, so this assertion
+    // cannot have teeth on the saturation either — it pins the answer. The
+    // saturation mattered when the deviations were computed in `i32`.
     let spiked = [1i32, 2, 3, 4, 1_000_000];
     assert_eq!(filter_outliers_mad(&spiked, i32::MAX), spiked.to_vec());
     assert_eq!(filter_outliers_mad(&spiked, 1 << 24), spiked.to_vec());
+    let full_range = [i32::MIN, 0, i32::MAX, 0, i32::MIN];
+    assert_eq!(
+        filter_outliers_mad(&full_range, i32::MAX),
+        full_range.to_vec()
+    );
 
     // a minimum segment length below two cannot terminate the recursion, so
     // it is normalised to two rather than dividing the window forever. The
@@ -267,11 +280,20 @@ fn a_non_positive_mad_factor_collapses_the_window_onto_its_median() {
 fn piecewise_bounds_outside_their_intended_range_stay_total() {
     let ramp: Vec<i32> = (0..16).collect();
 
-    let minimal = fit_piecewise_linear(&ramp, -1, 2);
-    assert_eq!(minimal.len(), 8);
-    assert!(minimal.iter().all(|s| s.end - s.start == 2));
-    assert_eq!(minimal[0].start, 0);
-    assert_eq!(minimal[7].end, 16);
+    // a negative budget cannot be met by any segment, so the recursion stops
+    // only at the minimum segment length: this is the one input where that
+    // bound is observable (with a budget of 0 the recursion always stops at
+    // two samples anyway, because a line through two points is exact)
+    for min_len in [0usize, 1, 2] {
+        let minimal = fit_piecewise_linear(&ramp, -1, min_len);
+        assert_eq!(minimal.len(), 8, "min_len = {min_len}");
+        assert!(
+            minimal.iter().all(|s| s.end - s.start == 2),
+            "min_len = {min_len} must still be floored at two samples"
+        );
+        assert_eq!(minimal[0].start, 0);
+        assert_eq!(minimal[7].end, 16);
+    }
 
     for min_len in [16usize, 17, usize::MAX] {
         let whole = fit_piecewise_linear(&ramp, 0, min_len);

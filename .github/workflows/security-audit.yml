@@ -69,7 +69,7 @@ jobs:
       - name: Run cargo audit
         run: |
           cargo audit \
-            --db target/advisory-db \
+            --db "$RUNNER_TEMP/advisory-db" \
             --deny yanked \
             --ignore RUSTSEC-2026-0049 \
             --ignore RUSTSEC-2026-0098 \

@@ -76,6 +76,8 @@ pub mod depth_capture;
 pub mod edge_pipeline;
 #[cfg(feature = "ffi")]
 pub mod ffi;
+#[cfg(feature = "law")]
+pub mod law;
 #[cfg(feature = "ml")]
 pub mod ml_bridge;
 #[cfg(feature = "mqtt")]

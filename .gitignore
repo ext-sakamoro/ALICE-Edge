@@ -1,7 +1,3 @@
-# Claude Code
-CLAUDE.md
-.claude/
-
 # Build artifacts
 /target/
 **/*.rs.bk
@@ -23,3 +19,6 @@ fuzz/target/
 fuzz/corpus/
 fuzz/artifacts/
 fuzz/Cargo.lock
+
+# Python bytecode (scripts/docs_lint.py tests)
+__pycache__/

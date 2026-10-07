@@ -9,6 +9,7 @@ name: Security & Hygiene
 #
 # ci.yml stays focused on build / test / clippy / doc; this workflow is the
 # security + hygiene lane, triggered on push + PR + weekly cron.
+# scripts/preflight.sh runs the same commands with the same arguments.
 
 on:
   push:
@@ -18,6 +19,7 @@ on:
       - 'src/**'
       - 'deny.toml'
       - '.github/workflows/security-audit.yml'
+      - 'scripts/stub_guard.sh'
   pull_request:
     branches: [main]
     paths:
@@ -25,6 +27,7 @@ on:
       - 'src/**'
       - 'deny.toml'
       - '.github/workflows/security-audit.yml'
+      - 'scripts/stub_guard.sh'
   schedule:
     # Monday 09:00 UTC = 18:00 JST; catches advisories published between commits
     - cron: '0 9 * * 1'
@@ -40,7 +43,7 @@ env:
   CARGO_HTTP_MULTIPLEXING: "false"
   # docs.rs feature set (Cargo.toml [package.metadata.docs.rs]); pyo3 needs a
   # Python runtime and sensors-hw needs Linux GPIO crates, both excluded.
-  FULL_FEATURES: "std,zip,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi"
+  FULL_FEATURES: "std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi"
 
 jobs:
   audit:
@@ -60,10 +63,13 @@ jobs:
         run: cargo generate-lockfile
 
       # The ignore list mirrors deny.toml [advisories].ignore with the reason
-      # for each entry; keep the two in sync.
+      # for each entry; keep the two in sync. The database is kept under
+      # target/ so it never collides with the cargo-deny database in
+      # ~/.cargo/advisory-db.
       - name: Run cargo audit
         run: |
           cargo audit \
+            --db target/advisory-db \
             --deny yanked \
             --ignore RUSTSEC-2026-0049 \
             --ignore RUSTSEC-2026-0098 \
@@ -111,7 +117,6 @@ jobs:
       # 必要 file が漏れる — これらは repo / workspace に file がある限り
       # cargo build も cargo test も clippy も preflight も全部通り、
       # crates.io から取得した利用者だけが compile 不能になる
-      # (2026-09-28 ALICE-LOL lol.gbnf、canonical template 罠 #51)
       #
       # semver-checks は baseline を build するので結果的に検出するが、
       # (a) 壊れた版を publish した後にしか分からない
@@ -182,13 +187,14 @@ jobs:
       # Compares HEAD against the latest crates.io release (0.1.0). A breaking
       # change must ship with a version bump, which makes this job green again.
       #
+      # `law` is excluded because the baseline release has no such feature.
       # `dashboard` is excluded until the next publish: 0.1.0 imports
       # `alice_analytics::{CountMinSketch, HyperLogLog}` from the crate root,
       # which alice-analytics 0.1.0 does not export, so the baseline cannot be
       # documented with that feature (fixed on main, see CHANGELOG).
       - name: Run cargo semver-checks
         run: |
-          feats=$(echo "$FULL_FEATURES" | tr ',' '\n' | grep -vx dashboard | paste -sd, -)
+          feats=$(echo "$FULL_FEATURES" | tr ',' '\n' | grep -vx -e dashboard -e law | paste -sd, -)
           echo "features: $feats"
           cargo semver-checks check-release --package alice-edge \
             --only-explicit-features --features "$feats"
@@ -200,33 +206,9 @@ jobs:
       - uses: actions/checkout@v5
 
       # Production path (src/) must not carry todo! / unimplemented! /
-      # panic!("...STUB...") placeholders. src/bin/ (CLI) is excluded.
-      - name: Detect todo! / unimplemented! / panic!(STUB) in src/**
-        run: |
-          set -eo pipefail
-          hits=$(grep -rnE 'todo!\(|unimplemented!\(|panic!\([^)]*STUB' \
-            src/ --include="*.rs" \
-            --exclude-dir=bin \
-            || true)
-          if [ -n "$hits" ]; then
-            echo "Stub / unimplemented / STUB panic detected in src/ (production path):"
-            echo "$hits"
-            echo ""
-            echo "Fix: use ? operator, Result<T, E>, or remove the stub."
-            exit 1
-          fi
-          echo "OK: no todo! / unimplemented! / panic!(STUB) in src/ (excluding src/bin/)"
-
-      - name: Detect dbg!() residual in src/**
-        run: |
-          set -eo pipefail
-          hits=$(grep -rn 'dbg!(' src/ --include="*.rs" || true)
-          if [ -n "$hits" ]; then
-            echo "dbg!() macro left in src/:"
-            echo "$hits"
-            exit 1
-          fi
-          echo "OK: no dbg!() in src/"
+      # panic!("...STUB...") placeholders or dbg!; 0 files compared is red.
+      - name: Detect todo! / unimplemented! / panic!(STUB) / dbg! in src/**
+        run: scripts/stub_guard.sh
 
       # TODO / FIXME / XXX / HACK are informational (visible to the reviewer,
       # not blocking).

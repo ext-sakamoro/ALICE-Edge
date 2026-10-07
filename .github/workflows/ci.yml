@@ -4,7 +4,8 @@ name: CI
 # that must not block belongs in security-audit.yml (coverage) or fuzz.yml
 # (time-boxed exploration), never here.
 #
-# Local reproduction before push: scripts/preflight.sh [--quick]
+# scripts/preflight.sh runs the same commands with the same arguments locally;
+# a step added here is added there in the same commit.
 
 on:
   push:
@@ -23,7 +24,7 @@ env:
   # docs.rs feature set (Cargo.toml [package.metadata.docs.rs]). pyo3 needs a
   # Python runtime and sensors-hw needs Linux GPIO / libudev, both handled in
   # dedicated steps below.
-  FULL_FEATURES: "std,zip,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi"
+  FULL_FEATURES: "std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi"
 
 jobs:
   test:
@@ -32,7 +33,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        # - macos-latest      → aarch64-apple-darwin
+        # - ubuntu-24.04-arm  → aarch64-unknown-linux-gnu
+        # - ubuntu-latest     → x86_64-unknown-linux-gnu
+        # - windows-latest    → x86_64-pc-windows-msvc
+        # The core, std and law suites run on every OS. The steps that pull in
+        # the optional bridges (rusb / rumqttc / alice-sdf and the other
+        # crates.io siblings) run on Linux and macOS only.
+        os: [macos-latest, ubuntu-24.04-arm, ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v5
 
@@ -57,25 +65,43 @@ jobs:
       - name: Doc tests (std)
         run: cargo test --doc --features "std"
 
+      # alice_zip::law without std: lib + doc tests, the closed-form oracles
+      # in tests/edge_law.rs, and the example run end to end
+      - name: Test — law (lib)
+        run: cargo test --lib --features "law"
+
+      - name: Doc tests — law
+        run: cargo test --doc --features "law"
+
+      - name: Test — law oracles (tests/edge_law.rs)
+        run: cargo test --test edge_law --features "law"
+
+      - name: Run example edge_law
+        run: cargo run --example edge_law --features "law"
+
       # 解析解 oracle (tests/analytic_oracle.rs): 上の step は --lib なので tests/ が走らない
-      # (CLAUDE.md § 解析解突合テスト規律 (5)、strict-eval 16)  sdf feature の球 primitive
-      # oracle は crates.io alice-sdf 1.9 で実行
+      # sdf feature の球 primitive oracle は crates.io alice-sdf 1.9 で実行
       - name: Test — analytic oracles (std + sdf)
+        if: runner.os != 'Windows'
         run: cargo test --test analytic_oracle --features "std,sdf"
 
       # One build + one test run with every optional bridge on: the crates.io
       # siblings (alice-zip / codec / db / sdf / ml / analytics / libasp) are
       # real dependencies here, not stubs.
       - name: Build (full feature set)
+        if: runner.os != 'Windows'
         run: cargo build --lib --features "$FULL_FEATURES"
 
       - name: Test (full feature set)
+        if: runner.os != 'Windows'
         run: cargo test --lib --features "$FULL_FEATURES"
 
       - name: Test (edge-pipeline)
+        if: runner.os != 'Windows'
         run: cargo test --lib --features "edge-pipeline"
 
       - name: Build examples (sensors + dashboard + mqtt)
+        if: runner.os != 'Windows'
         run: cargo build --examples --features "std,sensors,dashboard,mqtt"
 
       # Real GPIO / I2C / SPI / UART drivers only compile on Linux
@@ -98,6 +124,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: thumbv7em-none-eabihf
+          components: clippy
 
       - uses: Swatinem/rust-cache@v2
 
@@ -106,6 +133,13 @@ jobs:
 
       - name: Build no_std + ffi (thumbv7em-none-eabihf)
         run: cargo build --lib --target thumbv7em-none-eabihf --no-default-features --features "ffi"
+
+      # law needs alloc but not std: alice-zip is built without its std feature
+      - name: Build no_std + law + ffi (thumbv7em-none-eabihf)
+        run: cargo build --lib --target thumbv7em-none-eabihf --no-default-features --features "law,ffi"
+
+      - name: Clippy no_std + law + ffi (thumbv7em-none-eabihf)
+        run: cargo clippy --lib --target thumbv7em-none-eabihf --no-default-features --features "law,ffi" -- -D warnings
 
   clippy:
     name: Clippy (-D warnings)
@@ -122,6 +156,9 @@ jobs:
 
       - name: Clippy (no_std, lib)
         run: cargo clippy --lib --no-default-features -- -D warnings
+
+      - name: Clippy (no_std + law, lib + law oracles + examples)
+        run: cargo clippy --lib --test edge_law --examples --no-default-features --features "law" -- -D warnings
 
       - name: Clippy (std, lib + all targets)
         run: cargo clippy --lib --all-targets --features "std" -- -D warnings
@@ -144,6 +181,9 @@ jobs:
       - name: cargo check on MSRV (lib, no_std)
         run: cargo +1.87 check --lib --no-default-features
 
+      - name: cargo check on MSRV (lib, no_std + law)
+        run: cargo +1.87 check --lib --no-default-features --features "law"
+
       - name: cargo check on MSRV (lib, full feature set)
         run: cargo +1.87 check --lib --features "$FULL_FEATURES"
 
@@ -158,7 +198,7 @@ jobs:
       - name: Install cargo-hack
         uses: taiki-e/install-action@cargo-hack
 
-      # Every feature alone and every pair (80 combinations). Excluded:
+      # Every feature alone and every pair. Excluded:
       # pyo3 (Python runtime), sensors-hw (Linux libudev, checked in `test`),
       # edge-pipeline (a pure alias of depth-camera+sdf+ml+asp, tested in `test`).
       - name: cargo hack check --feature-powerset
@@ -198,6 +238,25 @@ jobs:
         run: cargo doc --lib --no-deps --features "$FULL_FEATURES"
         env:
           RUSTDOCFLAGS: "-Dwarnings"
+
+  docs-lint:
+    # run on every OS so a locale or path difference in the checker itself
+    # shows up here rather than as a silent pass
+    name: Docs lint (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Docs lint (tests)
+        run: python scripts/test_docs_lint.py
+      - name: Docs lint (public documents, CHANGELOG structure)
+        run: python scripts/docs_lint.py --check
 
   actionlint:
     name: actionlint (workflow YAML)

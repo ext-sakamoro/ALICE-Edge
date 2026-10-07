@@ -187,19 +187,44 @@ fn every_division_by_a_derived_number_guards_its_zero() {
     );
 
     // MAD zero (every sample identical): the window is returned untouched
-    // instead of dividing by it
+    // instead of dividing by it.
+    //
+    // Measured: the two `mad == 0` early returns in `robust` are pure
+    // short-circuits. With `mad == 0` the threshold is `k · 0 = 0`, every
+    // deviation is also 0, so the comparison keeps every sample and the
+    // refit converges on the first pass — removing either early return gives
+    // the same answer. No assertion can have teeth on them, so what is
+    // asserted here is the answer, not the branch. What does carry the
+    // division's weight is the saturating threshold below.
     let flat = [7i32; 9];
     assert_eq!(filter_outliers_mad(&flat, 3), flat.to_vec());
     assert_eq!(fit_linear_robust(&flat, 3), (0, int_to_q16(7)));
 
+    // the threshold `k · MAD` saturates rather than wrapping: a huge `k`
+    // keeps every sample instead of flipping negative and rejecting all of
+    // them (this is the assertion the `mad == 0` branches do not give)
+    let spiked = [1i32, 2, 3, 4, 1_000_000];
+    assert_eq!(filter_outliers_mad(&spiked, i32::MAX), spiked.to_vec());
+    assert_eq!(filter_outliers_mad(&spiked, 1 << 24), spiked.to_vec());
+
     // a minimum segment length below two cannot terminate the recursion, so
-    // it is normalised to two rather than dividing the window forever
-    let ramp: Vec<i32> = (0..16).collect();
-    let with_zero = fit_piecewise_linear(&ramp, 0, 0);
-    let with_two = fit_piecewise_linear(&ramp, 0, 2);
+    // it is normalised to two rather than dividing the window forever. The
+    // window has to be one the greedy split actually divides, otherwise the
+    // first segment meets the error budget and the bound is never reached.
+    let wiggly: Vec<i32> = (0..24)
+        .map(|x: i32| if x % 2 == 0 { 10 * x } else { 10 * x + 400 })
+        .collect();
+    let with_zero = fit_piecewise_linear(&wiggly, 0, 0);
+    let with_two = fit_piecewise_linear(&wiggly, 0, 2);
     assert_eq!(with_zero, with_two);
+    assert!(
+        with_zero.len() > 1,
+        "the window must actually be split for the bound to matter, got {} segment(s)",
+        with_zero.len()
+    );
     assert!(with_zero.iter().all(|s| s.end - s.start >= 2));
-    assert_eq!(with_zero.last().expect("16 samples give segments").end, 16);
+    assert_eq!(with_zero[0].start, 0);
+    assert_eq!(with_zero.last().expect("24 samples give segments").end, 24);
 }
 
 // ---------------------------------------------------------------------------

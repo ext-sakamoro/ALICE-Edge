@@ -632,18 +632,22 @@ fn golden_law() {
 }
 
 // ---------------------------------------------------------------------------
-// 12. object_classifier (feature `ml`) — the feature extractor. The ternary
-//     matrix-vector kernel it feeds lives in `alice_ml` and is gated there.
+// 12. object_classifier (feature `ml`) — the feature extractor and the
+//     classification it feeds, including the softmax. The ternary
+//     matrix-vector kernel comes from `alice_ml`; it accumulates `f32` with
+//     `+` and one `*` in a fixed row-major order, so it is bit-exact for the
+//     same reason the rest of this file is, and pinning the classifier output
+//     keeps the softmax (an `alice_det_math::exp` per logit) under the gate.
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "ml")]
 const GOLDEN_OBJECT_FEATURES: &str =
-    "3e328c9cf3e28445f519846ddfed922f9b40df20618dd1811e2d0451935105af";
+    "21729bd788fb8c700e52293bb627b28d491e983c570abe10a00d2eec7c33c997";
 
 #[cfg(feature = "ml")]
 #[test]
 fn golden_object_features() {
-    use alice_edge::object_classifier::{ObjectClass, SdfFeatures};
+    use alice_edge::object_classifier::{ObjectClass, SdfFeatures, TernaryClassifier};
     let mut s = Sink::default();
 
     for kind in 0u8..5 {
@@ -673,5 +677,142 @@ fn golden_object_features() {
         s.i32(ObjectClass::from_id(id) as i32);
     }
 
-    assert_golden("object_features", s, 10_200, GOLDEN_OBJECT_FEATURES);
+    // the classifier: the logits go through a softmax built on
+    // `alice_det_math::exp`, and the reported class and confidence are what a
+    // caller acts on
+    for n in [1usize, 4, 8, TernaryClassifier::MAX_CLASSES] {
+        let classifier = TernaryClassifier::new(n);
+        for i in 0..8u64 {
+            let bounds = [
+                prand_f32(i + 600) * 3.0 + 0.05,
+                prand_f32(i + 700) * 3.0 + 0.05,
+                prand_f32(i + 800) * 3.0 + 0.05,
+            ];
+            let f = SdfFeatures::from_primitive(1, &[0.5, 0.25, 0.125], bounds, 4_096);
+            let (class, confidence) = classifier.classify(&f);
+            s.i32(class as i32);
+            s.f32(confidence);
+        }
+    }
+
+    assert_golden("object_features", s, 10_500, GOLDEN_OBJECT_FEATURES);
+}
+
+// ---------------------------------------------------------------------------
+// 13. sensors (feature `sensors`) — the two simulated drivers whose sample
+//     generators call the transcendental kernels. Driven with a zero
+//     interval; the timestamps come from the wall clock and are deliberately
+//     not serialised, everything the generators compute is.
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "sensors")]
+const GOLDEN_SENSORS: &str = "f40d90cb955cc8dcb3ec9bdc5e47523da138e5e2fde79e675358f8eb1ea2278c";
+
+#[cfg(feature = "sensors")]
+#[test]
+fn golden_sensors() {
+    use alice_edge::sensors::{Bno055Sensor, SensorDriver, SimulatedSensor};
+    use core::time::Duration;
+    let mut s = Sink::default();
+
+    let mut imu = Bno055Sensor::new(0x28);
+    let batch = imu
+        .read_samples_interval(400, Duration::ZERO)
+        .expect("the simulated branch cannot fail");
+    s.usize(batch.accel_x.len());
+    for (x, y) in batch.accel_x.iter().zip(&batch.accel_y) {
+        s.i32(*x);
+        s.i32(*y);
+    }
+    for z in &batch.accel_z {
+        s.i32(*z);
+    }
+    for t in &batch.temperature {
+        s.i32(*t);
+    }
+
+    for noise in [0i32, 1, 50] {
+        let mut sim = SimulatedSensor::new(2_500, noise);
+        let batch = sim
+            .read_samples_interval(200, Duration::ZERO)
+            .expect("the simulated sensor cannot fail");
+        s.usize(batch.accel_x.len());
+        for (x, y) in batch.accel_x.iter().zip(&batch.accel_y) {
+            s.i32(*x);
+            s.i32(*y);
+        }
+        for (t, h) in batch.temperature.iter().zip(&batch.humidity) {
+            s.i32(*t);
+            s.i32(*h);
+        }
+        for pr in &batch.pressure {
+            s.i32(*pr);
+        }
+    }
+
+    assert_golden("sensors", s, 18_400, GOLDEN_SENSORS);
+}
+
+// ---------------------------------------------------------------------------
+// 14. depth_capture (feature `depth-camera`) — the two point-cloud
+//     operations that are reachable without a device. The simulated frame
+//     generator is not: it is a fallback inside `init`, which enumerates USB,
+//     so its arithmetic is pinned through scenario 7 instead.
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "depth-camera")]
+const GOLDEN_DEPTH_CAPTURE: &str =
+    "16d9355a324c9eed84fed8f03b5572579a551f215e3aec071f494a036b208122";
+
+#[cfg(feature = "depth-camera")]
+#[test]
+fn golden_depth_capture() {
+    use alice_edge::depth_capture::{DolphinD5Driver, PointNormal};
+    let mut s = Sink::default();
+
+    // the same 10x10x8 grid the simulated frames describe, built here
+    let mut points: Vec<PointNormal> = Vec::new();
+    for frame in 0..8u32 {
+        let frame_f = frame as f32 * 0.1;
+        for iy in 0..10 {
+            for ix in 0..10 {
+                let x = (ix as f32 - 4.5) * 0.1;
+                let z = (iy as f32 - 4.5) * 0.1;
+                let y = 1.0
+                    + 0.1
+                        * alice_det_math::sin(x * core::f32::consts::PI + frame_f)
+                        * alice_det_math::cos(z * 2.71 + frame_f);
+                points.push(PointNormal {
+                    x,
+                    y,
+                    z,
+                    nx: 0.0,
+                    ny: 1.0,
+                    nz: 0.0,
+                });
+            }
+        }
+    }
+
+    for voxel in [0.0f32, -1.0, 0.01, 0.05, 0.25, 1.0] {
+        let kept = DolphinD5Driver::voxel_downsample(&points, voxel);
+        s.usize(kept.len());
+        for p in &kept {
+            s.f32(p.x);
+            s.f32(p.y);
+            s.f32(p.z);
+        }
+    }
+
+    for k in [0usize, 1, 4, 16] {
+        let mut normals = points.clone();
+        DolphinD5Driver::estimate_normals(&mut normals, k);
+        for p in &normals {
+            s.f32(p.nx);
+            s.f32(p.ny);
+            s.f32(p.nz);
+        }
+    }
+
+    assert_golden("depth_capture", s, 61_900, GOLDEN_DEPTH_CAPTURE);
 }

@@ -128,12 +128,16 @@ impl CoefficientStore {
 mod tests {
     use super::*;
 
+    // A wall-clock name alone collides when tests run in parallel: macOS
+    // reports microseconds, so two tests can get the same directory and one
+    // fails on the database's write lock. The process id and a per-process
+    // counter make every call distinct.
     fn temp_dir() -> String {
-        let id = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        format!("/tmp/alice_edge_db_test_{}", id)
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("alice_edge_db_test_{}_{}", std::process::id(), n));
+        dir.to_string_lossy().into_owned()
     }
 
     #[test]

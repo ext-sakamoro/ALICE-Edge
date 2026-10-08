@@ -76,7 +76,7 @@ serde = { version = "1", features = ["derive"], optional = true }
 # MQTT bridge
 rumqttc = { version = "0.25", optional = true }
 # Dashboard
-alice-analytics = { version = "0.1", optional = true }
+alice-analytics = { version = "0.3", optional = true }
 
 # The two float lints that propose re-fusing arithmetic are off as a property
 # of the crate, not case by case: every transcendental goes through

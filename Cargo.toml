@@ -56,11 +56,11 @@ ffi = []  # C-ABI FFI exports (extern "C" functions)、panic 隔離は std 時�
 # computed on one device and a fit computed on another must be the same bits,
 # because the coefficients are what gets transmitted and stored. Enforced by
 # `clippy.toml` `disallowed-methods`, pinned by tests/determinism_golden.rs.
-alice-det-math = { version = "0.3", default-features = false }
+alice-det-math = { version = "0.4", default-features = false }
 pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 numpy = { version = "0.29", optional = true }
 # `zip` turns on alice-zip's std + lzma, `law` uses it without them (no_std)
-alice_core = { package = "alice-zip", version = "0.5.1", optional = true, default-features = false }
+alice_core = { package = "alice-zip", version = "0.7", optional = true, default-features = false }
 alice-codec = { version = "0.1", optional = true, default-features = false, features = ["std"] }
 # crates.io (0.2.0-beta.2 = ALICE-DB main); the CI sibling stub carried version 0.1.0
 # and could never satisfy `^0.2.0-beta.1`, so every job that resolved deps was red

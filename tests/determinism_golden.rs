@@ -837,3 +837,122 @@ fn golden_depth_capture() {
 
     assert_golden("depth_capture", s, 61_900, GOLDEN_DEPTH_CAPTURE);
 }
+
+// ---------------------------------------------------------------------------
+// 15. the arithmetic identifier — names the numeric semantics every scenario
+//     above was computed under. The scenarios pin outputs; this pins the name
+//     a stored or transmitted result is recorded with.
+// ---------------------------------------------------------------------------
+
+/// `alice_det_math::SEMANTICS_ID` of the alice-det-math 0.4 series
+///
+/// Matches `alice_zip::law::SEMANTICS_ID`, `alice_db::SEMANTICS_ID` and
+/// `alice_analytics::SEMANTICS_ID` resolved against the same alice-det-math.
+/// If this test fails, check which alice-det-math version resolved, confirm
+/// the scenario hashes above are unchanged (or explained), then update this
+/// constant and record both in CHANGELOG.
+const GOLDEN_SEMANTICS_ID: &str =
+    "d2209b30f6f1f45baa1b638bcdfee34ac64773b2e63b9c083b2e77afc691398e";
+
+#[test]
+fn golden_semantics_id() {
+    assert_eq!(
+        alice_edge::SEMANTICS_ID,
+        alice_det_math::SEMANTICS_ID,
+        "the identifier this crate re-exports is not the arithmetic it computes with"
+    );
+
+    let mut hex = String::with_capacity(64);
+    for b in alice_edge::SEMANTICS_ID {
+        write!(hex, "{b:02x}").expect("writing to a String cannot fail");
+    }
+    assert_eq!(hex.len(), 64, "the identifier is 32 bytes of hex");
+    assert_eq!(
+        hex, GOLDEN_SEMANTICS_ID,
+        "\n\nThe arithmetic this crate computes with changed.\n\
+         actual:   {hex}\n\
+         expected: {GOLDEN_SEMANTICS_ID}\n\n\
+         Check which alice-det-math version resolved, confirm the golden\n\
+         scenario hashes above are unchanged, then update GOLDEN_SEMANTICS_ID\n\
+         and record the change in CHANGELOG.\n"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 16. law identifier (feature `law`) — the value a receiver uses to say "this
+//     result came from that law". It mixes the arithmetic identifier with the
+//     domain and coefficients of the law, so pinning it pins both halves.
+// ---------------------------------------------------------------------------
+
+/// Identifiers of two fixed Edge fits, computed outside this toolchain
+///
+/// Each value is SHA-256 over the encoding `alice_zip::law::SignalLaw::law_id`
+/// publishes (length-prefixed `alice-zip/law-id/v1` and
+/// `signal-law/polynomial/v1`, the 32-byte arithmetic identifier, the domain
+/// bounds and the coefficients as big-endian `f64` bits, the coefficient count
+/// as a big-endian `u64`), applied to coefficients derived by hand from the
+/// samples (not read back from the implementation):
+///
+/// - rising `[2500, 2510, 2520, 2530, 2540]`: slope 10, intercept 2500, so
+///   `c = [2500, 10 · 4]` on the domain `[0, 4]`
+/// - falling `[40, 30, 20, 10, 0]`: slope −10, intercept 40, so
+///   `c = [40, −10 · 4]` on the domain `[0, 4]`
+///
+/// They match what the implementation returns, so they pin verified values
+/// rather than whatever happened to come out.
+#[cfg(feature = "law")]
+const GOLDEN_LAW_ID_RISING: &str =
+    "525ef7aff3afeb6f7db979da46c4bc823d887830dfb262bf6f61f0e3fbbda694";
+#[cfg(feature = "law")]
+const GOLDEN_LAW_ID_FALLING: &str =
+    "ebaad4a249a3031f48f779f57cf8e059ca531109922bc9fa77d9de2fbe419605";
+
+#[cfg(feature = "law")]
+#[test]
+fn golden_law_id() {
+    use alice_edge::law::{linear_law, Provenance};
+
+    let cases: [(&str, [i32; 5], [f64; 2], &str); 2] = [
+        (
+            "rising",
+            [2500, 2510, 2520, 2530, 2540],
+            [2500.0, 40.0],
+            GOLDEN_LAW_ID_RISING,
+        ),
+        (
+            "falling",
+            [40, 30, 20, 10, 0],
+            [40.0, -40.0],
+            GOLDEN_LAW_ID_FALLING,
+        ),
+    ];
+    for (name, samples, coefficients, expected) in cases {
+        let law = linear_law(&samples, Provenance::new("golden", name))
+            .expect("five samples are enough for a line");
+        // the constants above were derived from these coefficients and this
+        // domain; if the fit moved, the identifier is not what is being tested
+        assert_eq!(law.coefficients(), &coefficients, "{name}: coefficients");
+        assert_eq!(
+            (law.domain().lo, law.domain().hi),
+            (0.0, 4.0),
+            "{name}: domain"
+        );
+
+        let id = law.law_id(&alice_edge::SEMANTICS_ID);
+        let mut hex = String::with_capacity(64);
+        for b in id {
+            write!(hex, "{b:02x}").expect("writing to a String cannot fail");
+        }
+        assert_eq!(hex.len(), 64, "a law identifier is 32 bytes of hex");
+        assert_eq!(
+            hex, expected,
+            "\n\nThe identifier reported for the fixed `{name}` fit changed.\n\
+             actual:   {hex}\n\
+             expected: {expected}\n\n\
+             Either the arithmetic changed (see golden_semantics_id) or the\n\
+             encoding in alice-zip did. Both change what a stored identifier\n\
+             means: confirm which, then update the constant and record it in\n\
+             CHANGELOG.\n"
+        );
+    }
+}

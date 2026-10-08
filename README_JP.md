@@ -182,6 +182,16 @@ scenario は直列化した byte 数の下限も assert するので、module �
 
 <!-- claim-test: golden_q16_linear, golden_adaptive_polyfit, golden_constant_fit, golden_simd_fit, golden_sensor_fusion, golden_ring_buffer, golden_det_math_kernels, golden_robust, golden_piecewise, golden_delta, golden_law, golden_object_features -->
 
+結果はその算術の名前と一緒に記録する: `alice_edge::SEMANTICS_ID`
+(`alice-det-math` からの再 export) 端末から出る係数の隣に保存し、同じ値を
+持つ結果どうしだけを数値として比べる `law` feature では
+`SignalLaw::law_id(&alice_edge::SEMANTICS_ID)` が法則と算術をまとめて 1 つの
+識別子にする どちらも `tests/determinism_golden.rs` で固定しており、法則の
+識別子は alice-zip が公開している符号化からこの toolchain の外で計算した値と
+突合している
+
+<!-- claim-test: golden_semantics_id, golden_law_id -->
+
 保証範囲の外: `f32` をより広い register で計算して 1 度だけ丸める target
 (`i586` 等、SSE2 のない旧 x86) と、fast-math などで compiler に float の
 再結合を許す build どちらも CI では build していない

@@ -130,3 +130,22 @@ pub use crate::q16_linear::*;
 #[cfg(feature = "std")]
 pub use crate::robust::*;
 pub use crate::simd_fit::*;
+
+/// Identifier of the numeric semantics this crate computes with
+///
+/// Every float transcendental in this crate goes through [`alice_det_math`],
+/// and this is that crate's identifier of its own numeric behaviour,
+/// re-exported here.
+///
+/// Record it next to any coefficients that are stored or transmitted. Two
+/// results are comparable as numbers only if they were produced under the same
+/// identifier; when it differs, the two were computed by different arithmetic
+/// and agreement between them is not guaranteed at the bit level, however
+/// close the values look.
+///
+/// Pinned as hex by `tests/determinism_golden.rs`, so a change in the
+/// arithmetic cannot reach a release unnoticed. With the `law` feature, pass
+/// it to `law::SignalLaw::law_id` to get a single value that names both the
+/// law and the arithmetic it is evaluated with (not linked here: the module is
+/// behind that feature, so the link would not resolve in a build without it).
+pub use alice_det_math::SEMANTICS_ID;

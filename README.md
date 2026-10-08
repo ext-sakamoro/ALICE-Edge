@@ -191,6 +191,16 @@ fails instead of passing with the hash of an empty buffer.
 
 <!-- claim-test: golden_q16_linear, golden_adaptive_polyfit, golden_constant_fit, golden_simd_fit, golden_sensor_fusion, golden_ring_buffer, golden_det_math_kernels, golden_robust, golden_piecewise, golden_delta, golden_law, golden_object_features -->
 
+Results are recorded under a name for that arithmetic: `alice_edge::SEMANTICS_ID`
+(re-exported from `alice-det-math`). Store it next to coefficients that leave
+the device; two results compare as numbers only when they carry the same
+value. With the `law` feature, `SignalLaw::law_id(&alice_edge::SEMANTICS_ID)`
+gives one identifier for the law and the arithmetic together. Both are pinned
+in `tests/determinism_golden.rs`, the law identifier against values computed
+outside this toolchain from the encoding alice-zip publishes.
+
+<!-- claim-test: golden_semantics_id, golden_law_id -->
+
 Out of scope: targets that compute `f32` in a wider register and round once
 (`i586` and older x86 without SSE2), and builds that enable fast-math or
 otherwise let the compiler reassociate float arithmetic. Neither is built in

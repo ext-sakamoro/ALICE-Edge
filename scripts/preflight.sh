@@ -111,6 +111,7 @@ if [[ $quick -eq 1 ]]; then
   step "quick: determinism goldens + panic contract (std)"
   cargo test --test determinism_golden --no-default-features
   cargo test --test determinism_golden --features "std"
+  cargo test --test determinism_golden --features "law"
   cargo test --test panic_contract --features "std"
   echo; echo "preflight --quick OK (the other test suites, the release-profile panic contract, MSRV, powerset, fuzz build and security jobs are skipped)"; exit 0
 fi
@@ -134,6 +135,7 @@ cargo test --test analytic_oracle --features "std,sdf"
 step "ci.yml / test: determinism goldens (no features, std, full)"
 cargo test --test determinism_golden --no-default-features
 cargo test --test determinism_golden --features "std"
+cargo test --test determinism_golden --features "law"
 cargo test --test determinism_golden --features "$FULL"
 
 step "ci.yml / test: panic contract (std + full, debug and release)"

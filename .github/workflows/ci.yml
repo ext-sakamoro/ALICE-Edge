@@ -76,6 +76,11 @@ jobs:
       - name: Test — determinism goldens (std)
         run: cargo test --test determinism_golden --features "std"
 
+      # law_id goldens need only `law` (no_std + alloc), so they run on every
+      # leg here; the full-feature run below is skipped on Windows.
+      - name: Test — determinism goldens (law)
+        run: cargo test --test determinism_golden --features "law"
+
       # Degenerate inputs: empty / length-one windows, the guarded divisions,
       # out-of-range and non-finite arguments, the Q16 wrap and the integer
       # overflow paths. The overflow cases branch on `debug_assertions`, so

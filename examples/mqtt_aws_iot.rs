@@ -6,7 +6,7 @@
 //!   2. Download device certificates
 //!   3. Set environment variables:
 //!      export AWS_IOT_ENDPOINT="<account>-ats.iot.<region>.amazonaws.com"
-//!      export AWS_IOT_CLIENT_ID="alice-edge-pi5"
+//!      export AWS_IOT_CLIENT_ID="alice-edge"
 //!
 //! ```bash
 //! cargo run --example mqtt_aws_iot --features "sensors,mqtt"
@@ -33,7 +33,7 @@ fn main() {
             return;
         }
     };
-    let client_id = std::env::var("AWS_IOT_CLIENT_ID").unwrap_or_else(|_| "alice-edge-pi5".into());
+    let client_id = std::env::var("AWS_IOT_CLIENT_ID").unwrap_or_else(|_| "alice-edge".into());
 
     let config = MqttConfig::aws_iot(&endpoint, &client_id);
     println!("Endpoint: {}:{}", config.host, config.port);

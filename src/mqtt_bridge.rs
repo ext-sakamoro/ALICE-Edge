@@ -613,7 +613,8 @@ mod tests {
 
     #[test]
     fn test_config_aws() {
-        let config = MqttConfig::aws_iot("abc123-ats.iot.ap-northeast-1.amazonaws.com", "pi5");
+        let config =
+            MqttConfig::aws_iot("abc123-ats.iot.ap-northeast-1.amazonaws.com", "edge-node");
         assert_eq!(config.port, 8883);
         assert!(config.use_tls);
     }
@@ -631,7 +632,7 @@ mod tests {
 
     #[test]
     fn test_config_local_keep_alive() {
-        let config = MqttConfig::local("pi5");
+        let config = MqttConfig::local("edge-node");
         assert_eq!(config.keep_alive, Duration::from_secs(30));
     }
 

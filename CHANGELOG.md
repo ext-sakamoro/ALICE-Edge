@@ -19,6 +19,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 - `tests/determinism_golden.rs` `golden_law_id` (feature `law`): the `law_id` of two fixed `linear_law` fits (a rising and a falling window), pinned against values computed outside this toolchain with SHA-256 over the encoding alice-zip publishes and coefficients derived by hand from the samples
 
 ### Changed
+- benchmark target renamed to `edge_bench` (`cargo bench --bench edge_bench`); the MQTT examples default their client id to `alice-edge`
 - `alice-det-math` requirement raised from `0.3` to `0.4` and `alice-zip` from `0.5.1` to `0.7`, so every feature set resolves a single `alice-det-math` (0.4.0), the same series as `alice-zip` 0.7, `alice-db` and `alice-analytics` 0.3. 0.4 changes the bits of `atan64` / `atan2_64` only, neither of which this crate calls; the alice-zip API used here (`law::SignalLaw` and `compression::{compress,decompress}_residual_quantized`) is unchanged apart from the added `SignalLaw::law_id`. Every golden hash in `tests/determinism_golden.rs` and every case in `tests/panic_contract.rs` is unchanged
 - `zip` feature enables alice-zip's `std` and `lzma` features explicitly (the dependency is declared without features so that `law` can use alice-zip without `std`); the resolved feature set of `zip` is unchanged
 - `alice-zip` requirement raised from `0.5` to `0.5.1` (`alice_zip::law` is first published in 0.5.1)

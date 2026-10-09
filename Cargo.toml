@@ -104,7 +104,7 @@ tempfile = "3"
 sha2 = "0.10"
 
 [[bench]]
-name = "pi5_bench"
+name = "edge_bench"
 harness = false
 
 [[example]]

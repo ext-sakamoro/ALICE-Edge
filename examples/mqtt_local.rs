@@ -24,7 +24,7 @@ fn main() {
     println!("=== ALICE-Edge: MQTT Local Publish ===\n");
 
     // Connect to local Mosquitto
-    let config = MqttConfig::local("alice-edge-pi5");
+    let config = MqttConfig::local("alice-edge");
     let mut publisher = match MqttPublisher::new(config) {
         Ok(p) => p,
         Err(e) => {

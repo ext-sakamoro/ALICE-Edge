@@ -119,6 +119,7 @@ fi
 step "ci.yml / test: no_std core, std, doc tests"
 cargo check --lib --no-default-features
 cargo test --lib --no-default-features
+cargo test --tests --no-run --no-default-features
 cargo build --lib --features "std"
 cargo test --lib --features "std"
 cargo test --doc --features "std"

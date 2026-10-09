@@ -24,6 +24,7 @@ use alice_edge::adaptive_polyfit::{
     evaluate_cubic_fixed, evaluate_quadratic_fixed, fit_cubic_fixed, fit_quadratic_fixed,
 };
 use alice_edge::constant_fit::{compute_residual_error, fit_constant_fixed};
+#[cfg(feature = "std")]
 use alice_edge::piecewise::fit_piecewise_linear;
 use alice_edge::q16_linear::{evaluate_linear_fixed, fit_linear_fixed, q16_to_f32, Q16_ONE};
 use alice_edge::ring_buffer::RingBuffer;
@@ -158,6 +159,7 @@ fn quadratic_and_cubic_fits_recover_exact_integer_polynomials() {
     assert_eq!(fit_cubic_fixed(&[5, 8, 13]).0, 0);
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn piecewise_fit_splits_two_exact_lines_at_the_break() {
     let mut data: Vec<i32> = (0..40).map(|x| 2 * x + 10).collect(); // slope 2 up to x = 39 (y = 88)

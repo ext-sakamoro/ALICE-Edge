@@ -4,6 +4,9 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- `cargo test` (feature 指定なし) が build できなかった `tests/analytic_oracle.rs` が `std` でだけ在る `piecewise::fit_piecewise_linear` を cfg 無しで import していた import と該当の試験に `#[cfg(feature = "std")]` を付け、CI と `scripts/preflight.sh` に全 integration test を feature 無しで build する step (`cargo test --tests --no-run --no-default-features`) を足した CI は試験 target を feature 付きで個別に回していたので出なかった
+
 ### Added
 - `law` feature and `law::linear_law(samples, provenance)`: the `fit_linear_fixed` result as an `alice_zip::law::SignalLaw` (alice-zip 0.5.1, used without `std`, so the feature builds for `thumbv7em-none-eabihf`). The Q16.16 coefficients are converted without refitting to the normalised basis `u = x / (n − 1)` (`c0 = intercept_q / 2¹⁶`, `c1 = slope_q · (n − 1) / 2¹⁶`); the valid range is `[0, n − 1]`, the evidence is the samples, and the residual is measured against the samples (it includes the Q16 truncation of the fit and the wrap of samples outside the Q16 range). Fewer than two samples return `LawError::TooFewPoints`
 - `law::sample_points(samples)`: samples as `(x, y)` points, for judging a later window with `SignalLaw::ingest`; the law types are re-exported from `alice_edge::law`

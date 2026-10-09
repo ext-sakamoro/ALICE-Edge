@@ -9,7 +9,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # ci/**: the same checks on a branch before it is fast-forwarded to main
+    branches: [main, 'ci/**']
   pull_request:
     branches: [main]
 
@@ -55,6 +56,11 @@ jobs:
 
       - name: Test (no default features, no_std core)
         run: cargo test --lib --no-default-features
+
+      # every integration test target must build without any feature: a file
+      # that uses a gated item without its own cfg breaks a plain `cargo test`
+      - name: Build all integration tests (no default features)
+        run: cargo test --tests --no-run --no-default-features
 
       - name: Build (std)
         run: cargo build --lib --features "std"

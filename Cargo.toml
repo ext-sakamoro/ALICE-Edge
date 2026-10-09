@@ -98,7 +98,7 @@ strip = true
 
 [dev-dependencies]
 # For testing on host
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 tempfile = "3"
 # cross-platform golden hashes (tests/determinism_golden.rs)
 sha2 = "0.10"

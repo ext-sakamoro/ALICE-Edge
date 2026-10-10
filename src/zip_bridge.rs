@@ -10,10 +10,16 @@ use alice_core::compression;
 
 /// Compressed model coefficients for batch transmission.
 ///
-/// Instead of sending raw Q16.16 pairs, we quantize and LZMA-compress
-/// a batch of coefficients for 10-50x size reduction over raw bytes.
+/// Instead of sending raw Q16.16 pairs, we quantize to 16 bits and compress
+/// a batch of coefficients with deflate (alice-zip 0.8+, the codec is recorded
+/// in the batch). Batches written before that used LZMA; they still decode.
+///
+/// A receiver must run alice-zip 0.8 or later to read a batch written here:
+/// alice-zip 0.7 refuses it with an error (it reads the codec marker as a
+/// length and reports truncated data), it does not return wrong values
+/// (tests/zip_compat.rs).
 pub struct CompressedModelBatch {
-    /// LZMA-compressed coefficient data.
+    /// Compressed coefficient data (an alice-zip quantised residual container).
     pub data: Vec<u8>,
     /// Number of models in this batch.
     pub count: usize,
@@ -21,12 +27,12 @@ pub struct CompressedModelBatch {
 
 /// Compress a batch of (slope, intercept) coefficient pairs.
 ///
-/// Uses 8-bit quantization + LZMA compression.
+/// Uses 16-bit quantization + deflate compression.
 /// Typical compression: 1000 models × 8 bytes → ~200-500 bytes.
 ///
 /// # Errors
 ///
-/// Returns `std::io::Error` if the underlying LZMA compression fails.
+/// Returns `std::io::Error` if the underlying compression fails.
 pub fn compress_coefficients(coefficients: &[(i32, i32)]) -> std::io::Result<CompressedModelBatch> {
     // Convert to float for quantization
     let floats: Vec<f32> = coefficients
@@ -46,7 +52,7 @@ pub fn compress_coefficients(coefficients: &[(i32, i32)]) -> std::io::Result<Com
 ///
 /// # Errors
 ///
-/// Returns `std::io::Error` if the underlying LZMA decompression fails or the data is malformed.
+/// Returns `std::io::Error` if decompression fails or the data is malformed.
 pub fn decompress_coefficients(batch: &CompressedModelBatch) -> std::io::Result<Vec<(i32, i32)>> {
     let floats = compression::decompress_residual_quantized(&batch.data)?;
 
@@ -64,7 +70,7 @@ pub fn decompress_coefficients(batch: &CompressedModelBatch) -> std::io::Result<
 ///
 /// # Errors
 ///
-/// Returns `std::io::Error` if the LZMA compression of the fitted coefficients fails.
+/// Returns `std::io::Error` if the compression of the fitted coefficients fails.
 pub fn fit_and_compress(sensor_batches: &[&[i32]]) -> std::io::Result<CompressedModelBatch> {
     let coefficients: Vec<(i32, i32)> = sensor_batches
         .iter()

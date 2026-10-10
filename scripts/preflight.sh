@@ -144,6 +144,7 @@ step "ci.yml / test: determinism goldens (no features, std, full)"
 cargo test --test determinism_golden --no-default-features
 cargo test --test determinism_golden --features "std"
 cargo test --test determinism_golden --features "law"
+CARGO_TERM_COLOR=never cargo test --test zip_compat --features zip 2>&1 | tee /dev/stderr | grep -Eq "test result: ok\. [1-9][0-9]* passed"
 cargo test --test determinism_golden --features "$FULL"
 
 step "ci.yml / test: panic contract (std + full, debug and release)"

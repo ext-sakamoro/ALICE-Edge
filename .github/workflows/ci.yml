@@ -122,6 +122,16 @@ jobs:
       - name: Test — robust fit contract (std)
         run: cargo test --test robust_contract --features "std"
 
+      # coefficient batches across the alice-zip 0.7 -> 0.8 codec change; the
+      # published 0.7.0 is the old writer/reader. 0 tests executed is red
+      - name: Test — zip batches across alice-zip 0.7 / 0.8 (zip)
+        shell: bash
+        env:
+          CARGO_TERM_COLOR: never
+        run: |
+          cargo test --test zip_compat --features zip 2>&1 | tee zip_compat.log
+          grep -Eq "test result: ok\. [1-9][0-9]* passed" zip_compat.log
+
       # One build + one test run with every optional bridge on: the crates.io
       # siblings (alice-zip / codec / db / sdf / ml / analytics / libasp) are
       # real dependencies here, not stubs.

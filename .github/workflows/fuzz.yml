@@ -8,11 +8,15 @@ name: Fuzz
 # Notes:
 # - cargo-fuzz needs nightly (rust-toolchain.toml pins stable, overridden here)
 # - fuzz/ is its own crate, not a workspace member
-# - the build step is blocking; only the exploration run is informational
+# - every step is blocking: a crash, a leak, an out-of-memory, a per-input
+#   timeout or a run that executed 0 inputs is a red job
+# - cargo-fuzz is installed with `cargo install`: the prebuilt binaries target
+#   musl, which the sanitizer build refuses
 
 on:
   push:
-    branches: [main]
+    # ci/**: the same checks on a branch before it is fast-forwarded to main
+    branches: [main, 'ci/**']
     paths:
       - 'src/**'
       - 'Cargo.toml'
@@ -47,8 +51,13 @@ jobs:
   fuzz:
     name: Fuzz — ${{ matrix.target }}
     runs-on: ubuntu-latest
+    # build + a 60 s run normally take under 10 min
+    timeout-minutes: 30
     strategy:
       fail-fast: false
+      # the runners are shared with every other workflow: a branch run takes
+      # at most 2 at a time, main all 4
+      max-parallel: ${{ github.ref == 'refs/heads/main' && 4 || 2 }}
       matrix:
         target:
           - fuzz_fit_linear
@@ -68,7 +77,7 @@ jobs:
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
 
-      # Blocking: a compile error in a fuzz target is a red job.
+      # a compile error in a fuzz target is a red job
       - name: Build fuzz target
         run: |
           cd fuzz
@@ -83,46 +92,79 @@ jobs:
           fi
           echo "seconds=$DURATION" >> "$GITHUB_OUTPUT"
 
-      # Crashes found earlier are committed under fuzz/seeds/<target>/ and
-      # replayed as a hard gate (a regression of a known finding is red).
-      - name: Replay committed seeds (blocking)
+      # Inputs that crashed earlier are committed under
+      # fuzz/regressions/<target>/ and replayed one by one before the
+      # exploration run, so a fixed crash stays fixed
+      - name: Replay regression inputs
+        shell: bash
+        env:
+          CARGO_TERM_COLOR: never
         run: |
           cd fuzz
-          seeds="seeds/${{ matrix.target }}"
-          if [ -d "$seeds" ] && [ -n "$(ls -A "$seeds")" ]; then
-            for f in "$seeds"/*; do
-              echo "replay: $f"
-              cargo +nightly fuzz run "${{ matrix.target }}" "$f"
-            done
-          else
-            echo "no committed seeds for ${{ matrix.target }}"
+          T="${{ matrix.target }}"
+          dir="regressions/$T"
+          shopt -s nullglob
+          files=("$dir"/*)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "no regression inputs for $T"
+            exit 0
           fi
+          echo "replaying ${#files[@]} regression inputs for $T"
+          cargo +nightly fuzz run "$T" "${files[@]}"
 
-      # Informational: a *new* crash uploads its input for triage; once it is
-      # committed to fuzz/seeds/ it becomes part of the blocking replay above.
+      # A crash, a leak, an out-of-memory (-rss_limit_mb) or a slow input
+      # (-timeout, seconds per input) makes libFuzzer exit non-zero, and the
+      # job fails with it. A run that executed 0 inputs is not a pass either.
+      # The summary row is written before the step fails, so a crash still
+      # shows up there
       - name: Run fuzz target (time-boxed)
-        id: run
-        continue-on-error: true
+        shell: bash
+        env:
+          CARGO_TERM_COLOR: never
         run: |
           cd fuzz
-          seeds="seeds/${{ matrix.target }}"
-          if [ -d "$seeds" ]; then
-            cargo +nightly fuzz run "${{ matrix.target }}" "corpus/${{ matrix.target }}" "$seeds" -- \
-              -max_total_time=${{ steps.dur.outputs.seconds }}
-          else
-            cargo +nightly fuzz run "${{ matrix.target }}" -- \
-              -max_total_time=${{ steps.dur.outputs.seconds }}
+          T="${{ matrix.target }}"
+          extra=()
+          if [ -d "regressions/$T" ]; then extra=("regressions/$T"); fi
+          mkdir -p "corpus/$T"
+          set +e
+          cargo +nightly fuzz run "$T" "corpus/$T" "${extra[@]}" -- \
+            -max_total_time=${{ steps.dur.outputs.seconds }} \
+            -timeout=30 -rss_limit_mb=2048 -print_final_stats=1 2>&1 | tee fuzz-run.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          runs=$(grep -oE "Done [0-9]+ runs" fuzz-run.log | tail -1 | grep -oE "[0-9]+" || true)
+          if [ -z "$runs" ]; then
+            runs=$(grep -oE "stat::number_of_executed_units: *[0-9]+" fuzz-run.log | tail -1 | grep -oE "[0-9]+$" || true)
+          fi
+          cov=$(grep -oE "DONE +cov: [0-9]+" fuzz-run.log | tail -1 | grep -oE "[0-9]+$" || true)
+          status=ok
+          if [ "$rc" -ne 0 ]; then
+            status="failed (exit $rc)"
+            for kind in "deadly signal" "panicked" "detected memory leaks" "out-of-memory" "libFuzzer: timeout"; do
+              if grep -q "$kind" fuzz-run.log; then status="$status: $kind"; break; fi
+            done
+          elif [ "${runs:-0}" -le 0 ]; then
+            status="0 inputs executed"
+          fi
+          {
+            echo "| target | runs | coverage | result |"
+            echo "|---|---|---|---|"
+            echo "| $T | ${runs:-0} | ${cov:-?} | $status |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -ne 0 ]; then exit "$rc"; fi
+          if [ "${runs:-0}" -le 0 ]; then
+            echo "::error::fuzz target $T executed 0 inputs"
+            exit 1
           fi
 
-      - name: Upload crash artifacts (if any)
-        if: steps.run.outcome == 'failure'
+      - name: Upload crash artifacts
+        if: failure()
         uses: actions/upload-artifact@v6
         with:
           name: fuzz-crash-${{ matrix.target }}
-          path: fuzz/artifacts/${{ matrix.target }}
+          path: |
+            fuzz/artifacts/${{ matrix.target }}
+            fuzz/fuzz-run.log
           if-no-files-found: ignore
           retention-days: 14
-
-      - name: Report crash (informational)
-        if: steps.run.outcome == 'failure'
-        run: echo "::warning::fuzz target ${{ matrix.target }} found a crash — see fuzz-crash-${{ matrix.target }} artifact"

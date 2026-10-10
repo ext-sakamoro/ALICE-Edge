@@ -133,6 +133,9 @@ cargo run --example edge_law --features "law"
 step "ci.yml / test: analytic oracles (tests/analytic_oracle.rs, std + sdf)"
 cargo test --test analytic_oracle --features "std,sdf"
 
+step "ci.yml / test: robust fit contract (tests/robust_contract.rs, std)"
+cargo test --test robust_contract --features "std"
+
 step "ci.yml / test: determinism goldens (no features, std, full)"
 cargo test --test determinism_golden --no-default-features
 cargo test --test determinism_golden --features "std"

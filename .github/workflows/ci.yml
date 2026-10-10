@@ -117,6 +117,11 @@ jobs:
         if: runner.os != 'Windows'
         run: cargo test --test analytic_oracle --features "std,sdf"
 
+      # fit_linear_robust against the rule in its documentation
+      # (tests/support/robust_reference.rs, shared with the fuzz target)
+      - name: Test — robust fit contract (std)
+        run: cargo test --test robust_contract --features "std"
+
       # One build + one test run with every optional bridge on: the crates.io
       # siblings (alice-zip / codec / db / sdf / ml / analytics / libasp) are
       # real dependencies here, not stubs.

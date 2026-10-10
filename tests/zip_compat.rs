@@ -1,4 +1,5 @@
-//! Coefficient batches across the alice-zip 0.7 → 0.8 codec change.
+//! Coefficient batches across the alice-zip 0.7 → 0.8 codec change, and
+//! between the 0.8 and 0.9 writers and readers.
 //!
 //! alice-zip 0.8 writes the quantised residual container with deflate and a
 //! recorded codec byte; 0.7 wrote LZMA with no codec byte. The writer and
@@ -88,4 +89,40 @@ fn a_receiver_still_on_alice_zip_0_7_refuses_a_new_batch() {
         refused += 1;
     }
     assert_eq!(refused, 6);
+}
+
+/// Encode with the published alice-zip 0.8.0, the arguments the bridge uses
+fn batch_08(input: &[(i32, i32)]) -> CompressedModelBatch {
+    let floats: Vec<f32> = input
+        .iter()
+        .flat_map(|&(a, b)| [a as f32, b as f32])
+        .collect();
+    CompressedModelBatch {
+        data: alice_zip_08::compression::compress_residual_quantized(&floats, 16, 6).unwrap(),
+        count: input.len(),
+    }
+}
+
+#[test]
+fn batches_written_by_alice_zip_0_8_and_0_9_are_interchangeable() {
+    // 0.9 changed a quantisation rounding in its Python package; the Rust
+    // writer the bridge uses must still give the same bytes and values, so a
+    // fleet with both versions reads each other's batches
+    for (n, salt) in [(1, 14), (2, 15), (100, 16), (1000, 17)] {
+        let input = pairs(n, salt);
+        let old = batch_08(&input);
+        let new = compress_coefficients(&input).unwrap();
+        assert_eq!(
+            new.data, old.data,
+            "{n} pairs: the 0.9 bytes differ from 0.8"
+        );
+        let read_by_08: Vec<(i32, i32)> =
+            alice_zip_08::compression::decompress_residual_quantized(&new.data)
+                .unwrap()
+                .chunks_exact(2)
+                .map(|p| (p[0] as i32, p[1] as i32))
+                .collect();
+        assert_eq!(decompress_coefficients(&old).unwrap(), read_by_08);
+        assert_eq!(read_by_08, old_round_trip(&input));
+    }
 }

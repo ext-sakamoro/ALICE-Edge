@@ -61,7 +61,7 @@ pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 numpy = { version = "0.29", optional = true }
 # `zip` turns on alice-zip's std + lzma, `law` uses it without them (no_std).
 # lzma stays on so batches written before alice-zip 0.8 (LZMA) still decode
-alice_core = { package = "alice-zip", version = "0.8", optional = true, default-features = false }
+alice_core = { package = "alice-zip", version = "0.9", optional = true, default-features = false }
 alice-codec = { version = "0.1", optional = true, default-features = false, features = ["std"] }
 # crates.io (0.2.0-beta.2 = ALICE-DB main); the CI sibling stub carried version 0.1.0
 # and could never satisfy `^0.2.0-beta.1`, so every job that resolved deps was red
@@ -106,6 +106,7 @@ sha2 = "0.10"
 # tests/zip_compat.rs: the published writer and reader of the previous batch
 # format (LZMA), to prove old batches decode and new ones are refused there
 alice_zip_07 = { package = "alice-zip", version = "=0.7.0", default-features = false, features = ["std", "lzma"] }
+alice_zip_08 = { package = "alice-zip", version = "=0.8.0", default-features = false, features = ["std", "lzma"] }
 
 [[bench]]
 name = "edge_bench"

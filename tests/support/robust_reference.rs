@@ -8,6 +8,8 @@
 // - `k` is a plain integer multiplier of the MAD (`3` = three MADs, not
 //   Q16.16); `k <= 0` is refused with `RobustError::NonPositiveK { k }`
 //   before the window is looked at, so the rule below is for `k > 0` only
+// - a window longer than `alice_edge::ROBUST_MAX_N` (1024) is then refused
+//   with `RobustError::WindowTooLong { n, max: ROBUST_MAX_N }`
 // - windows of fewer than 3 samples: the plain fit `fit_linear_fixed(data)`
 // - start: the repeated-median line. Pair slope
 //   `((y_j - y_i) << 16) / (j - i)` in `i64` (truncated toward zero); row
@@ -184,6 +186,19 @@ pub fn check_robust_contract(data: &[i32], k: i32) {
             alice_edge::fit_linear_robust(data, k),
             Err(alice_edge::RobustError::NonPositiveK { k }),
             "k = {k} must be refused"
+        );
+        return;
+    }
+    // 0b. a window past the bound is refused, after the k check
+    if data.len() > alice_edge::ROBUST_MAX_N {
+        assert_eq!(
+            alice_edge::fit_linear_robust(data, k),
+            Err(alice_edge::RobustError::WindowTooLong {
+                n: data.len(),
+                max: alice_edge::ROBUST_MAX_N
+            }),
+            "n = {} must be refused",
+            data.len()
         );
         return;
     }

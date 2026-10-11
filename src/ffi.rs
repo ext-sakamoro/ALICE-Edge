@@ -232,6 +232,8 @@ pub const ALICE_EDGE_ERR_NULL_POINTER: i32 = -1;
 pub const ALICE_EDGE_ERR_NON_POSITIVE_K: i32 = -2;
 /// Status: the function panicked; the message is in `alice_edge_last_error`.
 pub const ALICE_EDGE_ERR_PANIC: i32 = -3;
+/// Status: the window is longer than `ROBUST_MAX_N` (1024) samples.
+pub const ALICE_EDGE_ERR_WINDOW_TOO_LONG: i32 = -4;
 
 /// Map a refused robust call to its status and record the message for
 /// `alice_edge_last_error`.
@@ -240,6 +242,7 @@ fn robust_status(err: crate::RobustError) -> i32 {
     guard::set_last_error(format!("alice_edge: {err}"));
     match err {
         crate::RobustError::NonPositiveK { .. } => ALICE_EDGE_ERR_NON_POSITIVE_K,
+        crate::RobustError::WindowTooLong { .. } => ALICE_EDGE_ERR_WINDOW_TOO_LONG,
         // `RobustError` is `#[non_exhaustive]` only towards other crates;
         // inside this crate the match is exhaustive, so a new variant has to
         // be given its own status here
@@ -265,8 +268,10 @@ unsafe fn input_slice<'a>(data: *const i32, len: usize) -> Option<&'a [i32]> {
 
 // ── Robust / SIMD fitting ───────────────────────────────────────────────
 
-/// Fit a robust linear model (MAD outlier rejection on the residuals of a
-/// least-squares fit, outliers filled with the line's prediction, refit).
+/// Fit a robust linear model: repeated-median start, MAD outlier rejection
+/// on the residuals with a scale floor of one count, least-squares refit of
+/// the kept samples until the outlier set is stable (the rule is documented
+/// on `fit_linear_robust`).
 ///
 /// `k` is a **plain integer multiplier** of the MAD (`3` = three MADs; it is
 /// not Q16.16). The fit is written to `*out`.
@@ -274,6 +279,7 @@ unsafe fn input_slice<'a>(data: *const i32, len: usize) -> Option<&'a [i32]> {
 /// Returns [`ALICE_EDGE_OK`], or:
 /// - [`ALICE_EDGE_ERR_NON_POSITIVE_K`] when `k <= 0` (message in
 ///   `alice_edge_last_error`)
+/// - [`ALICE_EDGE_ERR_WINDOW_TOO_LONG`] when `len > ROBUST_MAX_N` (1024)
 /// - [`ALICE_EDGE_ERR_NULL_POINTER`] when `out` is null, or `data` is null
 ///   with `len > 0`
 /// - [`ALICE_EDGE_ERR_PANIC`] when the body panicked
@@ -356,6 +362,7 @@ pub unsafe extern "C" fn alice_fit_linear_simd(data: *const i32, len: usize) -> 
 /// Returns [`ALICE_EDGE_OK`], or:
 /// - [`ALICE_EDGE_ERR_NON_POSITIVE_K`] when `k <= 0` (message in
 ///   `alice_edge_last_error`)
+/// - [`ALICE_EDGE_ERR_WINDOW_TOO_LONG`] when `len > ROBUST_MAX_N` (1024)
 /// - [`ALICE_EDGE_ERR_NULL_POINTER`] when `out_written` is null, `data` is
 ///   null with `len > 0`, or `out` is null with `out_capacity > 0`
 /// - [`ALICE_EDGE_ERR_PANIC`] when the body panicked

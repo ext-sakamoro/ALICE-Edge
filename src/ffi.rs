@@ -653,24 +653,13 @@ mod tests {
         assert_eq!(status, ALICE_EDGE_OK);
         let robust = (out.slope, out.intercept);
         assert_eq!(Ok(robust), crate::fit_linear_robust(&spiked, 3));
-        // ... and the outlier is removed. Measured: plain fit slope −67.8,
-        // robust fit (97.3, 127.6) against the true (100, 100). The residual
-        // iteration stops once the outlier set is stable, so a 12-sample
-        // window keeps a few percent of bias from the first fit; the bounds
-        // below are 3 in slope and 30 in intercept, while leaving the outlier
-        // in (or passing k as Q16.16, which keeps it) gives slope −67.8.
-        assert!(
-            (robust.0 - plain_clean.0).abs() <= int_to_q16(3),
-            "robust slope {} vs {}",
-            robust.0,
-            plain_clean.0
-        );
-        assert!(
-            (robust.1 - plain_clean.1).abs() <= int_to_q16(30),
-            "robust intercept {} vs {}",
-            robust.1,
-            plain_clean.1
-        );
+        // ... and the outlier is removed exactly: the repeated-median start
+        // is the true line (11 of the 12 rows have their exact pair slopes
+        // in the majority), the outlier is the only residual above 3 MADs
+        // and the least-squares refit of the other 11 samples is the line
+        // itself, (100, 100). Leaving the outlier in (or passing k as
+        // Q16.16, which keeps it) gives slope −67.8.
+        assert_eq!(robust, plain_clean);
         // the same k as Q16.16 (3 << 16) is a threshold of 196608 MADs:
         // nothing is filtered and the plain fit comes back
         let (status, as_q16) = ffi_robust(&spiked, int_to_q16(3));

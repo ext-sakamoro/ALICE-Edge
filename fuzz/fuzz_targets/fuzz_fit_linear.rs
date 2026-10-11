@@ -3,30 +3,27 @@
 //! 1. Scalar / SIMD parity: `fit_linear_simd` is a re-implementation of
 //!    `fit_linear_fixed`, so the two return the same `(slope, intercept)`.
 //!
-//! 2. `fit_linear_robust(data, k)` filters on the residuals of a fit, not on
-//!    the raw values, and fills an outlier with the line's own prediction.
-//!    The rule and its arithmetic are written out in
-//!    `tests/support/robust_reference.rs` (included below). `k` is a plain
-//!    integer multiplier of the MAD; `k <= 0` is refused with
+//! 2. `fit_linear_robust(data, k)` flags outliers on the residuals of a
+//!    line and refits on the kept samples. The rule and its arithmetic are
+//!    written out in `tests/support/robust_reference.rs` (included below).
+//!    `k` is a plain integer multiplier of the MAD; `k <= 0` is refused with
 //!    `RobustError::NonPositiveK { k }` for every `data`. For every `data`
 //!    and every `k > 0`:
-//!    - fewer than 3 samples, a first-round residual MAD of 0, or no
-//!      first-round residual with `|r| > k · MAD` (strict `>`, `k · MAD`
-//!      saturated in `i64`) → the result is `fit_linear_fixed(data)`
-//!    - the result equals the fit the documented rule produces
-//!    - the result is `fit_linear_fixed(filled)` for the rule's last filled
-//!      series, which has the input's length and whose element `i` is
-//!      bit-exact either `data[i]` or the line prediction
-//!      `q16_to_int(evaluate_linear_fixed(slope, intercept, i as i32))`
-//!    The function returns only the fit, so the filled series is recomputed
-//!    here from the rule. The inputs are integers: there is no NaN case.
+//!    - fewer than 3 samples, or an empty final outlier set → the result is
+//!      `fit_linear_fixed(data)`, bit for bit
+//!    - the result equals the fit the documented rule produces (repeated-
+//!      median start, `|r| > k · max(MAD, Q16_ONE)` with the product
+//!      saturated in `i64`, least-squares refit until the set is stable)
+//!    - the result is the least-squares fit of the kept indices, bit for
+//!      bit, and more than half of the samples are kept
+//!    The inputs are integers: there is no NaN case.
 //!
 //! 3. `filter_outliers_mad(data, k)` has its own contract on the raw values:
-//!    `k <= 0` is refused with the same error; otherwise same length; fewer than 3 samples or a MAD of 0 pass through; otherwise
-//!    sample `x` becomes the median exactly when `|x − median| > k · MAD`
-//!    (in `i64`, product saturated), and stays `x` otherwise. It is not the
-//!    pre-pass of `fit_linear_robust` any more, so the two are checked
-//!    separately.
+//!    `k <= 0` is refused with the same error; otherwise same length; fewer
+//!    than 3 samples pass through; otherwise sample `x` becomes the median
+//!    exactly when `|x − median| > k · max(MAD, 1)` (in `i64`, product
+//!    saturated), and stays `x` otherwise. It is not the pre-pass of
+//!    `fit_linear_robust`, so the two are checked separately.
 #![no_main]
 
 use alice_edge::{filter_outliers_mad, fit_linear_simd, RobustError};
@@ -77,9 +74,9 @@ fuzz_target!(|input: Input| {
     let mut devs: Vec<i64> = data.iter().map(|&x| dev(x)).collect();
     devs.sort_unstable();
     let mad = devs[data.len() / 2];
-    let threshold = i64::from(k).saturating_mul(mad);
+    let threshold = i64::from(k).saturating_mul(mad.max(1));
     for (i, (&before, &after)) in data.iter().zip(&filtered).enumerate() {
-        let expected = if mad != 0 && dev(before) > threshold {
+        let expected = if dev(before) > threshold {
             median
         } else {
             before

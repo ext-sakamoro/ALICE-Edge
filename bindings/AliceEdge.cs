@@ -36,6 +36,28 @@ namespace AliceEdge
         public int d;
     }
 
+    /// Status codes returned by the robust / filter functions
+    /// (see ALICE_EDGE_* in alice_edge.h)
+    public static class AliceStatus
+    {
+        public const int Ok = 0;
+        public const int NullPointer = -1;
+        public const int NonPositiveK = -2;
+        public const int Panic = -3;
+    }
+
+    /// A native call returned a status other than AliceStatus.Ok
+    public class AliceEdgeException : Exception
+    {
+        public int Status { get; }
+
+        public AliceEdgeException(int status, string message)
+            : base(message)
+        {
+            Status = status;
+        }
+    }
+
     public static class Native
     {
         private const string DllName = "alice_edge";
@@ -91,19 +113,31 @@ namespace AliceEdge
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr alice_edge_version();
 
-        // ── Robust / SIMD ───────────────────────────────────────────────
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr alice_edge_last_error();
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern AliceLinearResult alice_fit_linear_robust(int[] data, UIntPtr len, int madK);
+        public static extern void alice_edge_free_error_string(IntPtr s);
+
+        // ── Robust / SIMD ───────────────────────────────────────────────
+
+        /// k: outlier factor, a plain integer multiplier of the MAD (3 = three
+        /// MADs, not Q16.16); k <= 0 returns AliceStatus.NonPositiveK
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int alice_fit_linear_robust(int[] data, UIntPtr len, int k,
+                                                         out AliceLinearResult result);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern AliceLinearResult alice_fit_linear_simd(int[] data, UIntPtr len);
 
         // ── Filter / Delta ──────────────────────────────────────────────
 
+        /// k: outlier factor, a plain integer multiplier of the MAD (3 = three
+        /// MADs, not Q16.16); k <= 0 returns AliceStatus.NonPositiveK
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern UIntPtr alice_filter_outliers_mad(int[] data, UIntPtr len, int k,
-                                                                [Out] int[] outBuf, UIntPtr outCapacity);
+        public static extern int alice_filter_outliers_mad(int[] data, UIntPtr len, int k,
+                                                           [Out] int[] outBuf, UIntPtr outCapacity,
+                                                           out UIntPtr outWritten);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern UIntPtr alice_delta_encode(int[] pairs, UIntPtr numPairs);
@@ -143,6 +177,51 @@ namespace AliceEdge
         public static int IntToQ16(int i)
         {
             return Native.alice_int_to_q16(i);
+        }
+
+        /// Robust linear fit (MAD rejection on the residuals), returning
+        /// (slope, intercept) in Q16.16. k is a plain integer multiplier of the
+        /// MAD (3 = three MADs, not Q16.16). Throws AliceEdgeException when
+        /// k <= 0 (Status == AliceStatus.NonPositiveK) or on any other error.
+        public static (int slope, int intercept) FitLinearRobust(int[] data, int k)
+        {
+            int status = Native.alice_fit_linear_robust(data, (UIntPtr)data.Length, k,
+                                                        out AliceLinearResult result);
+            ThrowIfError(status);
+            return (result.slope, result.intercept);
+        }
+
+        /// Replace MAD outliers by the median. k is a plain integer multiplier
+        /// of the MAD (3 = three MADs, not Q16.16). Throws AliceEdgeException when k <= 0 or on any other error.
+        public static int[] FilterOutliersMad(int[] data, int k)
+        {
+            var outBuf = new int[data.Length];
+            int status = Native.alice_filter_outliers_mad(data, (UIntPtr)data.Length, k,
+                                                          outBuf, (UIntPtr)outBuf.Length,
+                                                          out UIntPtr written);
+            ThrowIfError(status);
+            if ((ulong)written != (ulong)data.Length)
+            {
+                Array.Resize(ref outBuf, (int)written);
+            }
+            return outBuf;
+        }
+
+        private static void ThrowIfError(int status)
+        {
+            if (status == AliceStatus.Ok)
+            {
+                return;
+            }
+            string message = null;
+            IntPtr ptr = Native.alice_edge_last_error();
+            if (ptr != IntPtr.Zero)
+            {
+                message = Marshal.PtrToStringAnsi(ptr);
+                Native.alice_edge_free_error_string(ptr);
+            }
+            throw new AliceEdgeException(status,
+                message ?? $"alice_edge call failed with status {status}");
         }
 
         /// Get library version string

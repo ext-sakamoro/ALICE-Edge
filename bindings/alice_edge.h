@@ -33,6 +33,17 @@ typedef struct {
     int32_t d;
 } AliceCubicResult;
 
+// ── Status codes ────────────────────────────────────────────────────────
+//
+// Returned by alice_fit_linear_robust and alice_filter_outliers_mad. On any
+// status other than ALICE_EDGE_OK the message is available through
+// alice_edge_last_error() (std builds).
+
+#define ALICE_EDGE_OK                  0   // success
+#define ALICE_EDGE_ERR_NULL_POINTER   (-1) // a required pointer was null
+#define ALICE_EDGE_ERR_NON_POSITIVE_K (-2) // outlier factor k <= 0
+#define ALICE_EDGE_ERR_PANIC          (-3) // the call panicked
+
 // ── Linear fitting ──────────────────────────────────────────────────────
 
 // Fit a linear model to sensor data (Q16.16 fixed-point).
@@ -83,18 +94,36 @@ int64_t alice_residual_error(const int32_t* data, size_t len,
 
 // ── Robust / SIMD fitting ───────────────────────────────────────────────
 
-// Robust linear fit with MAD-based outlier removal.
-// mad_k: outlier sensitivity in Q16.16 (typically int_to_q16(2) or int_to_q16(3)).
-AliceLinearResult alice_fit_linear_robust(const int32_t* data, size_t len, int32_t mad_k);
+// Robust linear fit: MAD outlier rejection on the residuals of a
+// least-squares fit, outliers filled with the line's prediction, refit.
+// k: outlier factor, a PLAIN INTEGER multiplier of the MAD (3 = three MADs;
+//    not Q16.16). k <= 0 returns ALICE_EDGE_ERR_NON_POSITIVE_K.
+// out: receives the fit (Q16.16 slope / intercept); set to {0, 0} on error.
+// len == 0 (data may be NULL) is the plain fit of
+// nothing, ALICE_EDGE_OK.
+// Returns ALICE_EDGE_OK, ALICE_EDGE_ERR_NON_POSITIVE_K,
+// ALICE_EDGE_ERR_NULL_POINTER (out NULL, or data NULL with len > 0) or
+// ALICE_EDGE_ERR_PANIC.
+int32_t alice_fit_linear_robust(const int32_t* data, size_t len, int32_t k,
+                                AliceLinearResult* out);
 
 // SIMD-accelerated linear fit (auto-fallback on small data).
 AliceLinearResult alice_fit_linear_simd(const int32_t* data, size_t len);
 
 // ── Filter / Delta encoding ────────────────────────────────────────────
 
-// Filter outliers using MAD. Writes result to out, returns count written.
-size_t alice_filter_outliers_mad(const int32_t* data, size_t len, int32_t k,
-                                 int32_t* out, size_t out_capacity);
+// Filter outliers using MAD: x is replaced by the median when
+// |x - median| > k * MAD. Writes min(len, out_capacity) elements to out and
+// that count to *out_written.
+// k: outlier factor, a PLAIN INTEGER multiplier of the MAD (3 = three MADs;
+//    not Q16.16). k <= 0 returns ALICE_EDGE_ERR_NON_POSITIVE_K.
+// Fewer than 3 samples pass the window through unchanged. On error *out_written is 0 and out is not written.
+// Returns ALICE_EDGE_OK, ALICE_EDGE_ERR_NON_POSITIVE_K,
+// ALICE_EDGE_ERR_NULL_POINTER (out_written NULL, data NULL with len > 0, or
+// out NULL with out_capacity > 0) or ALICE_EDGE_ERR_PANIC.
+int32_t alice_filter_outliers_mad(const int32_t* data, size_t len, int32_t k,
+                                  int32_t* out, size_t out_capacity,
+                                  size_t* out_written);
 
 // Delta-encode coefficient pairs in-place. Layout: [s0,i0,s1,i1,...].
 size_t alice_delta_encode(int32_t* pairs, size_t num_pairs);
@@ -109,6 +138,20 @@ void alice_zeroize(int32_t* buf, size_t len);
 
 // Return library version as null-terminated C string.
 const char* alice_edge_version(void);
+
+// ── Errors ──────────────────────────────────────────────────────────────
+
+// Message of the most recent error on this thread (a caught panic, or an
+// argument refused with a status code), or NULL if none. Owned by the
+// caller: release it with alice_edge_free_error_string. Always NULL in
+// no_std builds.
+char* alice_edge_last_error(void);
+
+// Clear the most recent error message.
+void alice_edge_clear_last_error(void);
+
+// Release a string returned by alice_edge_last_error (NULL is accepted).
+void alice_edge_free_error_string(char* s);
 
 #ifdef __cplusplus
 }

@@ -1,21 +1,69 @@
 //! Robust fitting (MAD outlier filter + robust linear).
+//!
+//! Both entry points take the outlier factor `k` as a **plain integer
+//! multiplier** of the MAD (`k = 3` means "three MADs"), not a Q16.16 value,
+//! and both refuse `k <= 0` with [`RobustError::NonPositiveK`]: with `k <= 0`
+//! the rule `|deviation| > k · MAD` marks every sample that is not exactly
+//! at the centre as an outlier, which destroys the window instead of
+//! cleaning it.
 
 extern crate alloc;
 use alloc::vec::Vec;
 
 use crate::q16_linear::fit_linear_fixed;
 
+/// Why a robust entry point refused its arguments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RobustError {
+    /// The outlier factor `k` was zero or negative. `k` multiplies the MAD
+    /// as a plain integer and has to be at least 1.
+    NonPositiveK {
+        /// The rejected factor.
+        k: i32,
+    },
+}
+
+impl core::fmt::Display for RobustError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::NonPositiveK { k } => write!(
+                f,
+                "outlier factor k must be a positive integer multiplier of the MAD, got {k}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for RobustError {}
+
+/// `k` has to be a positive multiplier of the MAD.
+const fn check_k(k: i32) -> Result<(), RobustError> {
+    if k > 0 {
+        Ok(())
+    } else {
+        Err(RobustError::NonPositiveK { k })
+    }
+}
+
 /// Replace outliers by the median using the MAD (median absolute deviation)
 /// rule: a sample `x` is an outlier when `|x - median| > k * MAD`.
+///
+/// `k` is a plain integer multiplier (`3` = three MADs, not Q16.16).
 ///
 /// Deviations are computed in `i64`, so the full `i32` input range is valid
 /// (`i32::MIN - median` and `|i32::MIN|` do not overflow), and the threshold
 /// `k * MAD` saturates instead of wrapping; a huge `k` therefore keeps every
 /// sample rather than silently discarding all of them.
-pub fn filter_outliers_mad(data: &[i32], k: i32) -> Vec<i32> {
+///
+/// # Errors
+///
+/// [`RobustError::NonPositiveK`] when `k <= 0`, whatever the window.
+pub fn filter_outliers_mad(data: &[i32], k: i32) -> Result<Vec<i32>, RobustError> {
+    check_k(k)?;
     let n = data.len();
     if n < 3 {
-        return data.to_vec();
+        return Ok(data.to_vec());
     }
 
     // 中央値の計算
@@ -30,13 +78,14 @@ pub fn filter_outliers_mad(data: &[i32], k: i32) -> Vec<i32> {
     let mad = abs_devs[n / 2];
 
     if mad == 0 {
-        return data.to_vec();
+        return Ok(data.to_vec());
     }
 
     let threshold = i64::from(k).saturating_mul(mad);
-    data.iter()
+    Ok(data
+        .iter()
         .map(|&x| if deviation(x) > threshold { median } else { x })
-        .collect()
+        .collect())
 }
 
 /// Fit linear model with outlier removal pre-processing.
@@ -45,7 +94,12 @@ pub fn filter_outliers_mad(data: &[i32], k: i32) -> Vec<i32> {
 /// least-squares fit, outliers imputed with that fit's prediction (so the
 /// abscissa `x = i` stays intact), then a second fit.
 ///
-/// Rule: a sample is an outlier when `|residual − median(residual)| > k · MAD(residual)`.
+/// Rule: a sample is an outlier when `|residual − median(residual)| > k · MAD(residual)`,
+/// where `k` is a plain integer multiplier (`3` = three MADs, not Q16.16).
+///
+/// # Errors
+///
+/// [`RobustError::NonPositiveK`] when `k <= 0`, whatever the window.
 ///
 /// History (2026-09-17, oracle `tests/analytic_oracle.rs`): the previous
 /// wrapper ran `filter_outliers_mad` on the raw values, i.e. compared each
@@ -56,12 +110,12 @@ pub fn filter_outliers_mad(data: &[i32], k: i32) -> Vec<i32> {
 /// 0.98 (2 % off) because the "repair" itself injected `y(10) = 50`.
 #[cfg(feature = "std")]
 #[inline]
-#[must_use]
-pub fn fit_linear_robust(data: &[i32], mad_k: i32) -> (i32, i32) {
+pub fn fit_linear_robust(data: &[i32], k: i32) -> Result<(i32, i32), RobustError> {
     use crate::q16_linear::{evaluate_linear_fixed, int_to_q16, q16_to_int};
+    check_k(k)?;
     let n = data.len();
     if n < 3 {
-        return fit_linear_fixed(data);
+        return Ok(fit_linear_fixed(data));
     }
     // Iterate: fit → residual MAD → impute outliers with the line's own
     // prediction → refit, until the outlier set stops changing (the first
@@ -87,9 +141,9 @@ pub fn fit_linear_robust(data: &[i32], mad_k: i32) -> (i32, i32) {
         abs_devs.sort_unstable();
         let mad = abs_devs[n / 2];
         if mad == 0 {
-            return fit;
+            return Ok(fit);
         }
-        let threshold = i64::from(mad_k).saturating_mul(mad);
+        let threshold = i64::from(k).saturating_mul(mad);
         let new_mask: Vec<bool> = res.iter().map(|r| r.abs() > threshold).collect();
         for i in 0..n {
             repaired[i] = if new_mask[i] {
@@ -107,5 +161,5 @@ pub fn fit_linear_robust(data: &[i32], mad_k: i32) -> (i32, i32) {
             break;
         }
     }
-    fit
+    Ok(fit)
 }

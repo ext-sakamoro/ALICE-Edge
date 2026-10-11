@@ -5,6 +5,9 @@
 //
 // The rule, with the arithmetic the crate uses:
 //
+// - `k` is a plain integer multiplier of the MAD (`3` = three MADs, not
+//   Q16.16); `k <= 0` is refused with `RobustError::NonPositiveK { k }`
+//   before the window is looked at, so the rule below is for `k > 0` only
 // - windows of fewer than 3 samples: the plain fit `fit_linear_fixed(data)`
 // - otherwise start from `fit = fit_linear_fixed(data)` and repeat at most
 //   `ROBUST_MAX_ROUNDS` times:
@@ -12,9 +15,9 @@
 //     slope, intercept, i as i32))` (Q16.16, in `i64`)
 //   - centre: `r_i -= median`, where `median` is `sorted(r)[n / 2]`
 //   - `MAD = sorted(|r_i|)[n / 2]`; if `MAD == 0` the current fit is returned
+//     (matches the current implementation)
 //   - sample `i` is an outlier when `|r_i| > i64(k).saturating_mul(MAD)`
-//     (strict `>`; any `k`, so `k <= 0` makes every non-zero residual an
-//     outlier)
+//     (strict `>`)
 //   - the filled series takes `data[i]` for a kept sample and the line
 //     prediction `q16_to_int(evaluate_linear_fixed(slope, intercept, i as
 //     i32))` (Q16.16 floored by an arithmetic shift) for an outlier
@@ -83,7 +86,9 @@ pub struct RobustTrace {
     pub exit: RobustExit,
 }
 
+/// The rule for `k > 0`; a non-positive `k` has no rule, it is refused.
 pub fn robust_reference(data: &[i32], k: i32) -> RobustTrace {
+    assert!(k > 0, "the rule is defined for k > 0 only, got {k}");
     let n = data.len();
     let mut fit = fit_linear_fixed(data);
     if n < 3 {
@@ -142,7 +147,16 @@ pub fn robust_reference(data: &[i32], k: i32) -> RobustTrace {
 /// Checks `fit_linear_robust(data, k)` against the contract and panics with
 /// the failing clause. Used by the unit tests and the fuzz target.
 pub fn check_robust_contract(data: &[i32], k: i32) {
-    let got = alice_edge::fit_linear_robust(data, k);
+    // 0. k <= 0 is refused, whatever the window
+    if k <= 0 {
+        assert_eq!(
+            alice_edge::fit_linear_robust(data, k),
+            Err(alice_edge::RobustError::NonPositiveK { k }),
+            "k = {k} must be refused"
+        );
+        return;
+    }
+    let got = alice_edge::fit_linear_robust(data, k).expect("k > 0 is accepted");
     let plain = fit_linear_fixed(data);
 
     // 1. no outlier in the first round (or MAD 0, or fewer than 3 samples)

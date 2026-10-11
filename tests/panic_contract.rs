@@ -38,7 +38,7 @@ use alice_edge::constant_fit::{compute_residual_error, fit_constant_fixed};
 use alice_edge::piecewise::fit_piecewise_linear;
 use alice_edge::q16_linear::{evaluate_linear_fixed, fit_linear_fixed, int_to_q16, q16_to_int};
 use alice_edge::ring_buffer::RingBuffer;
-use alice_edge::robust::{filter_outliers_mad, fit_linear_robust};
+use alice_edge::robust::{filter_outliers_mad, fit_linear_robust, RobustError};
 use alice_edge::sensor_fusion::{
     FusedSensor, FusionConfig, KalmanFilter1D, KalmanFilter2D, SensorInput,
 };
@@ -127,10 +127,13 @@ fn an_empty_window_gives_the_zero_fit_from_every_entry_point() {
     );
     // an empty window is not evidence that a line beats a constant
     assert!(!value("should_use_linear", run(|| should_use_linear(&[]))));
-    assert!(value("filter_outliers_mad", run(|| filter_outliers_mad(&[], 3))).is_empty());
+    assert_eq!(
+        value("filter_outliers_mad", run(|| filter_outliers_mad(&[], 3))),
+        Ok(vec![])
+    );
     assert_eq!(
         value("fit_linear_robust", run(|| fit_linear_robust(&[], 3))),
-        (0, 0)
+        Ok((0, 0))
     );
     assert!(value(
         "fit_piecewise_linear",
@@ -197,8 +200,8 @@ fn every_division_by_a_derived_number_guards_its_zero() {
     // asserted here is the answer, not the branch. What does carry the
     // division's weight is the saturating threshold below.
     let flat = [7i32; 9];
-    assert_eq!(filter_outliers_mad(&flat, 3), flat.to_vec());
-    assert_eq!(fit_linear_robust(&flat, 3), (0, int_to_q16(7)));
+    assert_eq!(filter_outliers_mad(&flat, 3), Ok(flat.to_vec()));
+    assert_eq!(fit_linear_robust(&flat, 3), Ok((0, int_to_q16(7))));
 
     // a huge `k` keeps every sample instead of flipping negative and
     // rejecting all of them.
@@ -212,12 +215,12 @@ fn every_division_by_a_derived_number_guards_its_zero() {
     // cannot have teeth on the saturation either — it pins the answer. The
     // saturation mattered when the deviations were computed in `i32`.
     let spiked = [1i32, 2, 3, 4, 1_000_000];
-    assert_eq!(filter_outliers_mad(&spiked, i32::MAX), spiked.to_vec());
-    assert_eq!(filter_outliers_mad(&spiked, 1 << 24), spiked.to_vec());
+    assert_eq!(filter_outliers_mad(&spiked, i32::MAX), Ok(spiked.to_vec()));
+    assert_eq!(filter_outliers_mad(&spiked, 1 << 24), Ok(spiked.to_vec()));
     let full_range = [i32::MIN, 0, i32::MAX, 0, i32::MIN];
     assert_eq!(
         filter_outliers_mad(&full_range, i32::MAX),
-        full_range.to_vec()
+        Ok(full_range.to_vec())
     );
 
     // a minimum segment length below two cannot terminate the recursion, so
@@ -244,30 +247,39 @@ fn every_division_by_a_derived_number_guards_its_zero() {
 // Out-of-range and negative arguments
 // ---------------------------------------------------------------------------
 
-/// Contract: **a specific value, documented as lossy.** The MAD rule keeps a
-/// sample when `|x − median| <= k · MAD`, so `k <= 0` keeps nothing: every
-/// sample is replaced by the median. That is the arithmetic working as
-/// written, and it is also a way to destroy a window with one bad argument,
-/// so it is pinned by value here and the saturating upper end is pinned next
-/// to it (a huge `k` keeps everything instead of wrapping negative).
+/// Contract: **`Err`.** The outlier factor `k` is a plain integer
+/// multiplier of the MAD, and the rule keeps a sample when
+/// `|x − median| <= k · MAD`, so `k <= 0` would keep nothing: every sample
+/// would be replaced by the median (and every non-zero residual of the
+/// robust fit would be filled). One bad argument would destroy the window
+/// and return a plausible-looking result, so both functions refuse it with
+/// `RobustError::NonPositiveK { k }`, before looking at the window. The
+/// saturating upper end is pinned next to it (a huge `k` keeps everything
+/// instead of wrapping negative).
 #[test]
-fn a_non_positive_mad_factor_collapses_the_window_onto_its_median() {
+fn a_non_positive_mad_factor_is_refused() {
     let w = [1i32, 2, 3, 4, 100];
     let median = 3i32;
 
     for k in [0i32, -1, -5, i32::MIN] {
+        let err = RobustError::NonPositiveK { k };
         assert_eq!(
-            filter_outliers_mad(&w, k),
-            vec![median; w.len()],
-            "k = {k} should replace every sample by the median"
+            value("filter_outliers_mad", run(|| filter_outliers_mad(&w, k))),
+            Err(err),
+            "k = {k}"
+        );
+        assert_eq!(
+            value("fit_linear_robust", run(|| fit_linear_robust(&w, k))),
+            Err(err),
+            "k = {k}"
         );
     }
     // the other end: the threshold saturates, so nothing is rejected
     for k in [i32::MAX, 1 << 30] {
-        assert_eq!(filter_outliers_mad(&w, k), w.to_vec(), "k = {k}");
+        assert_eq!(filter_outliers_mad(&w, k), Ok(w.to_vec()), "k = {k}");
     }
     // between the two ends the outlier, and only the outlier, is replaced
-    assert_eq!(filter_outliers_mad(&w, 2), vec![1, 2, 3, 4, median]);
+    assert_eq!(filter_outliers_mad(&w, 2), Ok(vec![1, 2, 3, 4, median]));
 }
 
 /// Contract: **a specific value.** `fit_piecewise_linear` takes two

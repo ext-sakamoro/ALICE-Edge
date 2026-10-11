@@ -519,7 +519,7 @@ fn test_piecewise_linear_short() {
 fn test_filter_outliers_basic() {
     // 通常データ + 1個の外れ値
     let data = [100, 101, 99, 100, 102, 100, 9999, 100, 101, 99];
-    let filtered = filter_outliers_mad(&data, 3);
+    let filtered = filter_outliers_mad(&data, 3).expect("k > 0");
     assert_eq!(filtered.len(), 10);
     // 外れ値 9999 が中央値に置換されている
     assert!(filtered[6] < 200, "outlier was replaced: {}", filtered[6]);
@@ -529,7 +529,7 @@ fn test_filter_outliers_basic() {
 #[test]
 fn test_filter_outliers_no_outliers() {
     let data = [10, 11, 10, 11, 10];
-    let filtered = filter_outliers_mad(&data, 3);
+    let filtered = filter_outliers_mad(&data, 3).expect("k > 0");
     assert_eq!(filtered, data);
 }
 
@@ -537,7 +537,7 @@ fn test_filter_outliers_no_outliers() {
 #[test]
 fn test_filter_outliers_short() {
     let data = [1, 2];
-    let filtered = filter_outliers_mad(&data, 3);
+    let filtered = filter_outliers_mad(&data, 3).expect("k > 0");
     assert_eq!(filtered, data);
 }
 
@@ -547,7 +547,7 @@ fn test_fit_linear_robust() {
     // y = 10x + 外れ値
     let mut data: Vec<i32> = (0..20).map(|x| x * 10).collect();
     data[10] = 99999; // 外れ値
-    let (slope, _intercept) = fit_linear_robust(&data, 3);
+    let (slope, _intercept) = fit_linear_robust(&data, 3).expect("k > 0");
     // 外れ値除去後、slope ≈ 10
     assert!((slope - int_to_q16(10)).abs() < 20000, "slope = {slope}");
 }
@@ -558,7 +558,7 @@ fn test_fit_linear_robust() {
 #[test]
 fn test_filter_outliers_full_i32_range_no_overflow() {
     let data = [i32::MIN, i32::MAX, 0, i32::MIN, i32::MAX, 1, -1];
-    let filtered = filter_outliers_mad(&data, 3);
+    let filtered = filter_outliers_mad(&data, 3).expect("k > 0");
     assert_eq!(filtered.len(), data.len());
     let mut sorted = data;
     sorted.sort_unstable();
@@ -575,12 +575,12 @@ fn test_filter_outliers_huge_k_keeps_everything() {
     // of wrapping to a negative threshold (which replaced every sample by
     // the median).
     let data = [10, 11, 10, 11, 10, 12, 9999];
-    let filtered = filter_outliers_mad(&data, i32::MAX);
+    let filtered = filter_outliers_mad(&data, i32::MAX).expect("k > 0");
     assert_eq!(filtered, data);
-    let filtered = filter_outliers_mad(&data, 20_000);
+    let filtered = filter_outliers_mad(&data, 20_000).expect("k > 0");
     assert_eq!(filtered, data);
     // and a threshold below the deviation still replaces the outlier
-    let filtered = filter_outliers_mad(&data, 3);
+    let filtered = filter_outliers_mad(&data, 3).expect("k > 0");
     assert_eq!(filtered, [10, 11, 10, 11, 10, 12, 11]);
 }
 
@@ -1005,7 +1005,7 @@ fn test_compute_residual_error_noisy() {
 fn test_filter_outliers_mad_all_same() {
     // 全要素同一 (MAD=0) → そのまま返す
     let data = [42i32; 8];
-    let filtered = filter_outliers_mad(&data, 3);
+    let filtered = filter_outliers_mad(&data, 3).expect("k > 0");
     assert_eq!(filtered, data);
 }
 
@@ -1014,7 +1014,7 @@ fn test_filter_outliers_mad_all_same() {
 fn test_filter_outliers_mad_multiple_outliers() {
     // 複数の外れ値
     let data = [100i32, 101, 9999, 99, 100, -9999, 101, 100];
-    let filtered = filter_outliers_mad(&data, 3);
+    let filtered = filter_outliers_mad(&data, 3).expect("k > 0");
     assert!(filtered[2] < 200, "upper outlier replaced: {}", filtered[2]);
     assert!(
         filtered[5] > -200,
@@ -1028,7 +1028,7 @@ fn test_filter_outliers_mad_multiple_outliers() {
 fn test_filter_outliers_mad_k1_aggressive() {
     // k=1: より積極的に除去
     let data = [100i32, 101, 102, 200, 99, 100];
-    let filtered = filter_outliers_mad(&data, 1);
+    let filtered = filter_outliers_mad(&data, 1).expect("k > 0");
     // 200 は外れ値として置換される
     assert!(filtered[3] < 200, "filtered[3]={}", filtered[3]);
 }
@@ -1038,7 +1038,7 @@ fn test_filter_outliers_mad_k1_aggressive() {
 fn test_filter_outliers_mad_exact_3_elements() {
     // 3要素での動作
     let data = [10i32, 100, 10];
-    let filtered = filter_outliers_mad(&data, 2);
+    let filtered = filter_outliers_mad(&data, 2).expect("k > 0");
     assert_eq!(filtered.len(), 3);
 }
 
@@ -1047,7 +1047,7 @@ fn test_filter_outliers_mad_exact_3_elements() {
 fn test_fit_linear_robust_no_outliers() {
     // 外れ値なし: 通常フィットと同じ結果
     let data: Vec<i32> = (0..10).map(|x: i32| x * 50).collect();
-    let (s_robust, i_robust) = fit_linear_robust(&data, 3);
+    let (s_robust, i_robust) = fit_linear_robust(&data, 3).expect("k > 0");
     let (s_plain, i_plain) = fit_linear_fixed(&data);
     assert!((s_robust - s_plain).abs() < 200);
     assert!((i_robust - i_plain).abs() < 200);

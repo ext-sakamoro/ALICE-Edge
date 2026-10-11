@@ -184,19 +184,19 @@ fn robust_fit_ignores_a_gross_outlier_and_delta_coding_round_trips() {
     };
     use alice_edge::robust::{filter_outliers_mad, fit_linear_robust};
     // Hampel identifier on a symmetric sample: median 5, MAD 1, k = 3 ⇒ 100 is out
-    let filtered = filter_outliers_mad(&[3, 4, 5, 6, 7, 100], 3);
+    let filtered = filter_outliers_mad(&[3, 4, 5, 6, 7, 100], 3).expect("k > 0");
     assert_eq!(filtered.len(), 6);
     assert!(
         filtered.iter().all(|&v| v <= 7),
         "the outlier is neutralised: {filtered:?}"
     );
     assert_eq!(
-        filter_outliers_mad(&[1, 2], 3),
+        filter_outliers_mad(&[1, 2], 3).expect("k > 0"),
         vec![1, 2],
         "n < 3 untouched"
     );
     assert_eq!(
-        filter_outliers_mad(&[4, 4, 4, 4], 3),
+        filter_outliers_mad(&[4, 4, 4, 4], 3).expect("k > 0"),
         vec![4, 4, 4, 4],
         "MAD 0 untouched"
     );
@@ -204,7 +204,7 @@ fn robust_fit_ignores_a_gross_outlier_and_delta_coding_round_trips() {
     // within 1 % (the outlier carries no information about the line)
     let mut ramp: Vec<i32> = (0..100).collect();
     ramp[10] = 1000;
-    let (slope, intercept) = fit_linear_robust(&ramp, 3);
+    let (slope, intercept) = fit_linear_robust(&ramp, 3).expect("k > 0");
     assert!(
         (f64::from(slope) - q16(1.0)).abs() <= q16(0.01),
         "robust slope {} vs {}",

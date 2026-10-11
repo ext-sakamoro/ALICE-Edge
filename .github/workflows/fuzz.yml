@@ -26,6 +26,7 @@ on:
       - 'src/**'
       - 'Cargo.toml'
       - 'fuzz/**'
+      - 'tests/support/**'
       - 'rust-toolchain.toml'
       - 'scripts/changed_paths.py'
       - '.github/workflows/fuzz.yml'

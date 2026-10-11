@@ -8,6 +8,8 @@ src/**
 # fuzz/Cargo.toml depends on the crate by `path = ".."`
 Cargo.toml
 fuzz/**
+# include! in fuzz/fuzz_targets/fuzz_fit_linear.rs (the robust fit reference)
+tests/support/**
 # `cargo install cargo-fuzz` runs at the repository root, where this file picks the toolchain
 rust-toolchain.toml
 # the changes and gate jobs

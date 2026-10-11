@@ -701,6 +701,37 @@ mod tests {
         assert_eq!(status, ALICE_EDGE_OK);
     }
 
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_ffi_robust_window_bound() {
+        let at_max: Vec<i32> = (0..crate::ROBUST_MAX_N as i32).collect();
+        let (status, out) = ffi_robust(&at_max, 3);
+        assert_eq!(status, ALICE_EDGE_OK);
+        assert_eq!((out.slope, out.intercept), (int_to_q16(1), 0));
+        let mut buf = vec![7i32; at_max.len()];
+        assert_eq!(
+            ffi_filter(&at_max, 3, &mut buf),
+            (ALICE_EDGE_OK, at_max.len())
+        );
+        assert_eq!(buf, at_max);
+
+        let mut too_long = at_max.clone();
+        too_long.push(0);
+        guard::clear_last_error();
+        let (status, out) = ffi_robust(&too_long, 3);
+        assert_eq!(status, ALICE_EDGE_ERR_WINDOW_TOO_LONG);
+        assert_eq!((out.slope, out.intercept), (0, 0));
+        let msg = guard::take_last_error().expect("message recorded");
+        assert!(msg.contains("1025") && msg.contains("1024"), "{msg}");
+
+        let mut buf = vec![7i32; too_long.len()];
+        let (status, written) = ffi_filter(&too_long, 3, &mut buf);
+        assert_eq!(status, ALICE_EDGE_ERR_WINDOW_TOO_LONG);
+        assert_eq!(written, 0);
+        assert!(buf.iter().all(|&v| v == 7), "out must not be written");
+        assert_eq!(ALICE_EDGE_ERR_WINDOW_TOO_LONG, -4);
+    }
+
     #[test]
     fn test_ffi_fit_linear_simd() {
         let data = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];

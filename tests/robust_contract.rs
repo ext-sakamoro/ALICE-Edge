@@ -16,7 +16,7 @@
 //!   and more than half of the samples are kept
 #![cfg(feature = "std")]
 
-use alice_edge::robust::{filter_outliers_mad, fit_linear_robust, RobustError};
+use alice_edge::robust::{filter_outliers_mad, fit_linear_robust, RobustError, ROBUST_MAX_N};
 
 include!("support/robust_reference.rs");
 
@@ -425,4 +425,37 @@ fn three_samples_are_not_identifiable_and_the_result_is_pinned() {
     let centre = [100, 5000, 100];
     assert_eq!(fit_linear_robust(&centre, 3), Ok((0, int_to_q16(100))));
     check_robust_contract(&centre, 3);
+}
+
+/// The window length is bounded: `ROBUST_MAX_N` samples are accepted by
+/// both entry points, one more is refused with `WindowTooLong` (after the
+/// `k` check, so a bad `k` is reported first), whatever the samples.
+#[test]
+fn window_length_is_bounded_by_robust_max_n() {
+    assert_eq!(ROBUST_MAX_N, 1024);
+    let at_max: Vec<i32> = (0..ROBUST_MAX_N as i32).map(|i| 3 * i - 7).collect();
+    assert_eq!(
+        fit_linear_robust(&at_max, 3),
+        Ok((int_to_q16(3), int_to_q16(-7)))
+    );
+    assert_eq!(filter_outliers_mad(&at_max, 3), Ok(at_max.clone()));
+
+    let mut too_long = at_max.clone();
+    too_long.push(0);
+    let err = RobustError::WindowTooLong {
+        n: ROBUST_MAX_N + 1,
+        max: ROBUST_MAX_N,
+    };
+    for k in [1, 3, i32::MAX] {
+        assert_eq!(fit_linear_robust(&too_long, k), Err(err), "k = {k}");
+        assert_eq!(filter_outliers_mad(&too_long, k), Err(err), "k = {k}");
+    }
+    assert_eq!(
+        fit_linear_robust(&too_long, 0),
+        Err(RobustError::NonPositiveK { k: 0 })
+    );
+    assert_eq!(
+        err.to_string(),
+        "window of 1025 samples is longer than the robust bound of 1024"
+    );
 }

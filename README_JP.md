@@ -218,6 +218,14 @@ CI は `x86_64` の Linux と Windows、`aarch64` の Linux と macOS で test �
 
 C ABI は (`std` 時) panic を捕捉し `alice_edge_last_error()` で通知する
 
+robust 系の入口 (`fit_linear_robust` / `filter_outliers_mad`) の外れ値係数 `k`
+は MAD に掛ける素の整数 (`3` は MAD の 3 倍、Q16.16 ではない) で、`k <= 0` は
+`RobustError::NonPositiveK` で拒否する C ABI ではどちらも状態 code (`ALICE_EDGE_OK`、`k <= 0` は
+`ALICE_EDGE_ERR_NON_POSITIVE_K`) を返し、結果は出力引数に書く C# の wrapper
+は `AliceEdgeException` を投げる
+
+<!-- claim-test: a_non_positive_mad_factor_is_refused, non_positive_k_is_refused_by_both_functions -->
+
 ## 最小対応 Rust バージョン
 
 1.87 (`Cargo.toml` の `rust-version`) CI はそのバージョンの toolchain で、

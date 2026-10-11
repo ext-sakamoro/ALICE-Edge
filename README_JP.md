@@ -220,11 +220,25 @@ C ABI は (`std` 時) panic を捕捉し `alice_edge_last_error()` で通知す�
 
 robust 系の入口 (`fit_linear_robust` / `filter_outliers_mad`) の外れ値係数 `k`
 は MAD に掛ける素の整数 (`3` は MAD の 3 倍、Q16.16 ではない) で、`k <= 0` は
-`RobustError::NonPositiveK` で拒否する C ABI ではどちらも状態 code (`ALICE_EDGE_OK`、`k <= 0` は
-`ALICE_EDGE_ERR_NON_POSITIVE_K`) を返し、結果は出力引数に書く C# の wrapper
-は `AliceEdgeException` を投げる
+`RobustError::NonPositiveK`、`ROBUST_MAX_N` (1024) 標本を超える窓は
+`RobustError::WindowTooLong` で拒否する C ABI ではどちらも状態 code
+(`ALICE_EDGE_OK`、`k <= 0` は `ALICE_EDGE_ERR_NON_POSITIVE_K`、上限超えは
+`ALICE_EDGE_ERR_WINDOW_TOO_LONG` (-4)) を返し、結果は出力引数に書く C# の
+wrapper は `AliceEdgeException` を投げる
 
-<!-- claim-test: a_non_positive_mad_factor_is_refused, non_positive_k_is_refused_by_both_functions -->
+`fit_linear_robust` は Siegel の repeated median の直線から始め、残差が残差の
+中央値から `k · max(MAD, 1 count)` を超えて離れた標本を外れ値とし、残す標本
+だけの最小二乗で fit し直し、外れ値の集合が変わらなくなるまで繰り返す (最大 8
+回) 標本は整数なので 1 count を尺度の下限にする 雑音の無い直線に壊れた標本
+1 個 (残差の MAD が 0) でもその標本は外れ値になり、1 count の雑音は残る 外れ
+値が無ければ結果は `fit_linear_fixed` と bit 一致する 開始の直線は
+`n (n − 1)` 回の対の傾きの除算を行うので 1024 標本の上限を置く arm64 desktop
+の 1 core (release) で `n = 1024` のとき 1 呼び出し約 1.9 ms、heap は
+`18 · n` byte 3 標本では直線と外れ値を区別できない (どの 2 点も直線を決める)
+ので、`n = 3` では外れ値除去を保証しない `filter_outliers_mad` は中央値から
+`k · max(MAD, 1)` を超えて離れた標本を中央値に置き換える
+
+<!-- claim-test: a_non_positive_mad_factor_is_refused, non_positive_k_is_refused_by_both_functions, window_length_is_bounded_by_robust_max_n, flat_window_with_a_centre_spike_gives_the_flat_line, the_scale_floor_is_one_count, three_samples_are_not_identifiable_and_the_result_is_pinned -->
 
 ## 最小対応 Rust バージョン
 

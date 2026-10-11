@@ -235,12 +235,27 @@ The C ABI catches panics (with `std`) and reports them through
 The robust entry points (`fit_linear_robust`, `filter_outliers_mad`) take the
 outlier factor `k` as a plain integer multiplier of the MAD (`3` means three
 MADs; it is not Q16.16) and refuse `k <= 0` with
-`RobustError::NonPositiveK`. Through the C ABI both return a status code
-(`ALICE_EDGE_OK`, or `ALICE_EDGE_ERR_NON_POSITIVE_K` for `k <= 0`) and write
-their result through an out-parameter; the C# wrapper raises
-`AliceEdgeException`.
+`RobustError::NonPositiveK`, and a window longer than `ROBUST_MAX_N` (1024)
+samples with `RobustError::WindowTooLong`. Through the C ABI both return a
+status code (`ALICE_EDGE_OK`, `ALICE_EDGE_ERR_NON_POSITIVE_K` for `k <= 0`,
+`ALICE_EDGE_ERR_WINDOW_TOO_LONG` (-4) past the bound) and write their result
+through an out-parameter; the C# wrapper raises `AliceEdgeException`.
 
-<!-- claim-test: a_non_positive_mad_factor_is_refused, non_positive_k_is_refused_by_both_functions -->
+`fit_linear_robust` starts from Siegel's repeated-median line, flags a sample
+when its residual is more than `k · max(MAD, one count)` from the residual
+median, refits by least squares on the kept samples, and repeats until the
+flagged set is stable (at most 8 refits). One count is the floor because the
+samples are integers: an exact line with one corrupted sample (residual MAD
+0) still has the sample flagged, while one-count noise is kept. With nothing
+flagged the result is `fit_linear_fixed` bit for bit. The start makes
+`n (n − 1)` pair-slope divisions, which is what the 1024-sample bound fixes:
+about 1.9 ms per call at `n = 1024` on an arm64 desktop core (release), and
+`18 · n` bytes of heap. Three samples cannot separate a line from an outlier
+(any two of them define a line), so no filtering is claimed for `n = 3`.
+`filter_outliers_mad` replaces a sample by the median when it is more than
+`k · max(MAD, 1)` from it.
+
+<!-- claim-test: a_non_positive_mad_factor_is_refused, non_positive_k_is_refused_by_both_functions, window_length_is_bounded_by_robust_max_n, flat_window_with_a_centre_spike_gives_the_flat_line, the_scale_floor_is_one_count, three_samples_are_not_identifiable_and_the_result_is_pinned -->
 
 ## Minimum supported Rust version
 

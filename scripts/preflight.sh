@@ -53,6 +53,10 @@ step "ci.yml / docs-lint: tests + public documents / CHANGELOG structure"
 python3 scripts/test_docs_lint.py
 python3 scripts/docs_lint.py --check
 
+step "ci.yml / docs-lint: FFI status codes agree in Rust / C / C#"
+python3 scripts/test_ffi_status_check.py
+python3 scripts/ffi_status_check.py
+
 step "security-audit.yml / stub-guard"
 scripts/stub_guard.sh
 

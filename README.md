@@ -232,6 +232,16 @@ not built in CI.
 The C ABI catches panics (with `std`) and reports them through
 `alice_edge_last_error()`.
 
+The robust entry points (`fit_linear_robust`, `filter_outliers_mad`) take the
+outlier factor `k` as a plain integer multiplier of the MAD (`3` means three
+MADs; it is not Q16.16) and refuse `k <= 0` with
+`RobustError::NonPositiveK`. Through the C ABI both return a status code
+(`ALICE_EDGE_OK`, or `ALICE_EDGE_ERR_NON_POSITIVE_K` for `k <= 0`) and write
+their result through an out-parameter; the C# wrapper raises
+`AliceEdgeException`.
+
+<!-- claim-test: a_non_positive_mad_factor_is_refused, non_positive_k_is_refused_by_both_functions -->
+
 ## Minimum supported Rust version
 
 1.87 (`rust-version` in `Cargo.toml`). CI compiles the library on exactly

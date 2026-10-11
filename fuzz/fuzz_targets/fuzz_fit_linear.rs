@@ -16,7 +16,11 @@
 //!      saturated in `i64`, least-squares refit until the set is stable)
 //!    - the result is the least-squares fit of the kept indices, bit for
 //!      bit, and more than half of the samples are kept
-//!    The inputs are integers: there is no NaN case.
+//!    A window longer than `ROBUST_MAX_N` is refused with
+//!    `RobustError::WindowTooLong` by both robust functions; the contract
+//!    is then checked again on its first `ROBUST_MAX_N` samples, so long
+//!    inputs still reach the rule. The inputs are integers: there is no NaN
+//!    case.
 //!
 //! 3. `filter_outliers_mad(data, k)` has its own contract on the raw values:
 //!    `k <= 0` is refused with the same error; otherwise same length; fewer
@@ -26,7 +30,7 @@
 //!    `fit_linear_robust`, so the two are checked separately.
 #![no_main]
 
-use alice_edge::{filter_outliers_mad, fit_linear_simd, RobustError};
+use alice_edge::{filter_outliers_mad, fit_linear_simd, RobustError, ROBUST_MAX_N};
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
@@ -51,6 +55,29 @@ fuzz_target!(|input: Input| {
         data.len()
     );
 
+    if data.len() > ROBUST_MAX_N {
+        // refused by both robust functions (the fit's check is in the
+        // shared contract), then the contract on the first ROBUST_MAX_N
+        check_robust_contract(data, k);
+        if k > 0 {
+            assert_eq!(
+                filter_outliers_mad(data, k),
+                Err(RobustError::WindowTooLong {
+                    n: data.len(),
+                    max: ROBUST_MAX_N
+                }),
+                "filter_outliers_mad must refuse {} samples",
+                data.len()
+            );
+        }
+        check_window(&data[..ROBUST_MAX_N], k);
+    } else {
+        check_window(data, k);
+    }
+});
+
+/// The robust fit and filter contracts on a window within the bound.
+fn check_window(data: &[i32], k: i32) {
     check_robust_contract(data, k);
 
     if k <= 0 {
@@ -64,10 +91,10 @@ fuzz_target!(|input: Input| {
     let filtered = filter_outliers_mad(data, k).expect("k > 0 is accepted");
     assert_eq!(filtered.len(), data.len());
     if data.len() < 3 {
-        assert_eq!(&filtered, data, "fewer than 3 samples must pass through");
+        assert_eq!(filtered, data, "fewer than 3 samples must pass through");
         return;
     }
-    let mut sorted = data.clone();
+    let mut sorted = data.to_vec();
     sorted.sort_unstable();
     let median = sorted[data.len() / 2];
     let dev = |x: i32| (i64::from(x) - i64::from(median)).abs();
@@ -86,4 +113,4 @@ fuzz_target!(|input: Input| {
             "filter_outliers_mad element {i} (k = {k}, MAD = {mad})"
         );
     }
-});
+}

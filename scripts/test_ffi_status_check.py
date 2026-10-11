@@ -45,12 +45,12 @@ class FfiStatusCheckTest(unittest.TestCase):
     def test_repository_is_consistent(self):
         errors, counts = fsc.check(ROOT)
         self.assertEqual(errors, [])
-        self.assertEqual(counts, {"rust": 4, "c": 4, "cs": 4, "compared": 4})
+        self.assertEqual(counts, {"rust": 5, "c": 5, "cs": 5, "compared": 5})
 
     def test_copy_is_consistent(self):
         errors, counts = fsc.check(self.tmp)
         self.assertEqual(errors, [])
-        self.assertEqual(counts["compared"], 4)
+        self.assertEqual(counts["compared"], 5)
 
     def test_swap_in_rust(self):
         self.edit(fsc.RUST_FILE, "ALICE_EDGE_ERR_NULL_POINTER: i32 = -1;", "ALICE_EDGE_ERR_NULL_POINTER: i32 = -2;")
@@ -71,17 +71,59 @@ class FfiStatusCheckTest(unittest.TestCase):
 
     def test_missing_entry_in_cs(self):
         self.edit(fsc.CS_FILE, "        public const int Panic = -3;\n", "")
-        self.assertFinding("found 3 status codes, expected 4")
+        self.assertFinding("found 4 status codes, expected 5")
         self.assertFinding("AliceEdge.cs: ALICE_EDGE_ERR_PANIC is missing")
-        self.assertFinding("compared 3 codes")
+        self.assertFinding("compared 4 codes")
 
     def test_missing_entry_in_c(self):
         self.edit(fsc.C_FILE, "#define ALICE_EDGE_ERR_NULL_POINTER   (-1) // a required pointer was null\n", "")
         self.assertFinding("alice_edge.h: ALICE_EDGE_ERR_NULL_POINTER is missing")
 
     def test_extra_entry_in_rust(self):
-        self.edit(fsc.RUST_FILE, "pub const ALICE_EDGE_OK: i32 = 0;", "pub const ALICE_EDGE_OK: i32 = 0;\npub const ALICE_EDGE_ERR_OTHER: i32 = -4;")
-        self.assertFinding("found 5 status codes, expected 4")
+        self.edit(fsc.RUST_FILE, "pub const ALICE_EDGE_OK: i32 = 0;", "pub const ALICE_EDGE_OK: i32 = 0;\npub const ALICE_EDGE_ERR_OTHER: i32 = -5;")
+        self.assertFinding("found 6 status codes, expected 5")
+
+    def test_swap_window_too_long_in_rust(self):
+        self.edit(fsc.RUST_FILE, "ALICE_EDGE_ERR_PANIC: i32 = -3;", "ALICE_EDGE_ERR_PANIC: i32 = -4;")
+        self.edit(fsc.RUST_FILE, "ALICE_EDGE_ERR_WINDOW_TOO_LONG: i32 = -4;", "ALICE_EDGE_ERR_WINDOW_TOO_LONG: i32 = -3;")
+        self.assertFinding("ALICE_EDGE_ERR_PANIC differs")
+        self.assertFinding("ALICE_EDGE_ERR_WINDOW_TOO_LONG differs")
+
+    def test_swap_window_too_long_in_c(self):
+        self.edit(fsc.C_FILE, "ALICE_EDGE_ERR_NULL_POINTER   (-1)", "ALICE_EDGE_ERR_NULL_POINTER   (-4)")
+        self.edit(fsc.C_FILE, "ALICE_EDGE_ERR_WINDOW_TOO_LONG (-4)", "ALICE_EDGE_ERR_WINDOW_TOO_LONG (-1)")
+        self.assertFinding("ALICE_EDGE_ERR_NULL_POINTER differs")
+        self.assertFinding("ALICE_EDGE_ERR_WINDOW_TOO_LONG differs")
+
+    def test_swap_window_too_long_in_cs(self):
+        self.edit(fsc.CS_FILE, "public const int NonPositiveK = -2;", "public const int NonPositiveK = -4;")
+        self.edit(fsc.CS_FILE, "public const int WindowTooLong = -4;", "public const int WindowTooLong = -2;")
+        self.assertFinding("ALICE_EDGE_ERR_NON_POSITIVE_K differs")
+        self.assertFinding("ALICE_EDGE_ERR_WINDOW_TOO_LONG differs")
+
+    def test_missing_window_too_long_in_each_file(self):
+        removals = (
+            (fsc.RUST_FILE, "pub const ALICE_EDGE_ERR_WINDOW_TOO_LONG: i32 = -4;"),
+            (fsc.C_FILE, "#define ALICE_EDGE_ERR_WINDOW_TOO_LONG (-4) // len > ALICE_EDGE_ROBUST_MAX_N"),
+            (fsc.CS_FILE, "public const int WindowTooLong = -4;"),
+        )
+        for rel, line in removals:
+            with self.subTest(rel=rel):
+                # a fresh copy of the three files for each removal
+                self.tearDown()
+                self.setUp()
+                self.edit(rel, line, "")
+                self.assertFinding(f"{rel}: found 4 status codes, expected 5")
+                self.assertFinding(f"{rel}: ALICE_EDGE_ERR_WINDOW_TOO_LONG is missing")
+                self.assertFinding("compared 4 codes")
+
+    def test_limits_class_is_not_a_status(self):
+        # AliceLimits.RobustMaxN and ALICE_EDGE_ROBUST_MAX_N sit next to the
+        # status codes but are not status codes
+        errors, counts = fsc.check(self.tmp)
+        self.assertEqual(errors, [])
+        self.assertEqual(counts["cs"], 5)
+        self.assertEqual(counts["c"], 5)
 
     def test_renamed_class_compares_nothing(self):
         self.edit(fsc.CS_FILE, "class AliceStatus", "class AliceStatusCodes")
@@ -93,6 +135,7 @@ class FfiStatusCheckTest(unittest.TestCase):
         self.assertEqual(fsc.cs_to_c("Ok"), "OK")
         self.assertEqual(fsc.cs_to_c("NonPositiveK"), "ERR_NON_POSITIVE_K")
         self.assertEqual(fsc.cs_to_c("NullPointer"), "ERR_NULL_POINTER")
+        self.assertEqual(fsc.cs_to_c("WindowTooLong"), "ERR_WINDOW_TOO_LONG")
 
 
 if __name__ == "__main__":

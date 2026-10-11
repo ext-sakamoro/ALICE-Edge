@@ -29,7 +29,7 @@ import os
 import re
 import sys
 
-EXPECTED_COUNT = 4
+EXPECTED_COUNT = 5
 
 RUST_FILE = os.path.join("src", "ffi.rs")
 C_FILE = os.path.join("bindings", "alice_edge.h")

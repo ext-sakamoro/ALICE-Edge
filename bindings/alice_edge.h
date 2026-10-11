@@ -43,6 +43,10 @@ typedef struct {
 #define ALICE_EDGE_ERR_NULL_POINTER   (-1) // a required pointer was null
 #define ALICE_EDGE_ERR_NON_POSITIVE_K (-2) // outlier factor k <= 0
 #define ALICE_EDGE_ERR_PANIC          (-3) // the call panicked
+#define ALICE_EDGE_ERR_WINDOW_TOO_LONG (-4) // len > ALICE_EDGE_ROBUST_MAX_N
+
+// Longest window alice_fit_linear_robust and alice_filter_outliers_mad accept.
+#define ALICE_EDGE_ROBUST_MAX_N 1024
 
 // ── Linear fitting ──────────────────────────────────────────────────────
 
@@ -94,14 +98,17 @@ int64_t alice_residual_error(const int32_t* data, size_t len,
 
 // ── Robust / SIMD fitting ───────────────────────────────────────────────
 
-// Robust linear fit: MAD outlier rejection on the residuals of a
-// least-squares fit, outliers filled with the line's prediction, refit.
+// Robust linear fit: repeated-median start, MAD outlier rejection on the
+// residuals (scale floor of one count), least-squares refit of the kept
+// samples until the outlier set is stable.
 // k: outlier factor, a PLAIN INTEGER multiplier of the MAD (3 = three MADs;
 //    not Q16.16). k <= 0 returns ALICE_EDGE_ERR_NON_POSITIVE_K.
+// len > ALICE_EDGE_ROBUST_MAX_N (1024) returns ALICE_EDGE_ERR_WINDOW_TOO_LONG.
 // out: receives the fit (Q16.16 slope / intercept); set to {0, 0} on error.
 // len == 0 (data may be NULL) is the plain fit of
 // nothing, ALICE_EDGE_OK.
 // Returns ALICE_EDGE_OK, ALICE_EDGE_ERR_NON_POSITIVE_K,
+// ALICE_EDGE_ERR_WINDOW_TOO_LONG,
 // ALICE_EDGE_ERR_NULL_POINTER (out NULL, or data NULL with len > 0) or
 // ALICE_EDGE_ERR_PANIC.
 int32_t alice_fit_linear_robust(const int32_t* data, size_t len, int32_t k,
@@ -113,12 +120,14 @@ AliceLinearResult alice_fit_linear_simd(const int32_t* data, size_t len);
 // ── Filter / Delta encoding ────────────────────────────────────────────
 
 // Filter outliers using MAD: x is replaced by the median when
-// |x - median| > k * MAD. Writes min(len, out_capacity) elements to out and
+// |x - median| > k * max(MAD, 1). Writes min(len, out_capacity) elements to out and
 // that count to *out_written.
 // k: outlier factor, a PLAIN INTEGER multiplier of the MAD (3 = three MADs;
 //    not Q16.16). k <= 0 returns ALICE_EDGE_ERR_NON_POSITIVE_K.
+// len > ALICE_EDGE_ROBUST_MAX_N (1024) returns ALICE_EDGE_ERR_WINDOW_TOO_LONG.
 // Fewer than 3 samples pass the window through unchanged. On error *out_written is 0 and out is not written.
 // Returns ALICE_EDGE_OK, ALICE_EDGE_ERR_NON_POSITIVE_K,
+// ALICE_EDGE_ERR_WINDOW_TOO_LONG,
 // ALICE_EDGE_ERR_NULL_POINTER (out_written NULL, data NULL with len > 0, or
 // out NULL with out_capacity > 0) or ALICE_EDGE_ERR_PANIC.
 int32_t alice_filter_outliers_mad(const int32_t* data, size_t len, int32_t k,

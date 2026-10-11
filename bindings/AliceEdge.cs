@@ -44,6 +44,14 @@ namespace AliceEdge
         public const int NullPointer = -1;
         public const int NonPositiveK = -2;
         public const int Panic = -3;
+        public const int WindowTooLong = -4;
+    }
+
+    /// Limits of the robust / filter functions (see alice_edge.h)
+    public static class AliceLimits
+    {
+        /// Longest window FitLinearRobust / FilterOutliersMad accept
+        public const int RobustMaxN = 1024;
     }
 
     /// A native call returned a status other than AliceStatus.Ok
@@ -122,7 +130,8 @@ namespace AliceEdge
         // ── Robust / SIMD ───────────────────────────────────────────────
 
         /// k: outlier factor, a plain integer multiplier of the MAD (3 = three
-        /// MADs, not Q16.16); k <= 0 returns AliceStatus.NonPositiveK
+        /// MADs, not Q16.16); k <= 0 returns AliceStatus.NonPositiveK;
+        /// len > AliceLimits.RobustMaxN returns AliceStatus.WindowTooLong
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern int alice_fit_linear_robust(int[] data, UIntPtr len, int k,
                                                          out AliceLinearResult result);
@@ -133,7 +142,8 @@ namespace AliceEdge
         // ── Filter / Delta ──────────────────────────────────────────────
 
         /// k: outlier factor, a plain integer multiplier of the MAD (3 = three
-        /// MADs, not Q16.16); k <= 0 returns AliceStatus.NonPositiveK
+        /// MADs, not Q16.16); k <= 0 returns AliceStatus.NonPositiveK;
+        /// len > AliceLimits.RobustMaxN returns AliceStatus.WindowTooLong
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern int alice_filter_outliers_mad(int[] data, UIntPtr len, int k,
                                                            [Out] int[] outBuf, UIntPtr outCapacity,
@@ -179,10 +189,13 @@ namespace AliceEdge
             return Native.alice_int_to_q16(i);
         }
 
-        /// Robust linear fit (MAD rejection on the residuals), returning
+        /// Robust linear fit (repeated-median start, MAD rejection on the
+        /// residuals, least-squares refit of the kept samples), returning
         /// (slope, intercept) in Q16.16. k is a plain integer multiplier of the
         /// MAD (3 = three MADs, not Q16.16). Throws AliceEdgeException when
-        /// k <= 0 (Status == AliceStatus.NonPositiveK) or on any other error.
+        /// k <= 0 (Status == AliceStatus.NonPositiveK), when data is longer
+        /// than AliceLimits.RobustMaxN (Status == AliceStatus.WindowTooLong) or
+        /// on any other error.
         public static (int slope, int intercept) FitLinearRobust(int[] data, int k)
         {
             int status = Native.alice_fit_linear_robust(data, (UIntPtr)data.Length, k,
@@ -192,7 +205,10 @@ namespace AliceEdge
         }
 
         /// Replace MAD outliers by the median. k is a plain integer multiplier
-        /// of the MAD (3 = three MADs, not Q16.16). Throws AliceEdgeException when k <= 0 or on any other error.
+        /// of the MAD (3 = three MADs, not Q16.16), with a floor of one count on
+        /// the MAD. Throws AliceEdgeException when k <= 0, when data is longer
+        /// than AliceLimits.RobustMaxN (Status == AliceStatus.WindowTooLong) or
+        /// on any other error.
         public static int[] FilterOutliersMad(int[] data, int k)
         {
             var outBuf = new int[data.Length];

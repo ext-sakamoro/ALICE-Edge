@@ -468,21 +468,31 @@ fn golden_det_math_kernels() {
 // One hash per outlier factor `k` (a plain integer multiplier of the MAD).
 // Until 0.1.x this was a single hash over k ∈ {0, 1, 3, 10, i32::MAX}
 // (`30f195a6…`); `k <= 0` is now refused, so the scenario was split per `k`.
-// The four `k > 0` hashes below were recorded on the code *before* the
-// change (`d401fc3`) and are unchanged by it.
+//
+// 0.2.0 changed the fit (repeated-median start, least-squares refit of the
+// kept samples, scale floor of one count). The `filter_outliers_mad` outputs
+// are unchanged on every window; the fit moved in 8 of the 52 cases, all on
+// windows the old start or the old refit did not recover:
+// - k = 1 (`f7baf928…` → `a8bab202…`): cubes10, ramp64, ramp64 + spike,
+//   broken80 (the refit and the start both move them)
+// - k = 3 (`07caa63a…` → `764ebc23…`): cubes10 and broken80 (the start: the
+//   repeated median selects the first segment of broken80, which is then
+//   refit exactly as `(3, 0)`), ramp64 + spike (the refit)
+// - k = 10 (`75950f93…` → `ea9812e1…`): ramp64 + spike (the refit)
+// - k = i32::MAX (`a8de2b48…`): unchanged, nothing is ever flagged
 #[cfg(feature = "std")]
 const GOLDEN_ROBUST: [(i32, &str); 4] = [
     (
         1,
-        "f7baf928bd39a35e1e03ecf93bb7779ebbde6e7c24bb5e28ebf59a1332806e76",
+        "a8bab2022a2908ba6d6dfbab5fc6ad5410c01dc5b8c8c297d828677231d5783c",
     ),
     (
         3,
-        "07caa63a49319ad7e8e2399d640779496b71d6cd1add0294cd874a91d469bb83",
+        "764ebc23c0ef096a7286ba2f20552709473ae2341ccef1bbdf3e0de0cc141855",
     ),
     (
         10,
-        "75950f93be1f73f55d024000dccf87c9b62b4fc03a93885f11fedb0975aab1ae",
+        "ea9812e1eb47cce1004feb8315a530c5e24ac21a7f0b845d95a963963ce1963b",
     ),
     (
         i32::MAX,

@@ -1,20 +1,19 @@
-//! Contract of `fit_linear_robust`: MAD filtering on the residuals of a fit,
-//! outliers filled with the line's own prediction, refit until the outlier
-//! set stops changing.
+//! Contract of `fit_linear_robust`: a repeated-median start, MAD flagging on
+//! the residuals with a scale floor of one count, least-squares refit on the
+//! kept samples until the outlier set stops changing.
 //!
 //! The rule and its arithmetic are written out in
 //! `tests/support/robust_reference.rs`; the fuzz target
 //! `fuzz/fuzz_targets/fuzz_fit_linear.rs` includes the same file, so both
 //! check the same clauses:
-//! - fewer than 3 samples, a first-round residual MAD of 0, or no
-//!   first-round residual with `|r| > k · MAD` → `fit_linear_fixed(data)`
 //! - `k <= 0` is refused with `RobustError::NonPositiveK { k }` (for both
 //!   `fit_linear_robust` and `filter_outliers_mad`)
+//! - fewer than 3 samples, or an empty final outlier set →
+//!   `fit_linear_fixed(data)`, bit for bit
 //! - the result equals the fit the documented rule produces, for every
 //!   `k > 0`
-//! - the result is `fit_linear_fixed(filled)`, where the filled series has
-//!   the input's length and element `i` is bit-exact either `data[i]` or the
-//!   line prediction at `i`
+//! - the result is the least-squares fit of the kept indices, bit for bit,
+//!   and more than half of the samples are kept
 #![cfg(feature = "std")]
 
 use alice_edge::robust::{filter_outliers_mad, fit_linear_robust, RobustError};
@@ -44,17 +43,28 @@ impl Rng {
 /// (fuzz/regressions/fuzz_fit_linear/crash-284d0a5c…): `[4, -1, 0]`, found
 /// with k = 0, which is now refused.
 ///
-/// oracle (by hand): the least-squares line through (0, 4), (1, −1), (2, 0)
-/// has slope −2 and intercept 3. Its residuals 1, −2, 1 centre on the median
-/// 1 to 0, −3, 0, whose MAD is 0, so the rule returns that plain fit (for
-/// every `k > 0` now that `k = 0` is refused).
+/// oracle (by hand): the repeated-median rows are −3.5 (slopes −5 and −2),
+/// −2 (−5 and 1) and −0.5 (−2 and 1), so the slope is −2; the intercept
+/// candidates are 4, 1 and 4, so the start is `4 − 2x`. Its residuals are 0,
+/// −3 and 0 counts: median 0, MAD 0, scale floor one count. With k = 1 the
+/// middle sample (3 counts > 1) is flagged and the least-squares line of the
+/// other two is `(−2, 4)`; with k = 3 it is not above 3 counts, nothing is
+/// flagged and the plain fit `(−2, 3)` comes back (whose centred residuals
+/// are 0, −3, 0 counts again). Before the floor this window took the MAD-0
+/// early return for every k.
 #[test]
-fn regression_mad_zero_residuals_return_the_plain_fit() {
+fn regression_mad_zero_residuals_use_the_scale_floor() {
     let data = [4, -1, 0];
-    let expected = (int_to_q16(-2), int_to_q16(3));
-    assert_eq!(expected, (-131_072, 196_608));
+    let plain = (int_to_q16(-2), int_to_q16(3));
+    assert_eq!(fit_linear_fixed(&data), plain);
+    assert_eq!(
+        fit_linear_robust(&data, 1),
+        Ok((int_to_q16(-2), int_to_q16(4)))
+    );
     for k in [1, 3, i32::MAX] {
-        assert_eq!(fit_linear_robust(&data, k), Ok(expected), "k = {k}");
+        if k > 1 {
+            assert_eq!(fit_linear_robust(&data, k), Ok(plain), "k = {k}");
+        }
         check_robust_contract(&data, k);
     }
     assert_eq!(
@@ -96,13 +106,17 @@ fn small_windows_follow_the_rule_for_every_k() {
         let data: Vec<i32> = (0..n).map(|_| rng.range(-8, 8)).collect();
         for k in KS {
             check_robust_contract(&data, k);
-            if k > 0 && robust_reference(&data, k).filled.is_some() {
+            if k > 0
+                && robust_reference(&data, k)
+                    .outliers
+                    .is_some_and(|o| o.contains(&true))
+            {
                 filled += 1;
             }
         }
     }
-    // the sweep must reach the filling path, not only the early returns
-    assert!(filled > 1000, "only {filled} cases reached a fill");
+    // the sweep must reach the refit of a strict subset, not only the plain fit
+    assert!(filled > 1000, "only {filled} cases flagged an outlier");
 }
 
 /// Ramps with injected outliers, the case the robust fit exists for.
@@ -361,15 +375,19 @@ fn filter_scale_floor_is_one_count() {
 /// below 3. The 80 row medians sort as 39 values below 3 and 41 threes, so
 /// both middle values are 3 and the slope is 3; the intercept candidates are
 /// 41 zeros and 39 negatives, so it is 0. Every sample past 40 is then at
-/// least 5 counts off: flagged for k = 1, 3 and 10, and the refit of the
-/// first segment is exactly `(3, 0)`. With `k = i32::MAX` nothing is flagged
-/// and the plain fit comes back.
+/// least 5 counts off: flagged for k = 1 and 3, and the refit of the first
+/// segment is exactly `(3, 0)`. With k = 10 the threshold is 10 counts, so
+/// the junction samples 41 and 42 (5 and 10 counts off the first line) are
+/// kept, each refit tilts towards the second segment and admits more of it,
+/// and after four refits every sample is kept: the plain fit (measured:
+/// 43 → 45 → 52 → 80 kept samples). With `k = i32::MAX` nothing is flagged
+/// either.
 #[test]
 fn broken_line_takes_the_segment_the_repeated_median_selects() {
     let data: Vec<i32> = (0..80)
         .map(|x: i32| if x < 40 { 3 * x } else { 120 - 2 * (x - 40) })
         .collect();
-    for k in [1, 3, 10] {
+    for k in [1, 3] {
         assert_eq!(
             fit_linear_robust(&data, k),
             Ok((int_to_q16(3), 0)),
@@ -377,10 +395,14 @@ fn broken_line_takes_the_segment_the_repeated_median_selects() {
         );
         check_robust_contract(&data, k);
     }
-    assert_eq!(
-        fit_linear_robust(&data, i32::MAX),
-        Ok(fit_linear_fixed(&data))
-    );
+    for k in [10, i32::MAX] {
+        assert_eq!(
+            fit_linear_robust(&data, k),
+            Ok(fit_linear_fixed(&data)),
+            "k = {k}"
+        );
+        check_robust_contract(&data, k);
+    }
 }
 
 /// Three samples cannot identify a line and an outlier: any two of them

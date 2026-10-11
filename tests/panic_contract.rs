@@ -167,10 +167,11 @@ fn a_single_sample_window_gives_a_constant_fit() {
 // The divisions by a caller-supplied number
 // ---------------------------------------------------------------------------
 
-/// Contract: **early return, with the guarded value asserted.** Three
+/// Contract: **early return, with the guarded value asserted.** Two
 /// divisions take a number derived from the argument: the window length (the
-/// mean), the normal-equation determinant (the slope) and the median absolute
-/// deviation (the outlier threshold). Each guards its zero, and this case
+/// mean) and the normal-equation determinant (the slope); the median absolute
+/// deviation scales the outlier threshold with a floor of one count instead
+/// of being divided by. Each guards its zero, and this case
 /// pins the guarded answer rather than only the absence of a panic — the
 /// division by zero would be caught in every profile anyway, so "it did not
 /// panic" would pass even with the guards removed from a path that cannot
@@ -189,31 +190,40 @@ fn every_division_by_a_derived_number_guards_its_zero() {
         (int_to_q16(100), int_to_q16(100))
     );
 
-    // MAD zero (every sample identical): the window is returned untouched
-    // instead of dividing by it.
+    // MAD zero (more than half of the window identical): nothing divides by
+    // the MAD. Both robust entry points scale the threshold by
+    // `max(MAD, one count)` (the filter: `max(MAD, 1)` on raw samples, the
+    // fit: `max(MAD, Q16_ONE)` on Q16.16 residuals), so a MAD of 0 still
+    // gives a threshold of `k` counts.
     //
-    // Measured: the two `mad == 0` early returns in `robust` are pure
-    // short-circuits. With `mad == 0` the threshold is `k · 0 = 0`, every
-    // deviation is also 0, so the comparison keeps every sample and the
-    // refit converges on the first pass — removing either early return gives
-    // the same answer. No assertion can have teeth on them, so what is
-    // asserted here is the answer, not the branch. What does carry the
-    // division's weight is the saturating threshold below.
+    // Measured: the `mad == 0` early returns this replaced were not pure
+    // short-circuits. They returned before the comparison, so a flat window
+    // with one spike (MAD 0) came back with the spike in it: the filter left
+    // 5000 in `[100; 9]`, and the fit of that window was the least-squares
+    // line through the spike. Both are asserted here and in
+    // tests/robust_contract.rs.
     let flat = [7i32; 9];
     assert_eq!(filter_outliers_mad(&flat, 3), Ok(flat.to_vec()));
     assert_eq!(fit_linear_robust(&flat, 3), Ok((0, int_to_q16(7))));
+    let mut flat_spike = [100i32; 9];
+    flat_spike[4] = 5000;
+    assert_eq!(filter_outliers_mad(&flat_spike, 3), Ok(vec![100; 9]));
+    assert_eq!(fit_linear_robust(&flat_spike, 3), Ok((0, int_to_q16(100))));
 
     // a huge `k` keeps every sample instead of flipping negative and
     // rejecting all of them.
     //
-    // Measured: the `saturating_mul` that computes the threshold can never
-    // actually saturate. `k` is at most `2³¹ − 1` and a deviation between two
-    // `i32` values is at most `2³² − 1`, so the product is at most
-    // `(2³¹ − 1)(2³² − 1) = 9223372030412324865`, which is below
-    // `i64::MAX = 9223372036854775807`. Replacing it with `wrapping_mul` or a
-    // plain `*` gives the same answer for every input, so this assertion
-    // cannot have teeth on the saturation either — it pins the answer. The
-    // saturation mattered when the deviations were computed in `i32`.
+    // Measured: in the filter the saturating product cannot saturate — `k`
+    // is at most `2³¹ − 1` and a deviation between two `i32` values at most
+    // `2³² − 1`, so `k · max(MAD, 1)` is at most
+    // `(2³¹ − 1)(2³² − 1) = 9223372030412324865 < i64::MAX`, and the filter
+    // asserts below pin the answer only. In the fit it does saturate: the
+    // residuals are Q16.16 in `i64` and samples outside the Q16.16 range
+    // wrap in `int_to_q16`, so the residual MAD can exceed `2³²`. The
+    // window below has a residual MAD of 4 713 552 281 against its plain
+    // fit; `i32::MAX` times that is past `i64::MAX`, saturated nothing is
+    // flagged and the plain fit comes back, wrapped the threshold is
+    // negative and every sample is an outlier.
     let spiked = [1i32, 2, 3, 4, 1_000_000];
     assert_eq!(filter_outliers_mad(&spiked, i32::MAX), Ok(spiked.to_vec()));
     assert_eq!(filter_outliers_mad(&spiked, 1 << 24), Ok(spiked.to_vec()));
@@ -221,6 +231,14 @@ fn every_division_by_a_derived_number_guards_its_zero() {
     assert_eq!(
         filter_outliers_mad(&full_range, i32::MAX),
         Ok(full_range.to_vec())
+    );
+    let wraps = [32_778i32, 32_868, -32_862, 32_751];
+    assert_eq!(
+        value(
+            "fit_linear_robust",
+            run(|| fit_linear_robust(&wraps, i32::MAX))
+        ),
+        Ok(fit_linear_fixed(&wraps))
     );
 
     // a minimum segment length below two cannot terminate the recursion, so
@@ -249,9 +267,9 @@ fn every_division_by_a_derived_number_guards_its_zero() {
 
 /// Contract: **`Err`.** The outlier factor `k` is a plain integer
 /// multiplier of the MAD, and the rule keeps a sample when
-/// `|x − median| <= k · MAD`, so `k <= 0` would keep nothing: every sample
-/// would be replaced by the median (and every non-zero residual of the
-/// robust fit would be filled). One bad argument would destroy the window
+/// `|x − median| <= k · max(MAD, 1)`, so `k <= 0` would keep nothing but
+/// the samples exactly at the median: every other sample would be replaced
+/// (and every non-zero residual of the robust fit flagged). One bad argument would destroy the window
 /// and return a plausible-looking result, so both functions refuse it with
 /// `RobustError::NonPositiveK { k }`, before looking at the window. The
 /// saturating upper end is pinned next to it (a huge `k` keeps everything

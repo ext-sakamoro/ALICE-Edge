@@ -8,14 +8,16 @@
 //! check the same clauses:
 //! - fewer than 3 samples, a first-round residual MAD of 0, or no
 //!   first-round residual with `|r| > k · MAD` → `fit_linear_fixed(data)`
-//! - the result equals the fit the documented rule produces, for any `k`
-//!   (including `k <= 0`)
+//! - `k <= 0` is refused with `RobustError::NonPositiveK { k }` (for both
+//!   `fit_linear_robust` and `filter_outliers_mad`)
+//! - the result equals the fit the documented rule produces, for every
+//!   `k > 0`
 //! - the result is `fit_linear_fixed(filled)`, where the filled series has
 //!   the input's length and element `i` is bit-exact either `data[i]` or the
 //!   line prediction at `i`
 #![cfg(feature = "std")]
 
-use alice_edge::robust::{filter_outliers_mad, fit_linear_robust};
+use alice_edge::robust::{filter_outliers_mad, fit_linear_robust, RobustError};
 
 include!("support/robust_reference.rs");
 
@@ -39,24 +41,48 @@ impl Rng {
 }
 
 /// The input the time-boxed fuzz run found on 2026-10-10
-/// (fuzz/regressions/fuzz_fit_linear/crash-284d0a5c…): `[4, -1, 0]`, k = 0.
+/// (fuzz/regressions/fuzz_fit_linear/crash-284d0a5c…): `[4, -1, 0]`, found
+/// with k = 0, which is now refused.
 ///
 /// oracle (by hand): the least-squares line through (0, 4), (1, −1), (2, 0)
 /// has slope −2 and intercept 3. Its residuals 1, −2, 1 centre on the median
-/// 1 to 0, −3, 0, whose MAD is 0, so the rule returns that plain fit.
+/// 1 to 0, −3, 0, whose MAD is 0, so the rule returns that plain fit (for
+/// every `k > 0` now that `k = 0` is refused).
 #[test]
 fn regression_mad_zero_residuals_return_the_plain_fit() {
     let data = [4, -1, 0];
     let expected = (int_to_q16(-2), int_to_q16(3));
     assert_eq!(expected, (-131_072, 196_608));
-    assert_eq!(fit_linear_robust(&data, 0), expected);
-    check_robust_contract(&data, 0);
+    for k in [1, 3, i32::MAX] {
+        assert_eq!(fit_linear_robust(&data, k), Ok(expected), "k = {k}");
+        check_robust_contract(&data, k);
+    }
+    assert_eq!(
+        fit_linear_robust(&data, 0),
+        Err(RobustError::NonPositiveK { k: 0 })
+    );
+    assert_eq!(
+        filter_outliers_mad(&data, 0),
+        Err(RobustError::NonPositiveK { k: 0 })
+    );
+}
 
-    // The fit is not the plain fit of the raw-value MAD filter: that filter
-    // (median 0, MAD 1, threshold 0) maps the window to [0, 0, 0]. Comparing
-    // the two was the stale assertion this input exposed.
-    assert_eq!(filter_outliers_mad(&data, 0), vec![0, 0, 0]);
-    assert_eq!(fit_linear_fixed(&filter_outliers_mad(&data, 0)), (0, 0));
+/// `k <= 0` is refused by both entry points, for every window shape
+/// (empty, short, flat, a ramp with an outlier).
+#[test]
+fn non_positive_k_is_refused_by_both_functions() {
+    let windows: [&[i32]; 5] = [&[], &[1, 2], &[7; 9], &[1, 2, 3, 4, 100], &[4, -1, 0]];
+    for data in windows {
+        for k in [0, -1, -5, i32::MIN] {
+            let err = RobustError::NonPositiveK { k };
+            assert_eq!(fit_linear_robust(data, k), Err(err), "{data:?}, k = {k}");
+            assert_eq!(filter_outliers_mad(data, k), Err(err), "{data:?}, k = {k}");
+        }
+    }
+    assert_eq!(
+        RobustError::NonPositiveK { k: -1 }.to_string(),
+        "outlier factor k must be a positive integer multiplier of the MAD, got -1"
+    );
 }
 
 /// Small windows (ties between a residual and `k · MAD` are common at this
@@ -70,7 +96,7 @@ fn small_windows_follow_the_rule_for_every_k() {
         let data: Vec<i32> = (0..n).map(|_| rng.range(-8, 8)).collect();
         for k in KS {
             check_robust_contract(&data, k);
-            if robust_reference(&data, k).filled.is_some() {
+            if k > 0 && robust_reference(&data, k).filled.is_some() {
                 filled += 1;
             }
         }

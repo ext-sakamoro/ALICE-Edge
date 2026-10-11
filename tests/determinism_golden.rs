@@ -465,29 +465,59 @@ fn golden_det_math_kernels() {
 // 8. robust (feature `std`) — residual MAD rejection and the refit
 // ---------------------------------------------------------------------------
 
+// One hash per outlier factor `k` (a plain integer multiplier of the MAD).
+// Until 0.1.x this was a single hash over k ∈ {0, 1, 3, 10, i32::MAX}
+// (`30f195a6…`); `k <= 0` is now refused, so the scenario was split per `k`.
+// The four `k > 0` hashes below were recorded on the code *before* the
+// change (`d401fc3`) and are unchanged by it.
 #[cfg(feature = "std")]
-const GOLDEN_ROBUST: &str = "30f195a6dab847aee37f1e75d1a2eb36ea24687078198c32d49aee67762ee76a";
+const GOLDEN_ROBUST: [(i32, &str); 4] = [
+    (
+        1,
+        "f7baf928bd39a35e1e03ecf93bb7779ebbde6e7c24bb5e28ebf59a1332806e76",
+    ),
+    (
+        3,
+        "07caa63a49319ad7e8e2399d640779496b71d6cd1add0294cd874a91d469bb83",
+    ),
+    (
+        10,
+        "75950f93be1f73f55d024000dccf87c9b62b4fc03a93885f11fedb0975aab1ae",
+    ),
+    (
+        i32::MAX,
+        "a8de2b48247fbe7108931a655310ab569dc4f1999aa1ac000ac616004d81b5bd",
+    ),
+];
 
 #[cfg(feature = "std")]
 #[test]
 fn golden_robust() {
-    use alice_edge::robust::{filter_outliers_mad, fit_linear_robust};
-    let mut s = Sink::default();
+    use alice_edge::robust::{filter_outliers_mad, fit_linear_robust, RobustError};
 
-    for w in windows() {
-        for k in [0i32, 1, 3, 10, i32::MAX] {
-            let kept = filter_outliers_mad(&w, k);
+    for (k, expected) in GOLDEN_ROBUST {
+        let mut s = Sink::default();
+        for w in windows() {
+            let kept = filter_outliers_mad(&w, k).expect("k > 0 is accepted");
             s.usize(kept.len());
             for v in &kept {
                 s.i32(*v);
             }
-            let (slope, intercept) = fit_linear_robust(&w, k);
+            let (slope, intercept) = fit_linear_robust(&w, k).expect("k > 0 is accepted");
             s.i32(slope);
             s.i32(intercept);
         }
+        assert_golden(&format!("robust k = {k}"), s, 1_300, expected);
     }
 
-    assert_golden("robust", s, 6_500, GOLDEN_ROBUST);
+    // k <= 0 has no output to hash: it is refused for every window
+    for k in [0, -1, i32::MIN] {
+        for w in windows() {
+            let err = RobustError::NonPositiveK { k };
+            assert_eq!(filter_outliers_mad(&w, k), Err(err), "k = {k}");
+            assert_eq!(fit_linear_robust(&w, k), Err(err), "k = {k}");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

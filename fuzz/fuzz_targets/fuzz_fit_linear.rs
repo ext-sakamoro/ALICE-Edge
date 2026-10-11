@@ -6,8 +6,10 @@
 //! 2. `fit_linear_robust(data, k)` filters on the residuals of a fit, not on
 //!    the raw values, and fills an outlier with the line's own prediction.
 //!    The rule and its arithmetic are written out in
-//!    `tests/support/robust_reference.rs` (included below). For every
-//!    `data` and every `k`, including `k <= 0`:
+//!    `tests/support/robust_reference.rs` (included below). `k` is a plain
+//!    integer multiplier of the MAD; `k <= 0` is refused with
+//!    `RobustError::NonPositiveK { k }` for every `data`. For every `data`
+//!    and every `k > 0`:
 //!    - fewer than 3 samples, a first-round residual MAD of 0, or no
 //!      first-round residual with `|r| > k · MAD` (strict `>`, `k · MAD`
 //!      saturated in `i64`) → the result is `fit_linear_fixed(data)`
@@ -20,14 +22,14 @@
 //!    here from the rule. The inputs are integers: there is no NaN case.
 //!
 //! 3. `filter_outliers_mad(data, k)` has its own contract on the raw values:
-//!    same length; fewer than 3 samples or a MAD of 0 pass through; otherwise
+//!    `k <= 0` is refused with the same error; otherwise same length; fewer than 3 samples or a MAD of 0 pass through; otherwise
 //!    sample `x` becomes the median exactly when `|x − median| > k · MAD`
 //!    (in `i64`, product saturated), and stays `x` otherwise. It is not the
 //!    pre-pass of `fit_linear_robust` any more, so the two are checked
 //!    separately.
 #![no_main]
 
-use alice_edge::{filter_outliers_mad, fit_linear_simd};
+use alice_edge::{filter_outliers_mad, fit_linear_simd, RobustError};
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 
@@ -54,7 +56,15 @@ fuzz_target!(|input: Input| {
 
     check_robust_contract(data, k);
 
-    let filtered = filter_outliers_mad(data, k);
+    if k <= 0 {
+        assert_eq!(
+            filter_outliers_mad(data, k),
+            Err(RobustError::NonPositiveK { k }),
+            "filter_outliers_mad must refuse k = {k}"
+        );
+        return;
+    }
+    let filtered = filter_outliers_mad(data, k).expect("k > 0 is accepted");
     assert_eq!(filtered.len(), data.len());
     if data.len() < 3 {
         assert_eq!(&filtered, data, "fewer than 3 samples must pass through");

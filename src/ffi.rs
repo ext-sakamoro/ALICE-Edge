@@ -220,40 +220,101 @@ pub const unsafe extern "C" fn alice_residual_error(
     compute_residual_error(slice, slope, intercept)
 }
 
-// ── Robust / SIMD fitting ───────────────────────────────────────────────
+// ── Status codes ────────────────────────────────────────────────────────
 
-/// Fit a robust linear model (MAD-based outlier removal + least squares).
-///
-/// `mad_k` controls outlier sensitivity (typically 2-3 in Q16.16).
+/// Status: success.
+pub const ALICE_EDGE_OK: i32 = 0;
+/// Status: a required pointer was null (`data` with `len > 0`, `out` with a
+/// non-zero capacity, or an out-parameter).
+pub const ALICE_EDGE_ERR_NULL_POINTER: i32 = -1;
+/// Status: the outlier factor `k` was zero or negative. `k` is a plain
+/// integer multiplier of the MAD (`3` = three MADs, not Q16.16).
+pub const ALICE_EDGE_ERR_NON_POSITIVE_K: i32 = -2;
+/// Status: the function panicked; the message is in `alice_edge_last_error`.
+pub const ALICE_EDGE_ERR_PANIC: i32 = -3;
+
+/// Map a refused robust call to its status and record the message for
+/// `alice_edge_last_error`.
+#[cfg(feature = "std")]
+fn robust_status(err: crate::RobustError) -> i32 {
+    guard::set_last_error(format!("alice_edge: {err}"));
+    match err {
+        crate::RobustError::NonPositiveK { .. } => ALICE_EDGE_ERR_NON_POSITIVE_K,
+        // `RobustError` is `#[non_exhaustive]` only towards other crates;
+        // inside this crate the match is exhaustive, so a new variant has to
+        // be given its own status here
+    }
+}
+
+/// The input window, or `None` when `data` is null with `len > 0`.
 ///
 /// # Safety
 ///
-/// `data` must be non-null, pointing to at least `len` contiguous `i32` values.
+/// When `len > 0`, `data` must point to at least `len` contiguous `i32`.
+#[cfg(feature = "std")]
+unsafe fn input_slice<'a>(data: *const i32, len: usize) -> Option<&'a [i32]> {
+    if len == 0 {
+        Some(&[])
+    } else if data.is_null() {
+        None
+    } else {
+        // SAFETY: Caller guarantees data points to len contiguous i32 values.
+        Some(core::slice::from_raw_parts(data, len))
+    }
+}
+
+// ── Robust / SIMD fitting ───────────────────────────────────────────────
+
+/// Fit a robust linear model (MAD outlier rejection on the residuals of a
+/// least-squares fit, outliers filled with the line's prediction, refit).
+///
+/// `k` is a **plain integer multiplier** of the MAD (`3` = three MADs; it is
+/// not Q16.16). The fit is written to `*out`.
+///
+/// Returns [`ALICE_EDGE_OK`], or:
+/// - [`ALICE_EDGE_ERR_NON_POSITIVE_K`] when `k <= 0` (message in
+///   `alice_edge_last_error`)
+/// - [`ALICE_EDGE_ERR_NULL_POINTER`] when `out` is null, or `data` is null
+///   with `len > 0`
+/// - [`ALICE_EDGE_ERR_PANIC`] when the body panicked
+///
+/// On every status other than `ALICE_EDGE_OK` a non-null `*out` is set to
+/// `{0, 0}`. `len == 0` (or fewer than 3 samples) gives the plain fit.
+///
+/// # Safety
+///
+/// - when `len > 0`, `data` must point to at least `len` contiguous `i32`
+/// - `out` must be null or point to a writable `AliceLinearResult`
 #[cfg(feature = "std")]
 #[no_mangle]
 pub unsafe extern "C" fn alice_fit_linear_robust(
     data: *const i32,
     len: usize,
-    mad_k: i32,
-) -> AliceLinearResult {
-    ffi_guard(
-        AliceLinearResult {
-            slope: 0,
-            intercept: 0,
-        },
-        || {
-            if data.is_null() || len == 0 {
-                return AliceLinearResult {
-                    slope: 0,
-                    intercept: 0,
-                };
+    k: i32,
+    out: *mut AliceLinearResult,
+) -> i32 {
+    if out.is_null() {
+        return ALICE_EDGE_ERR_NULL_POINTER;
+    }
+    // SAFETY: `out` is non-null and caller-owned.
+    out.write(AliceLinearResult {
+        slope: 0,
+        intercept: 0,
+    });
+    ffi_guard(ALICE_EDGE_ERR_PANIC, || {
+        // SAFETY: forwarded caller guarantee on `data` / `len`.
+        let Some(slice) = input_slice(data, len) else {
+            return ALICE_EDGE_ERR_NULL_POINTER;
+        };
+        match crate::fit_linear_robust(slice, k) {
+            Ok((slope, intercept)) => {
+                // SAFETY: `out` is non-null and caller-owned.
+                out.write(AliceLinearResult { slope, intercept });
+                ALICE_EDGE_OK
             }
-            // SAFETY: Caller guarantees data points to len contiguous i32 values.
-            let slice = core::slice::from_raw_parts(data, len);
-            let (slope, intercept) = crate::fit_linear_robust(slice, mad_k);
-            AliceLinearResult { slope, intercept }
-        },
-    )
+            Err(e) => robust_status(e),
+        }
+    })
 }
 
 /// Fit a linear model using SIMD acceleration (auto-fallback on small data).
@@ -285,15 +346,30 @@ pub unsafe extern "C" fn alice_fit_linear_simd(data: *const i32, len: usize) -> 
 
 // ── Filter / Delta encoding ────────────────────────────────────────────
 
-/// Filter outliers using MAD. Writes filtered data into `out` buffer.
+/// Filter outliers using MAD: a sample `x` is replaced by the median when
+/// `|x − median| > k · MAD`. Writes the filtered window into `out`.
 ///
-/// Returns the number of elements written to `out`.
-/// `out_capacity` is the maximum number of elements `out` can hold.
+/// `k` is a **plain integer multiplier** of the MAD (`3` = three MADs; it is
+/// not Q16.16). `*out_written` receives the number of elements written,
+/// `min(len, out_capacity)`.
+///
+/// Returns [`ALICE_EDGE_OK`], or:
+/// - [`ALICE_EDGE_ERR_NON_POSITIVE_K`] when `k <= 0` (message in
+///   `alice_edge_last_error`)
+/// - [`ALICE_EDGE_ERR_NULL_POINTER`] when `out_written` is null, `data` is
+///   null with `len > 0`, or `out` is null with `out_capacity > 0`
+/// - [`ALICE_EDGE_ERR_PANIC`] when the body panicked
+///
+/// On every status other than `ALICE_EDGE_OK` a non-null `*out_written` is 0
+/// and `out` is not written. Fewer than 3 samples pass the window through
+/// unchanged.
 ///
 /// # Safety
 ///
-/// - `data` must point to at least `len` contiguous `i32` values.
-/// - `out` must point to at least `out_capacity` contiguous writable `i32` slots.
+/// - when `len > 0`, `data` must point to at least `len` contiguous `i32`
+/// - when `out_capacity > 0`, `out` must point to at least `out_capacity`
+///   contiguous writable `i32` slots
+/// - `out_written` must be null or point to a writable `size_t`
 #[cfg(feature = "std")]
 #[no_mangle]
 pub unsafe extern "C" fn alice_filter_outliers_mad(
@@ -302,17 +378,34 @@ pub unsafe extern "C" fn alice_filter_outliers_mad(
     k: i32,
     out: *mut i32,
     out_capacity: usize,
-) -> usize {
-    ffi_guard(0, || {
-        if data.is_null() || out.is_null() || len == 0 || out_capacity == 0 {
-            return 0;
+    out_written: *mut usize,
+) -> i32 {
+    if out_written.is_null() {
+        return ALICE_EDGE_ERR_NULL_POINTER;
+    }
+    // SAFETY: `out_written` is non-null and caller-owned.
+    out_written.write(0);
+    ffi_guard(ALICE_EDGE_ERR_PANIC, || {
+        if out.is_null() && out_capacity > 0 {
+            return ALICE_EDGE_ERR_NULL_POINTER;
         }
-        // SAFETY: Caller guarantees pointers and sizes.
-        let slice = core::slice::from_raw_parts(data, len);
-        let filtered = crate::filter_outliers_mad(slice, k);
-        let count = filtered.len().min(out_capacity);
-        core::ptr::copy_nonoverlapping(filtered.as_ptr(), out, count);
-        count
+        // SAFETY: forwarded caller guarantee on `data` / `len`.
+        let Some(slice) = input_slice(data, len) else {
+            return ALICE_EDGE_ERR_NULL_POINTER;
+        };
+        match crate::filter_outliers_mad(slice, k) {
+            Ok(filtered) => {
+                let count = filtered.len().min(out_capacity);
+                if count > 0 {
+                    // SAFETY: `out` holds at least `out_capacity >= count` slots.
+                    core::ptr::copy_nonoverlapping(filtered.as_ptr(), out, count);
+                }
+                // SAFETY: `out_written` is non-null and caller-owned.
+                out_written.write(count);
+                ALICE_EDGE_OK
+            }
+            Err(e) => robust_status(e),
+        }
     })
 }
 
@@ -516,12 +609,100 @@ mod tests {
         assert_eq!(result, 8);
     }
 
+    /// A ramp `y = 100·(i + 1)` with one gross outlier at `i = 3`, and the
+    /// same ramp without it.
+    #[cfg(feature = "std")]
+    fn ramp_with_outlier() -> ([i32; 12], [i32; 12]) {
+        let clean: [i32; 12] = core::array::from_fn(|i| 100 * (i as i32 + 1));
+        let mut spiked = clean;
+        spiked[3] = 9999;
+        (clean, spiked)
+    }
+
+    #[cfg(feature = "std")]
+    fn ffi_robust(data: &[i32], k: i32) -> (i32, AliceLinearResult) {
+        let mut out = AliceLinearResult {
+            slope: 1,
+            intercept: 1,
+        };
+        // SAFETY: data is a valid local slice, out a valid local struct.
+        let status = unsafe { alice_fit_linear_robust(data.as_ptr(), data.len(), k, &mut out) };
+        (status, out)
+    }
+
+    #[cfg(feature = "std")]
     #[test]
     fn test_ffi_fit_linear_robust() {
-        let data = [100, 200, 300, 9999, 500]; // 9999 は外れ値
-        let result = unsafe { alice_fit_linear_robust(data.as_ptr(), data.len(), int_to_q16(3)) };
-        // ロバスト推定は外れ値を除去するためslope != 0
-        let _ = (result.slope, result.intercept);
+        let (clean, spiked) = ramp_with_outlier();
+        let plain_clean = crate::fit_linear_fixed(&clean);
+        assert_eq!(plain_clean, (int_to_q16(100), int_to_q16(100)));
+        // the outlier pulls the plain fit off the line
+        assert_ne!(crate::fit_linear_fixed(&spiked), plain_clean);
+
+        // k is a plain multiplier: 3 = three MADs. The FFI result is the
+        // Rust robust fit (checked against the documented rule in
+        // tests/robust_contract.rs) ...
+        let (status, out) = ffi_robust(&spiked, 3);
+        assert_eq!(status, ALICE_EDGE_OK);
+        let robust = (out.slope, out.intercept);
+        assert_eq!(Ok(robust), crate::fit_linear_robust(&spiked, 3));
+        // ... and the outlier is removed. Measured: plain fit slope −67.8,
+        // robust fit (97.3, 127.6) against the true (100, 100). The residual
+        // iteration stops once the outlier set is stable, so a 12-sample
+        // window keeps a few percent of bias from the first fit; the bounds
+        // below are 3 in slope and 30 in intercept, while leaving the outlier
+        // in (or passing k as Q16.16, which keeps it) gives slope −67.8.
+        assert!(
+            (robust.0 - plain_clean.0).abs() <= int_to_q16(3),
+            "robust slope {} vs {}",
+            robust.0,
+            plain_clean.0
+        );
+        assert!(
+            (robust.1 - plain_clean.1).abs() <= int_to_q16(30),
+            "robust intercept {} vs {}",
+            robust.1,
+            plain_clean.1
+        );
+        // the same k as Q16.16 (3 << 16) is a threshold of 196608 MADs:
+        // nothing is filtered and the plain fit comes back
+        let (status, as_q16) = ffi_robust(&spiked, int_to_q16(3));
+        assert_eq!(status, ALICE_EDGE_OK);
+        assert_eq!(
+            (as_q16.slope, as_q16.intercept),
+            crate::fit_linear_fixed(&spiked)
+        );
+
+        // k <= 0 is refused with its status, `*out` zeroed, message recorded
+        for k in [0, -1, -5, i32::MIN] {
+            guard::clear_last_error();
+            let (status, out) = ffi_robust(&spiked, k);
+            assert_eq!(status, ALICE_EDGE_ERR_NON_POSITIVE_K, "k = {k}");
+            assert_eq!((out.slope, out.intercept), (0, 0), "k = {k}");
+            let msg = guard::take_last_error().expect("message recorded");
+            assert!(msg.contains(&k.to_string()), "{msg}");
+        }
+
+        // null out-parameter / null data with a length
+        // SAFETY: the function checks both pointers before using them.
+        unsafe {
+            assert_eq!(
+                alice_fit_linear_robust(spiked.as_ptr(), spiked.len(), 3, ptr::null_mut()),
+                ALICE_EDGE_ERR_NULL_POINTER
+            );
+        }
+        let mut out = AliceLinearResult {
+            slope: 1,
+            intercept: 1,
+        };
+        // SAFETY: as above.
+        let status = unsafe { alice_fit_linear_robust(ptr::null(), 4, 3, &mut out) };
+        assert_eq!(status, ALICE_EDGE_ERR_NULL_POINTER);
+        assert_eq!((out.slope, out.intercept), (0, 0));
+        // an empty window is valid: the plain fit of nothing
+        // SAFETY: len == 0, data is not read.
+        let status = unsafe { alice_fit_linear_robust(ptr::null(), 0, 3, &mut out) };
+        assert_eq!(status, ALICE_EDGE_OK);
     }
 
     #[test]
@@ -531,20 +712,62 @@ mod tests {
         assert_ne!(result.slope, 0);
     }
 
-    #[test]
-    fn test_ffi_filter_outliers_mad() {
-        let data = [100, 200, 300, 9999, 500];
-        let mut out = [0i32; 10];
-        let count = unsafe {
+    #[cfg(feature = "std")]
+    fn ffi_filter(data: &[i32], k: i32, out: &mut [i32]) -> (i32, usize) {
+        let mut written = usize::MAX;
+        // SAFETY: data / out are valid local slices, written a valid local.
+        let status = unsafe {
             alice_filter_outliers_mad(
                 data.as_ptr(),
                 data.len(),
-                int_to_q16(2),
+                k,
                 out.as_mut_ptr(),
                 out.len(),
+                &mut written,
             )
         };
-        assert!(count > 0 && count <= data.len());
+        (status, written)
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_ffi_filter_outliers_mad() {
+        // median 300, MAD 100: the outlier is 9699 away and is replaced by
+        // the median with k = 2 (a plain multiplier), every other sample kept
+        let data = [100, 200, 300, 9999, 500];
+        let mut out = [0i32; 10];
+        let (status, written) = ffi_filter(&data, 2, &mut out);
+        assert_eq!(status, ALICE_EDGE_OK);
+        assert_eq!(written, data.len());
+        assert_eq!(out[..written], [100, 200, 300, 300, 500]);
+
+        // k <= 0 is refused with its status, nothing written
+        for k in [0, -1, i32::MIN] {
+            let mut out = [7i32; 5];
+            let (status, written) = ffi_filter(&data, k, &mut out);
+            assert_eq!(status, ALICE_EDGE_ERR_NON_POSITIVE_K, "k = {k}");
+            assert_eq!(written, 0, "k = {k}");
+            assert_eq!(out, [7; 5], "k = {k}: out must not be written");
+        }
+
+        // a short buffer receives the first `out_capacity` elements
+        let mut short = [0i32; 2];
+        assert_eq!(ffi_filter(&data, 2, &mut short), (ALICE_EDGE_OK, 2));
+        assert_eq!(short, [100, 200]);
+
+        // null out_written
+        // SAFETY: the function checks the pointer before using it.
+        let status = unsafe {
+            alice_filter_outliers_mad(
+                data.as_ptr(),
+                data.len(),
+                2,
+                out.as_mut_ptr(),
+                out.len(),
+                ptr::null_mut(),
+            )
+        };
+        assert_eq!(status, ALICE_EDGE_ERR_NULL_POINTER);
     }
 
     #[test]
@@ -583,8 +806,9 @@ mod tests {
 // Panic isolation (see `guard`)
 // ============================================================================
 
-/// Message of the most recent panic caught at the FFI boundary on this thread
-/// (NUL-terminated, owned by the callee — release with
+/// Message of the most recent FFI error on this thread — a panic caught at
+/// the boundary, or an argument refused by a status-returning function such
+/// as `alice_fit_linear_robust` (NUL-terminated, owned by the callee — release with
 /// `alice_edge_free_error_string`), or null if none Always null without the
 /// `std` feature (bare-metal has no unwinding: a panic reaches the panic
 /// handler instead of this slot).

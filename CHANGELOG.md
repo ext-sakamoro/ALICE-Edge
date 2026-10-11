@@ -5,6 +5,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- C ABI の `alice_edge_version()` は版を文字列 `"0.1.0"` で埋め込んでいたので、0.1.1 でも `"0.1.0"` を返していた `Cargo.toml` の版 (`CARGO_PKG_VERSION`) から作るようにし、試験も同じ値と比べる
 - C ABI の文書が `alice_fit_linear_robust` の `mad_k` を Q16.16 (`int_to_q16(2)` / `int_to_q16(3)`) と説明していたが、実装は素の整数として MAD に掛けていた 文書どおり `int_to_q16(3)` (= 196608) を渡すと閾値が MAD の 196608 倍になり、外れ値は 1 つも除外されなかった `src/ffi.rs` / `bindings/alice_edge.h` / `bindings/AliceEdge.cs` を素の整数の説明に直し、FFI の試験 `test_ffi_fit_linear_robust` は外れ値を含む ramp で外れ値が除外されること (Rust の `fit_linear_robust` と一致し、真の直線から slope 3 / intercept 30 以内) と、Q16.16 の `k` では素の fit が返ることを確かめる (以前は何も検査していなかった)
 - `cargo test` (feature 指定なし) が build できなかった `tests/analytic_oracle.rs` が `std` でだけ在る `piecewise::fit_piecewise_linear` を cfg 無しで import していた import と該当の試験に `#[cfg(feature = "std")]` を付け、CI と `scripts/preflight.sh` に全 integration test を feature 無しで build する step (`cargo test --tests --no-run --no-default-features`) を足した CI は試験 target を feature 付きで個別に回していたので出なかった
 

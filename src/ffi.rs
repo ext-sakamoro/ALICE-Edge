@@ -495,9 +495,10 @@ pub unsafe extern "C" fn alice_zeroize(buf: *mut i32, len: usize) {
 /// Return the ALICE-Edge library version as a null-terminated C string.
 ///
 /// The returned pointer is valid for the lifetime of the process (static).
+/// The string is the crate version from `Cargo.toml`.
 #[no_mangle]
 pub const extern "C" fn alice_edge_version() -> *const u8 {
-    c"0.1.0".as_ptr().cast()
+    concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr()
 }
 
 #[cfg(test)]
@@ -588,7 +589,7 @@ mod tests {
         assert!(!ptr.is_null());
         // SAFETY: alice_edge_version returns a valid static string.
         let cstr = unsafe { core::ffi::CStr::from_ptr(ptr.cast::<core::ffi::c_char>()) };
-        assert_eq!(cstr.to_str().unwrap(), "0.1.0");
+        assert_eq!(cstr.to_str().unwrap(), env!("CARGO_PKG_VERSION"));
     }
 
     #[test]

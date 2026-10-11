@@ -307,6 +307,10 @@ jobs:
         run: python scripts/test_docs_lint.py
       - name: Docs lint (public documents, CHANGELOG structure)
         run: python scripts/docs_lint.py --check
+      - name: changed_paths oracle (path filter decision, gate and trigger lint)
+        run: python scripts/test_changed_paths.py
+      - name: changed_paths sync (no on.push paths off main, pull_request paths = pattern file, 0 compared fails)
+        run: python scripts/changed_paths.py sync
 
   actionlint:
     name: actionlint (workflow YAML)

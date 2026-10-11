@@ -53,6 +53,10 @@ step "ci.yml / docs-lint: tests + public documents / CHANGELOG structure"
 python3 scripts/test_docs_lint.py
 python3 scripts/docs_lint.py --check
 
+step "ci.yml / docs-lint: changed_paths tests + sync (fuzz.yml trigger and pattern file)"
+python3 scripts/test_changed_paths.py
+python3 scripts/changed_paths.py sync
+
 step "security-audit.yml / stub-guard"
 scripts/stub_guard.sh
 

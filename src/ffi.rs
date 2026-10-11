@@ -306,6 +306,9 @@ pub unsafe extern "C" fn alice_fit_linear_robust(
         let Some(slice) = input_slice(data, len) else {
             return ALICE_EDGE_ERR_NULL_POINTER;
         };
+        // unit-test builds only: lets a test make the robust fit panic here
+        #[cfg(test)]
+        guard::panic_hook::fire_if_armed();
         match crate::fit_linear_robust(slice, k) {
             Ok((slope, intercept)) => {
                 // SAFETY: `out` is non-null and caller-owned.
@@ -393,6 +396,9 @@ pub unsafe extern "C" fn alice_filter_outliers_mad(
         let Some(slice) = input_slice(data, len) else {
             return ALICE_EDGE_ERR_NULL_POINTER;
         };
+        // unit-test builds only: lets a test make the filter panic here
+        #[cfg(test)]
+        guard::panic_hook::fire_if_armed();
         match crate::filter_outliers_mad(slice, k) {
             Ok(filtered) => {
                 let count = filtered.len().min(out_capacity);
@@ -927,6 +933,39 @@ pub(crate) mod guard {
         body()
     }
 
+    /// Unit-test hook for the panic path of the robust FFI wrappers.
+    ///
+    /// No input is known to make `fit_linear_robust` or `filter_outliers_mad`
+    /// panic in both build profiles, so the `ALICE_EDGE_ERR_PANIC` path cannot
+    /// be reached through the data. When armed, the next robust wrapper call
+    /// on this thread panics inside its `ffi_guard` closure, at the point
+    /// where the fit runs. Compiled only for this crate's unit tests
+    /// (`cfg(test)`): library, release and integration-test builds contain
+    /// neither the hook nor its call sites.
+    #[cfg(all(test, feature = "std"))]
+    pub mod panic_hook {
+        use std::cell::Cell;
+
+        /// The panic message the hook raises.
+        pub const MESSAGE: &str = "alice_edge unit-test hook: forced panic in the robust wrapper";
+
+        thread_local! {
+            static ARMED: Cell<bool> = const { Cell::new(false) };
+        }
+
+        /// Make the next robust wrapper call on this thread panic.
+        pub fn arm() {
+            ARMED.with(|a| a.set(true));
+        }
+
+        /// Panic once if armed (disarms first).
+        pub fn fire_if_armed() {
+            if ARMED.with(|a| a.replace(false)) {
+                panic!("{MESSAGE}");
+            }
+        }
+    }
+
     #[cfg(all(test, feature = "std"))]
     mod tests {
         use super::*;
@@ -972,5 +1011,86 @@ mod guard_ffi_tests {
         assert!(msg.contains("ffi test panic"), "{msg}");
         unsafe { alice_edge_free_error_string(s) };
         assert!(alice_edge_last_error().is_null(), "take で slot は空になる");
+    }
+
+    /// The message from `alice_edge_last_error`, read and freed through the
+    /// C ABI.
+    fn last_error_text() -> Option<String> {
+        let s = alice_edge_last_error();
+        if s.is_null() {
+            return None;
+        }
+        // SAFETY: a non-null result is a CString owned by the caller.
+        let msg = unsafe { std::ffi::CStr::from_ptr(s) }
+            .to_string_lossy()
+            .into_owned();
+        // SAFETY: returned by alice_edge_last_error, freed once.
+        unsafe { alice_edge_free_error_string(s) };
+        Some(msg)
+    }
+
+    /// A panic inside the robust fit comes back as `ALICE_EDGE_ERR_PANIC`
+    /// with the panic message, not as `ALICE_EDGE_OK`; `*out` holds the
+    /// documented `{0, 0}` (written before the guarded body runs), not a fit.
+    #[test]
+    fn robust_fit_panic_is_reported_as_err_panic() {
+        let data = [100, 200, 300, 9999, 500, 600, 700];
+        alice_edge_clear_last_error();
+        guard::panic_hook::arm();
+        let mut out = AliceLinearResult {
+            slope: 1,
+            intercept: 1,
+        };
+        // SAFETY: data is a valid local slice, out a valid local struct.
+        let status = unsafe { alice_fit_linear_robust(data.as_ptr(), data.len(), 3, &mut out) };
+        assert_eq!(status, ALICE_EDGE_ERR_PANIC);
+        assert_eq!(
+            (out.slope, out.intercept),
+            (0, 0),
+            "out holds the zeroed result"
+        );
+        let msg = last_error_text().expect("panic message recorded");
+        assert!(!msg.is_empty());
+        assert!(msg.contains(guard::panic_hook::MESSAGE), "{msg}");
+
+        // the hook fired once: the next call is the normal fit
+        // SAFETY: as above.
+        let status = unsafe { alice_fit_linear_robust(data.as_ptr(), data.len(), 3, &mut out) };
+        assert_eq!(status, ALICE_EDGE_OK);
+        assert_eq!(
+            Ok((out.slope, out.intercept)),
+            crate::fit_linear_robust(&data, 3)
+        );
+        assert!(
+            last_error_text().is_none(),
+            "a successful call records nothing"
+        );
+    }
+
+    /// The same for the MAD filter: `ALICE_EDGE_ERR_PANIC`, the message, `*out_written`
+    /// 0 and `out` not written.
+    #[test]
+    fn filter_panic_is_reported_as_err_panic() {
+        let data = [100, 200, 300, 9999, 500];
+        alice_edge_clear_last_error();
+        guard::panic_hook::arm();
+        let mut out = [7i32; 5];
+        let mut written = usize::MAX;
+        // SAFETY: data / out are valid local slices, written a valid local.
+        let status = unsafe {
+            alice_filter_outliers_mad(
+                data.as_ptr(),
+                data.len(),
+                2,
+                out.as_mut_ptr(),
+                out.len(),
+                &mut written,
+            )
+        };
+        assert_eq!(status, ALICE_EDGE_ERR_PANIC);
+        assert_eq!(written, 0);
+        assert_eq!(out, [7; 5], "out must not be written");
+        let msg = last_error_text().expect("panic message recorded");
+        assert!(msg.contains(guard::panic_hook::MESSAGE), "{msg}");
     }
 }

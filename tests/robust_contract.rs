@@ -122,3 +122,51 @@ fn wide_values_follow_the_rule_for_every_k() {
         }
     }
 }
+
+/// `k · MAD` past `i64::MAX` must saturate, not wrap.
+///
+/// oracle (by hand, n = 4, x = 0..3, so Σx = 6 and the denominator
+/// n²(n²−1)/12 = 20): Σy = 65 535, Σxy = 65 397, slope numerator
+/// 4·65 397 − 6·65 535 = −131 622, slope = (−131 622 · 2¹⁶) / 20 truncated
+/// = −431 298 969, intercept = (65 535 · 2¹⁶ + 431 298 969 · 6) / 4 truncated
+/// = 1 720 673 893. Every sample but the third lies outside Q16.16, so
+/// `int_to_q16` wraps and the centred residuals are
+/// [−5 150 749 490, −4 713 552 281, 0, 436 345 241] with MAD 4 713 552 281.
+/// `i32::MAX · MAD` = 10 122 276 442 727 048 807 > `i64::MAX`: saturated it
+/// is `i64::MAX`, no residual exceeds it, and the result is the plain fit.
+/// Wrapped it would be −8 324 467 630 982 502 809, every sample an outlier,
+/// and the refit of the line predictions [26 255, 19 674, 13 093, 6 512]
+/// would give (−431 292 416, 1 720 647 680) instead.
+#[test]
+fn huge_k_times_mad_saturates_and_keeps_every_sample() {
+    let data = [32_778, 32_868, -32_862, 32_751];
+    let k = i32::MAX;
+    let expected = (-431_298_969, 1_720_673_893);
+
+    let plain = fit_linear_fixed(&data);
+    assert_eq!(plain, expected);
+    let (res, mad) = centred_residuals(&data, plain);
+    assert_eq!(res, vec![-5_150_749_490, -4_713_552_281, 0, 436_345_241]);
+    assert_eq!(mad, 4_713_552_281);
+    assert!(i128::from(k) * i128::from(mad) > i128::from(i64::MAX));
+    assert!(res.iter().all(|&r| !is_outlier(r, k, mad)));
+
+    assert_eq!(robust_reference(&data, k).fit, expected);
+    assert_eq!(fit_linear_robust(&data, k), expected);
+    check_robust_contract(&data, k);
+}
+
+/// The MAD rule is strict: a sample exactly at `k · MAD` from the median is
+/// kept.
+///
+/// oracle (by hand): [0, 1, 2, 3, 5] has median 2 and absolute deviations
+/// [2, 1, 0, 1, 3], whose median (MAD) is 1. With k = 3 the sample 5 sits
+/// exactly at 3 · 1 and is kept, so the window is unchanged. With k = 2 the
+/// sample 0 sits exactly at 2 · 1 and is kept, while 5 (deviation 3 > 2) is
+/// replaced by the median.
+#[test]
+fn mad_filter_keeps_a_sample_exactly_at_the_threshold() {
+    let data = [0, 1, 2, 3, 5];
+    assert_eq!(filter_outliers_mad(&data, 3), vec![0, 1, 2, 3, 5]);
+    assert_eq!(filter_outliers_mad(&data, 2), vec![0, 1, 2, 3, 2]);
+}

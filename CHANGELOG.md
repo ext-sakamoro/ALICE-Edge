@@ -4,6 +4,8 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-13
+
 ### Fixed
 - `scripts/docs_lint.py` は `[Unreleased]` の節が空だと「categories を 1 件も比べていない」で fail していたので、版を切った直後 (空の `[Unreleased]` の下に新しい版の節) の CHANGELOG が通らなかった 空の `[Unreleased]` は比べる対象が無い状態として扱い、項目があるのに `###` の分類が無い場合は従来どおり fail する 試験 2 本 (空の `[Unreleased]` が通る / 分類の無い項目が fail する)
 - C ABI の `alice_edge_version()` は版を文字列 `"0.1.0"` で埋め込んでいたので、0.1.1 でも `"0.1.0"` を返していた `Cargo.toml` の版 (`CARGO_PKG_VERSION`) から作るようにし、試験も同じ値と比べる

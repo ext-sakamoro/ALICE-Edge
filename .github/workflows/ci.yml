@@ -122,6 +122,11 @@ jobs:
       - name: Test — robust fit contract (std)
         run: cargo test --test robust_contract --features "std"
 
+      # CoefficientStore returns ALICE-DB's errors (tests/db_bridge_errors.rs):
+      # a store of another arithmetic is a Mismatch, not an empty result
+      - name: Test — db bridge errors (db)
+        run: cargo test --test db_bridge_errors --features "db"
+
       # One build + one test run with every optional bridge on: the crates.io
       # siblings (alice-zip / codec / db / sdf / ml / analytics / libasp) are
       # real dependencies here, not stubs.

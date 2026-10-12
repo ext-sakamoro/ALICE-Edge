@@ -10,8 +10,111 @@
 //! Sensor data → fit_linear_fixed() → (slope, intercept)
 //! → CoefficientStore.record() → ALICE-DB time-series
 //! ```
+//!
+//! # Errors are returned, never replaced by a default
+//!
+//! Every write and every read returns a [`CoefficientStoreError`] naming the
+//! store (slope or intercept) and carrying the `std::io::Error` of ALICE-DB.
+//! A read that ALICE-DB refuses, for example a lossless segment whose residual
+//! was measured under another arithmetic (`alice_db::ResidualError`), is an
+//! error here too, not an empty result: [`CoefficientStoreError::residual`]
+//! returns the typed reason. Reading the model approximation of such data is
+//! an explicit choice, [`CoefficientStore::open_with_policy`] with
+//! [`ResidualPolicy::ModelOnly`].
 
-use alice_db::AliceDB;
+use alice_db::{AliceDB, ResidualError, StorageConfig};
+use core::fmt;
+use std::io;
+use std::path::PathBuf;
+
+pub use alice_db::ResidualPolicy;
+
+/// Which of the two series an error belongs to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Series {
+    /// `<dir>/slope`
+    Slope,
+    /// `<dir>/intercept`
+    Intercept,
+}
+
+impl fmt::Display for Series {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Series::Slope => "slope",
+            Series::Intercept => "intercept",
+        })
+    }
+}
+
+/// An error of [`CoefficientStore`].
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum CoefficientStoreError {
+    /// ALICE-DB failed or refused the operation on `series`.
+    Db {
+        /// The series the operation was on
+        series: Series,
+        /// What was done: "open", "write", "read" or "flush"
+        op: &'static str,
+        /// The error ALICE-DB returned
+        source: io::Error,
+    },
+    /// A timestamp does not fit the `i64` keys of the store
+    /// (above `i64::MAX` on write, negative on read).
+    Timestamp {
+        /// The series the key belongs to
+        series: Series,
+        /// The key as given (write) or as stored (read)
+        value: i128,
+    },
+}
+
+impl CoefficientStoreError {
+    /// The typed reason when ALICE-DB refused a read of lossless data
+    /// (`ResidualError::Mismatch`: measured under another arithmetic,
+    /// `ResidualError::Corrupt`: the residual cannot be decoded).
+    #[must_use]
+    pub fn residual(&self) -> Option<&ResidualError> {
+        match self {
+            CoefficientStoreError::Db { source, .. } => source
+                .get_ref()
+                .and_then(|inner| inner.downcast_ref::<ResidualError>()),
+            CoefficientStoreError::Timestamp { .. } => None,
+        }
+    }
+
+    /// The series the error belongs to.
+    #[must_use]
+    pub fn series(&self) -> Series {
+        match self {
+            CoefficientStoreError::Db { series, .. }
+            | CoefficientStoreError::Timestamp { series, .. } => *series,
+        }
+    }
+}
+
+impl fmt::Display for CoefficientStoreError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CoefficientStoreError::Db { series, op, source } => {
+                write!(f, "{series} {op}: {source}")
+            }
+            CoefficientStoreError::Timestamp { series, value } => {
+                write!(f, "{series}: timestamp {value} is outside 0..=i64::MAX")
+            }
+        }
+    }
+}
+
+impl std::error::Error for CoefficientStoreError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            CoefficientStoreError::Db { source, .. } => Some(source),
+            CoefficientStoreError::Timestamp { .. } => None,
+        }
+    }
+}
 
 /// Persistent store for edge model coefficients.
 ///
@@ -22,20 +125,73 @@ pub struct CoefficientStore {
     intercept_db: AliceDB,
 }
 
+fn db(series: Series, op: &'static str) -> impl FnOnce(io::Error) -> CoefficientStoreError {
+    move |source| CoefficientStoreError::Db { series, op, source }
+}
+
+fn key(series: Series, timestamp_ms: u64) -> Result<i64, CoefficientStoreError> {
+    i64::try_from(timestamp_ms).map_err(|_| CoefficientStoreError::Timestamp {
+        series,
+        value: i128::from(timestamp_ms),
+    })
+}
+
+fn read(
+    series: Series,
+    rows: io::Result<Vec<(i64, f32)>>,
+) -> Result<Vec<(u64, f32)>, CoefficientStoreError> {
+    // scan only returns keys inside the requested non-negative range, so the
+    // conversion cannot fail today; it is checked rather than cast so that a
+    // change on either side can never wrap a key into a timestamp
+    rows.map_err(db(series, "read"))?
+        .into_iter()
+        .map(|(ts, v)| {
+            u64::try_from(ts)
+                .map(|ts| (ts, v))
+                .map_err(|_| CoefficientStoreError::Timestamp {
+                    series,
+                    value: i128::from(ts),
+                })
+        })
+        .collect()
+}
+
 impl CoefficientStore {
     /// Open or create coefficient databases at the given directory.
     ///
+    /// Reads refuse lossless data whose exact values cannot be reconstructed
+    /// ([`ResidualPolicy::Refuse`], the ALICE-DB default).
+    ///
     /// # Errors
     ///
-    /// Returns `Err(String)` if either the slope or intercept database fails to open.
-    pub fn open(dir: &str) -> Result<Self, String> {
-        let slope_db =
-            AliceDB::open(format!("{dir}/slope")).map_err(|e| format!("slope db: {e}"))?;
-        let intercept_db =
-            AliceDB::open(format!("{dir}/intercept")).map_err(|e| format!("intercept db: {e}"))?;
+    /// Returns [`CoefficientStoreError::Db`] if either database fails to open.
+    pub fn open(dir: &str) -> Result<Self, CoefficientStoreError> {
+        Self::open_with_policy(dir, ResidualPolicy::Refuse)
+    }
+
+    /// Open with an explicit residual policy. [`ResidualPolicy::ModelOnly`]
+    /// reads the model approximation of lossless data whose residual cannot
+    /// be applied, instead of an error; the values are then not the recorded
+    /// ones, which is why it is never the default.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoefficientStoreError::Db`] if either database fails to open.
+    pub fn open_with_policy(
+        dir: &str,
+        residual_policy: ResidualPolicy,
+    ) -> Result<Self, CoefficientStoreError> {
+        let open = |series: Series| {
+            AliceDB::with_config(StorageConfig {
+                data_dir: PathBuf::from(dir).join(series.to_string()),
+                residual_policy,
+                ..StorageConfig::default()
+            })
+            .map_err(db(series, "open"))
+        };
         Ok(Self {
-            slope_db,
-            intercept_db,
+            slope_db: open(Series::Slope)?,
+            intercept_db: open(Series::Intercept)?,
         })
     }
 
@@ -45,82 +201,108 @@ impl CoefficientStore {
     ///
     /// # Errors
     ///
-    /// Returns `Err(String)` if either the slope or intercept database write fails.
+    /// Returns [`CoefficientStoreError`] if the timestamp exceeds `i64::MAX`
+    /// or either database write fails.
     pub fn record_q16(
         &self,
         timestamp_ms: u64,
         slope_q16: i32,
         intercept_q16: i32,
-    ) -> Result<(), String> {
+    ) -> Result<(), CoefficientStoreError> {
         const INV_Q16_ONE: f32 = 1.0 / (1i32 << 16) as f32;
         let slope_f32 = slope_q16 as f32 * INV_Q16_ONE;
         let intercept_f32 = intercept_q16 as f32 * INV_Q16_ONE;
-        self.slope_db
-            .put(timestamp_ms as i64, slope_f32)
-            .map_err(|e| format!("slope write: {e}"))?;
-        self.intercept_db
-            .put(timestamp_ms as i64, intercept_f32)
-            .map_err(|e| format!("intercept write: {e}"))?;
-        Ok(())
+        self.record(timestamp_ms, slope_f32, intercept_f32)
     }
 
     /// Record a fitted model's coefficients (already f32).
     ///
     /// # Errors
     ///
-    /// Returns `Err(String)` if either the slope or intercept database write fails.
-    pub fn record(&self, timestamp_ms: u64, slope: f32, intercept: f32) -> Result<(), String> {
+    /// Returns [`CoefficientStoreError`] if the timestamp exceeds `i64::MAX`
+    /// or either database write fails.
+    pub fn record(
+        &self,
+        timestamp_ms: u64,
+        slope: f32,
+        intercept: f32,
+    ) -> Result<(), CoefficientStoreError> {
+        let ts = key(Series::Slope, timestamp_ms)?;
         self.slope_db
-            .put(timestamp_ms as i64, slope)
-            .map_err(|e| format!("slope write: {e}"))?;
+            .put(ts, slope)
+            .map_err(db(Series::Slope, "write"))?;
         self.intercept_db
-            .put(timestamp_ms as i64, intercept)
-            .map_err(|e| format!("intercept write: {e}"))?;
-        Ok(())
+            .put(ts, intercept)
+            .map_err(db(Series::Intercept, "write"))
     }
 
     /// Query slope history in a time range.
-    pub fn query_slopes(&self, from_ms: u64, to_ms: u64) -> Vec<(u64, f32)> {
-        self.slope_db
-            .scan(from_ms as i64, to_ms as i64)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(ts, v)| (ts as u64, v))
-            .collect()
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoefficientStoreError`] if ALICE-DB fails or refuses the read
+    /// (see [`CoefficientStoreError::residual`]); never an empty result in
+    /// place of an error.
+    pub fn query_slopes(
+        &self,
+        from_ms: u64,
+        to_ms: u64,
+    ) -> Result<Vec<(u64, f32)>, CoefficientStoreError> {
+        let (from, to) = (key(Series::Slope, from_ms)?, key(Series::Slope, to_ms)?);
+        read(Series::Slope, self.slope_db.scan(from, to))
     }
 
     /// Query intercept history in a time range.
-    pub fn query_intercepts(&self, from_ms: u64, to_ms: u64) -> Vec<(u64, f32)> {
-        self.intercept_db
-            .scan(from_ms as i64, to_ms as i64)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(ts, v)| (ts as u64, v))
-            .collect()
+    ///
+    /// # Errors
+    ///
+    /// As [`CoefficientStore::query_slopes`].
+    pub fn query_intercepts(
+        &self,
+        from_ms: u64,
+        to_ms: u64,
+    ) -> Result<Vec<(u64, f32)>, CoefficientStoreError> {
+        let (from, to) = (
+            key(Series::Intercept, from_ms)?,
+            key(Series::Intercept, to_ms)?,
+        );
+        read(Series::Intercept, self.intercept_db.scan(from, to))
     }
 
     /// Record a batch of coefficient pairs.
-    pub fn record_batch(&self, entries: &[(u64, f32, f32)]) {
-        let slopes: Vec<(i64, f32)> = entries.iter().map(|&(ts, s, _)| (ts as i64, s)).collect();
-        let intercepts: Vec<(i64, f32)> =
-            entries.iter().map(|&(ts, _, i)| (ts as i64, i)).collect();
-        let _ = self.slope_db.put_batch(&slopes);
-        let _ = self.intercept_db.put_batch(&intercepts);
+    ///
+    /// Every timestamp is checked before anything is written.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoefficientStoreError`] if a timestamp exceeds `i64::MAX` or
+    /// either database write fails.
+    pub fn record_batch(&self, entries: &[(u64, f32, f32)]) -> Result<(), CoefficientStoreError> {
+        let mut slopes = Vec::with_capacity(entries.len());
+        let mut intercepts = Vec::with_capacity(entries.len());
+        for &(ts, s, i) in entries {
+            let ts = key(Series::Slope, ts)?;
+            slopes.push((ts, s));
+            intercepts.push((ts, i));
+        }
+        self.slope_db
+            .put_batch(&slopes)
+            .map_err(db(Series::Slope, "write"))?;
+        self.intercept_db
+            .put_batch(&intercepts)
+            .map_err(db(Series::Intercept, "write"))
     }
 
     /// Flush memtable to disk so that scan/query can read the data.
     ///
     /// # Errors
     ///
-    /// Returns `Err(String)` if either the slope or intercept database flush fails.
-    pub fn flush(&self) -> Result<(), String> {
-        self.slope_db
-            .flush()
-            .map_err(|e| format!("slope flush: {e}"))?;
+    /// Returns [`CoefficientStoreError::Db`] if either database flush fails.
+    pub fn flush(&self) -> Result<(), CoefficientStoreError> {
+        self.slope_db.flush().map_err(db(Series::Slope, "flush"))?;
         self.intercept_db
             .flush()
-            .map_err(|e| format!("intercept flush: {e}"))?;
-        Ok(())
+            .map_err(db(Series::Intercept, "flush"))
     }
 }
 
@@ -146,7 +328,7 @@ mod tests {
         let store = CoefficientStore::open(&dir).expect("open failed");
         store.record(1000, 1.5, 10.0).expect("record failed");
         store.flush().expect("flush failed");
-        let slopes = store.query_slopes(0, 2000);
+        let slopes = store.query_slopes(0, 2000).expect("query failed");
         assert!(!slopes.is_empty());
     }
 
@@ -158,10 +340,10 @@ mod tests {
             .record_q16(100, 65536, -163840)
             .expect("record_q16 failed");
         store.flush().expect("flush failed");
-        let slopes = store.query_slopes(0, 200);
+        let slopes = store.query_slopes(0, 200).expect("query failed");
         assert_eq!(slopes.len(), 1);
         assert!((slopes[0].1 - 1.0).abs() < 0.01);
-        let intercepts = store.query_intercepts(0, 200);
+        let intercepts = store.query_intercepts(0, 200).expect("query failed");
         assert!((intercepts[0].1 - (-2.5)).abs() < 0.01);
     }
 
@@ -170,9 +352,9 @@ mod tests {
         let dir = temp_dir();
         let store = CoefficientStore::open(&dir).expect("open failed");
         let entries = vec![(100, 1.0f32, 2.0f32), (200, 3.0, 4.0), (300, 5.0, 6.0)];
-        store.record_batch(&entries);
+        store.record_batch(&entries).expect("record_batch failed");
         store.flush().expect("flush failed");
-        let slopes = store.query_slopes(0, 400);
+        let slopes = store.query_slopes(0, 400).expect("query failed");
         assert_eq!(slopes.len(), 3);
     }
 
@@ -182,7 +364,7 @@ mod tests {
         let store = CoefficientStore::open(&dir).expect("open failed");
         store.record(100, 1.0, 2.0).expect("record failed");
         store.flush().expect("flush failed");
-        let slopes = store.query_slopes(500, 600);
+        let slopes = store.query_slopes(500, 600).expect("query failed");
         assert!(slopes.is_empty());
     }
 
@@ -196,7 +378,7 @@ mod tests {
                 .expect("record failed");
         }
         store.flush().expect("flush failed");
-        let slopes = store.query_slopes(0, 1000);
+        let slopes = store.query_slopes(0, 1000).expect("query failed");
         assert_eq!(slopes.len(), 10);
     }
 
@@ -206,7 +388,7 @@ mod tests {
         let store = CoefficientStore::open(&dir).expect("open failed");
         store.record(100, 1.0, 42.0).expect("record failed");
         store.flush().expect("flush failed");
-        let intercepts = store.query_intercepts(0, 200);
+        let intercepts = store.query_intercepts(0, 200).expect("query failed");
         assert_eq!(intercepts.len(), 1);
         assert!((intercepts[0].1 - 42.0).abs() < 0.01);
     }
@@ -217,7 +399,7 @@ mod tests {
         let store = CoefficientStore::open(&dir).expect("open failed");
         store.record_q16(0, 0, 0).expect("record_q16 failed");
         store.flush().expect("flush failed");
-        let slopes = store.query_slopes(0, 1);
+        let slopes = store.query_slopes(0, 1).expect("query failed");
         assert_eq!(slopes.len(), 1);
         assert!((slopes[0].1).abs() < 0.001);
     }
@@ -227,9 +409,9 @@ mod tests {
         let dir = temp_dir();
         let store = CoefficientStore::open(&dir).expect("open failed");
         let entries: Vec<(u64, f32, f32)> = (0..20).map(|i| (i * 10, i as f32, 0.0)).collect();
-        store.record_batch(&entries);
+        store.record_batch(&entries).expect("record_batch failed");
         store.flush().expect("flush failed");
-        let slopes = store.query_slopes(50, 150);
+        let slopes = store.query_slopes(50, 150).expect("query failed");
         assert!(slopes.len() >= 5 && slopes.len() <= 15);
     }
 }

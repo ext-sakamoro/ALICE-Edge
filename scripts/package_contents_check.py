@@ -10,7 +10,8 @@ This check runs `cargo package --list` and fails when the list
   reported by `cargo metadata`,
 - misses a required file (README, licenses, the C / C# bindings),
 - misses a file that a packaged Rust source embeds with `include_str!` /
-  `include_bytes!` (the crate would not compile from crates.io),
+  `include_bytes!` (the crate would not compile from crates.io), or a
+  `tests/fixtures/...` file or directory that a packaged source names,
 - is empty, or no target was compared (the check would compare nothing).
 
 Usage: python scripts/package_contents_check.py
@@ -52,6 +53,8 @@ REQUIRED_FILES = (
 )
 
 EMBED_RE = re.compile(r'include_(?:str|bytes)!\s*\(\s*"([^"]+)"\s*\)')
+# fixtures that tests open at run time (`CARGO_MANIFEST_DIR` + this path)
+FIXTURE_RE = re.compile(r'"(tests/fixtures/[^"]*[^"/])"')
 
 
 def forbidden(path: str) -> bool:
@@ -94,6 +97,9 @@ def check(listing: list[str], targets: list[str], sources: dict[str, str]) -> tu
         for dep in embedded_paths(rel, text):
             if dep not in files:
                 errors.append(f"{rel}: embeds {dep}, which is not in the package")
+        for fixture in FIXTURE_RE.findall(text):
+            if fixture not in files and not any(f.startswith(fixture + "/") for f in files):
+                errors.append(f"{rel}: reads {fixture}, which is not in the package")
     return errors, compared
 
 

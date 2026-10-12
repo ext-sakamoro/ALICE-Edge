@@ -24,6 +24,7 @@ readme = "README.md"
 include = [
     "/src/**/*.rs",
     "/tests/**/*.rs",
+    "/tests/fixtures/**",
     "/benches/**/*.rs",
     "/examples/**/*.rs",
     "/bindings/alice_edge.h",

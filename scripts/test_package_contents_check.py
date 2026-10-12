@@ -65,6 +65,12 @@ class PackageContentsCheckTest(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("../README.md", errors[0])
 
+    def test_a_missing_runtime_fixture_fails(self):
+        sources = {"tests/golden.rs": 'let d = root.join("tests/fixtures/store/slope");'}
+        self.assertEqual(pcc.check(GOOD + ["tests/fixtures/store/slope/seg_1.rkyv"], TARGETS, sources)[0], [])
+        errors, _ = pcc.check(GOOD, TARGETS, sources)
+        self.assertEqual(errors, ["tests/golden.rs: reads tests/fixtures/store/slope, which is not in the package"])
+
     def test_an_empty_listing_fails(self):
         self.assertEqual(pcc.check([], TARGETS, SOURCES)[0], ["the package list is empty"])
 

@@ -128,7 +128,7 @@ assert!(matches!(law.ingest(&sample_points(&[0, 1, 4, 9, 16]), &policy), Verdict
 | `law` | no | alice-zip (`std` なし) | fit を `SignalLaw` で返す (`no_std` + `alloc`) |
 | `zip` | no | alice-zip (`std`, `lzma`) | 残差圧縮ブリッジ |
 | `codec` | no | alice-codec | wavelet ノイズ除去ブリッジ |
-| `db` | no | alice-db | 係数の永続化ブリッジ |
+| `db` | no | alice-db (`fs`) | 係数の永続化ブリッジ 書き込みと読み出しは ALICE-DB の error をそのまま返す (断られた読み出しは空の結果でなく error、model の近似値は `ResidualPolicy::ModelOnly` を指定した時だけ) |
 | `ml` | no | alice-ml | 1.58-bit ternary 物体分類 |
 | `sdf` | no | alice-sdf | 点群から SDF への圧縮 |
 | `depth-camera` | no | rusb | USB depth camera の取り込み |

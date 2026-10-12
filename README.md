@@ -134,7 +134,7 @@ are in `tests/edge_law.rs`.
 | `law` | no | alice-zip (without `std`) | fits as `SignalLaw` (`no_std` + `alloc`) |
 | `zip` | no | alice-zip (`std`, `lzma`) | residual compression bridge |
 | `codec` | no | alice-codec | wavelet denoising bridge |
-| `db` | no | alice-db | coefficient persistence bridge |
+| `db` | no | alice-db (`fs`) | coefficient persistence bridge; every write and read returns ALICE-DB's error (a refused read is an error, not an empty result; the model approximation only with `ResidualPolicy::ModelOnly`) |
 | `ml` | no | alice-ml | 1.58-bit ternary object classification |
 | `sdf` | no | alice-sdf | point cloud to SDF compression |
 | `depth-camera` | no | rusb | USB depth camera capture |

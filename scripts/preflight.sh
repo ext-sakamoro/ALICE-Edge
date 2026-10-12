@@ -144,6 +144,9 @@ cargo test --test analytic_oracle --features "std,sdf"
 step "ci.yml / test: robust fit contract (tests/robust_contract.rs, std)"
 cargo test --test robust_contract --features "std"
 
+step "ci.yml / test: db bridge errors (tests/db_bridge_errors.rs, db)"
+cargo test --test db_bridge_errors --features "db"
+
 step "ci.yml / test: determinism goldens (no features, std, full)"
 cargo test --test determinism_golden --no-default-features
 cargo test --test determinism_golden --features "std"

@@ -86,7 +86,7 @@ alice-codec = { version = "0.1", optional = true, default-features = false, feat
 # crate opens on-disk stores, so `fs` is named explicitly
 alice-db = { version = "0.4", optional = true, default-features = false, features = ["fs"] }
 rusb = { version = "0.9", optional = true }
-alice-sdf = { version = "1.9", optional = true, default-features = false, features = ["svo"] }
+alice-sdf = { version = "6", optional = true, default-features = false, features = ["svo"] }
 alice-ml = { version = "0.2", optional = true, default-features = false, features = ["std"] }
 libasp = { version = "1.0", optional = true, default-features = false }
 # Sensor drivers

@@ -57,6 +57,10 @@ step "ci.yml / docs-lint: FFI status codes agree in Rust / C / C#"
 python3 scripts/test_ffi_status_check.py
 python3 scripts/ffi_status_check.py
 
+step "ci.yml / docs-lint: package contents (include allowlist)"
+python3 scripts/test_package_contents_check.py
+python3 scripts/package_contents_check.py
+
 step "security-audit.yml / stub-guard"
 scripts/stub_guard.sh
 

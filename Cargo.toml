@@ -16,6 +16,25 @@ repository = "https://github.com/ext-sakamoro/ALICE-Edge"
 keywords = ["embedded", "no_std", "compression", "edge", "iot"]
 categories = ["embedded", "no-std", "compression"]
 readme = "README.md"
+# What the published .crate contains, as an allowlist: a new top-level file or
+# directory stays out until it is named here. CI tooling, helper scripts, fuzz
+# targets and editor / toolchain settings are not part of the library.
+# scripts/package_contents_check.py checks the packaged list against this
+# (forbidden paths, every Cargo target, every file a packaged source embeds)
+include = [
+    "/src/**/*.rs",
+    "/tests/**/*.rs",
+    "/benches/**/*.rs",
+    "/examples/**/*.rs",
+    "/bindings/alice_edge.h",
+    "/bindings/AliceEdge.cs",
+    "/README.md",
+    "/README_JP.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/LICENSE-APACHE",
+    "/TRADEMARK_NOTICE",
+]
 
 [lib]
 name = "alice_edge"

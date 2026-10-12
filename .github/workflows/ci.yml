@@ -314,6 +314,13 @@ jobs:
         run: python scripts/test_ffi_status_check.py
       - name: FFI status codes (Rust / C / C# agree)
         run: python scripts/ffi_status_check.py
+      # the published .crate is an allowlist (Cargo.toml `include`): no CI,
+      # scripts or fuzz files in it, every Cargo target and every embedded
+      # file present (an empty list or 0 targets compared is red)
+      - name: Package contents (tests)
+        run: python scripts/test_package_contents_check.py
+      - name: Package contents (cargo package --list)
+        run: python scripts/package_contents_check.py
 
   actionlint:
     name: actionlint (workflow YAML)

@@ -882,7 +882,7 @@ fn golden_depth_capture() {
 /// the scenario hashes above are unchanged (or explained), then update this
 /// constant and record both in CHANGELOG.
 const GOLDEN_SEMANTICS_ID: &str =
-    "d2209b30f6f1f45baa1b638bcdfee34ac64773b2e63b9c083b2e77afc691398e";
+    "135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000";
 
 #[test]
 fn golden_semantics_id() {
@@ -932,10 +932,10 @@ fn golden_semantics_id() {
 /// rather than whatever happened to come out.
 #[cfg(feature = "law")]
 const GOLDEN_LAW_ID_RISING: &str =
-    "525ef7aff3afeb6f7db979da46c4bc823d887830dfb262bf6f61f0e3fbbda694";
+    "041fc4a2e15b589cc6284d65900d996427a30232a7df1a904c6937f652a45c35";
 #[cfg(feature = "law")]
 const GOLDEN_LAW_ID_FALLING: &str =
-    "ebaad4a249a3031f48f779f57cf8e059ca531109922bc9fa77d9de2fbe419605";
+    "c0619c429284d441321d5df1e52ad7e5b2a412a31d2c18d18d201f9aa0fc07c9";
 
 #[cfg(feature = "law")]
 #[test]

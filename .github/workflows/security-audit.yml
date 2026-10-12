@@ -141,6 +141,11 @@ jobs:
           # sensors-hw が libudev-sys を引き、runner に system library libudev が無いと
           # build script が panic する packaging 検査としては default features で成立する
           cargo check
+          # cargo package の verify も上の check も test target を build しない
+          # tests/ が include! する file や実行時に開く fixture が欠けると、
+          # 展開した crate の test だけが壊れるので、展開先で test を実行する
+          # (docs.rs の feature 集合、sensors-hw は上と同じ理由で外す)
+          cargo test --tests --features "$FULL_FEATURES"
 
   coverage:
     name: Coverage (cargo-llvm-cov, informational)

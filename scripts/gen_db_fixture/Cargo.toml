@@ -1,0 +1,21 @@
+# Writes tests/fixtures/db_store_det_math_0_4/slope: a lossless store written by
+# alice-db 0.3.0 on alice-det-math 0.4 (arithmetic identifier d2209b30…)
+#
+#   cargo run --manifest-path scripts/gen_db_fixture/Cargo.toml -- \
+#       tests/fixtures/db_store_det_math_0_4/slope
+#
+# The versions are pinned exactly: the point of the fixture is the arithmetic
+# that wrote it. Rerunning reproduces the files byte for byte except the
+# segment's creation time (3 bytes of seg_1.rkyv at offset 360, wall clock)
+[package]
+name = "gen-db-fixture"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+alice-db = "=0.3.0"
+alice-det-math = "=0.4.0"
+
+# not a member of the alice-edge package
+[workspace]

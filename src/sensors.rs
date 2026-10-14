@@ -1565,6 +1565,46 @@ mod tests {
         assert_eq!(a.accel_z, b.accel_z, "Adxl345Sensor accel_z");
     }
 
+    /// Closed-form pin for `Adxl345Sensor`'s simulated branch: the run-to-run
+    /// equality oracle above only checks that two runs of the same index
+    /// sequence agree with each other, which a degenerate implementation
+    /// (e.g. one that always returns a constant regardless of `i`) would
+    /// also satisfy -- two runs of a constant are trivially equal. This
+    /// anchors the output to the exact closed-form expression
+    /// `read_samples_interval`'s simulated branch computes
+    /// (`t = i / 1000.0`, `accel_x = (sin(t) * 100.0) as i32`, `accel_y =
+    /// (cos(t) * 100.0) as i32`, `accel_z = 1000 + (t * 5.0) as i32`),
+    /// recomputed here independently of calling that method.
+    ///
+    /// `i = 500` (not a small index): at small `i` the integer-truncated
+    /// output is flat regardless of the waveform shape -- the same
+    /// intentional design as `Bno055Sensor`'s `i * INV_1000` pattern and
+    /// `Bme280Sensor`'s temperature (flat at 2500 for `i` in `0..5`, see the
+    /// oracle above) -- so a small-`i` pin would not distinguish a correct
+    /// trig waveform from a stuck constant either. `t = 0.5` at `i = 500`
+    /// keeps `sin`/`cos` well clear of an integer-truncation boundary.
+    #[test]
+    fn adxl345_accel_closed_form_pin() {
+        let i: usize = 500;
+        let mut sensor = Adxl345Sensor::new();
+        let batch = sensor
+            .read_samples_interval(i + 1, Duration::ZERO)
+            .expect("simulated branch cannot fail");
+
+        let t = i as f32 * (1.0 / 1000.0);
+        let expected_x = (alice_det_math::sin(t) * 100.0) as i32;
+        let expected_y = (alice_det_math::cos(t) * 100.0) as i32;
+        let expected_z = 1000 + (t * 5.0) as i32;
+
+        assert_ne!(
+            expected_x, 0,
+            "pin index chosen so accel_x is provably non-zero"
+        );
+        assert_eq!(batch.accel_x[i], expected_x, "accel_x closed form at i={i}");
+        assert_eq!(batch.accel_y[i], expected_y, "accel_y closed form at i={i}");
+        assert_eq!(batch.accel_z[i], expected_z, "accel_z closed form at i={i}");
+    }
+
     #[test]
     fn test_gps_sensor_name() {
         let sensor = GpsSensor::new("/dev/ttyS0", 9600);

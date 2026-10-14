@@ -415,3 +415,9 @@ jobs:
         run: |
           python3 scripts/test_workflow_timeouts.py
           python3 scripts/workflow_timeouts.py
+      # no built library or executable is tracked (an exception is a path listed in
+      # .github/tracked-binaries.txt with a reason); the checker's own tests run first
+      - name: tracked-binaries tests
+        run: python3 scripts/test_tracked_binaries.py
+      - name: tracked-binaries
+        run: python3 scripts/tracked_binaries.py

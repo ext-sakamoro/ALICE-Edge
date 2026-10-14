@@ -51,6 +51,8 @@ actionlint .github/workflows/*.yml
 step "ci.yml / actionlint: workflow-timeouts (every job has timeout-minutes)"
 python3 scripts/test_workflow_timeouts.py
 python3 scripts/workflow_timeouts.py
+python3 scripts/test_tracked_binaries.py
+python3 scripts/tracked_binaries.py
 
 step "ci.yml / fmt: cargo fmt --check"
 cargo fmt -- --check

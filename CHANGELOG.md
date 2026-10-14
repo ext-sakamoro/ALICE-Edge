@@ -10,11 +10,15 @@ All notable changes to ALICE-Edge will be documented in this file.
 - 出力順が入力だけで決まらなかった `edge_pipeline::voxel_grid_downsample` (点群の順序が呼び出しごとに変わった) と `TelemetryHub::timed_out_devices` (device_id の並びが反復順) を、キーの全順序で走査する `BTreeMap` に改めた 値の計算は変えていない
 - `Bme280Sensor` / `Dht22Sensor` / `Adxl345Sensor` の sensors-hw 無し (模擬) 経路が、模擬センサー値 (温度・湿度・気圧・加速度) を経過時間 (`Instant::elapsed()`) から計算していた (G10 の監査で発覚) 同じ file 内の `Bno055Sensor` / `Max30102Sensor` / `GpsSensor` / `SimulatedSensor` はループの添字から計算しており、この 3 件だけ異なる経路だった (`timestamps` フィールド自体は引き続き経過時間を記録する、変わるのは模擬値の計算元のみ) 新規 oracle `simulated_sensor_readings_are_index_driven_not_clock_driven`: 同じ回数を 2 つの明確に異なる interval (DHT22 は floor 前後) で読んで模擬値が byte 一致することを確認 (変異: 3 件それぞれを経過時間ベースに戻すと red を確認)
 
+### Added
+- `alice-law-conformance.toml`: ALICE-Law の 14 gate それぞれの状態を証跡つきで記録した (pass 1: G12 / fail-known 5: G2, G4, G5, G6, G11 / unverified 8: G1, G3, G7, G8, G9, G10, G13, G14) pass は変異を実行して赤になることを確かめた (G12 は非公開名を文書に足すと `scripts/public_text.sh` が exit 1) G10 は `SystemTime::now()`・`RandomState::default()`・qualified Self などは両層で止まるが、`Instant::elapsed` / `SystemTime::elapsed` がどちらの層にも無く、`src/ota.rs` に足しても検査が通るので unverified とした fail-known には箇所を書いた (例: float の max / min が `src/object_classifier.rs` などに 34 箇所、release profile で走る試験は `tests/panic_contract.rs` だけ) G1 は禁止の一覧は揃っているが、CI の clippy が `edge-pipeline` と `pyo3` を lint せず canary も無いので unverified とした `README.md` / `README_JP.md` の ALICE-Law の節をこの manifest から作り直した
+
 ### Changed
 - CI: ci.yml / fuzz.yml / security-audit.yml の concurrency を、main では commit ごとに別の group にして止めないようにした (main 以外の branch は従来どおり同じ branch の新しい commit が古い run を止める)
 - CI: security-audit.yml の push trigger に `ci/**` を足した (ci.yml / fuzz.yml と揃え、main に入れる前の branch でも Security & Hygiene が走るように)
 - CI: build した library と実行形式を tracked にしない検査 (`scripts/tracked_binaries.py`) を追加 例外は `.github/tracked-binaries.txt` に理由付きで書いた path だけ、読めない file と走査 0 件でも失敗する CI と preflight で走る
 - CI / `clippy.toml`: 決定論 gate (G10) として `std::time::Instant::now` / `std::time::SystemTime::now` / `std::collections::hash_map::RandomState::new` を disallowed-methods に追加 このクレートが送受する値 (fit した係数、点群フレーム、圧縮・分類・符号化したパケット) が OS のランダム性や壁時計に依存すると、同じ入力から別の機械・別の瞬間で別の値になる `scripts/entropy_guard.py` (試験 `scripts/test_entropy_guard.py`) が同じ対象を compile 無しで静的に検査する 監査した 25 箇所のうち、パイプラインの段階ごとの遅延計測・ダッシュボードの稼働時間・ウォッチドッグの生存監視・DHT22 の GPIO パルス幅計測は正当な壁時計の使用として許可した
+- `clippy.toml`: `f32::sin_cos` / `f64::sin_cos` を `disallowed-methods` に追加した (ALICE-Law の G1 の一覧で唯一欠けていた) 呼び出しは元から無く、`x.sin_cos()` を足すと std feature の clippy が赤になることを確かめた
 
 ## [0.2.1] - 2026-10-14
 

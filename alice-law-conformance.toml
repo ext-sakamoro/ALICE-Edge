@@ -1,0 +1,122 @@
+# ALICE-Law conformance manifest for this crate (alice-edge). One entry per gate
+# defined in ALICE-Law's conformance/gates.toml. Schema (status / evidence /
+# mutant / since / note / reference_repo) is docs/CONFORMANCE.md's "Manifest"
+# section in that repository.
+#
+# Every entry is written from what this repository's files show, checked
+# directly. A gate is `pass` only with evidence and a mutant that was carried
+# out and turned it red; `fail-known` names the unmet part and where it is;
+# `unverified` says why it was not decided. Line numbers are those of the
+# commit that introduced this file.
+#
+# What this crate computes: the fits (q16_linear.rs, simd_fit.rs, robust.rs,
+# constant_fit.rs, delta.rs, piecewise.rs, ring_buffer.rs) are integer Q16.16
+# arithmetic; float transcendentals appear only through alice-det-math in the
+# simulated sensors (src/sensors.rs), the depth-capture simulation
+# (src/depth_capture.rs) and the classifier features (src/object_classifier.rs).
+
+[G1]
+status = "unverified"
+evidence = [
+    "clippy.toml lines 22 to 74 (every method the G1 list marks banned, for f32 and f64, sin_cos at lines 25 and 51; powi, the pending default, is banned too)",
+    ".github/workflows/ci.yml clippy job lines 217 to 227 (no_std; no_std + law; std, all targets; full feature set, all targets), no-std-cross job line 201 (thumbv7em, law + ffi), test job line 173 (std + sensors-hw, Linux)",
+]
+mutant = "x.sin() added to a library function in src/delta.rs: cargo clippy --lib --all-targets --features std -- -D warnings fails (disallowed method f32::sin, src/delta.rs:76); the same call added to src/edge_pipeline.rs: the CI command cargo clippy --lib --all-targets --features \"$FULL_FEATURES\" -- -D warnings passes (Finished, exit 0), and only cargo clippy --lib --features edge-pipeline reports it; both reverted"
+since = ""
+note = "unverified: no banned call is known (a hand run of cargo clippy --lib --features pyo3 -- -D warnings is clean, and the temporary max/min measurement under G2 linted every feature together), but the machine check is incomplete in two places and has no canary. (1) Two features are never linted in CI or in scripts/preflight.sh: edge-pipeline (src/lib.rs:76, src/edge_pipeline.rs; FULL_FEATURES at .github/workflows/ci.yml:30 contains depth-camera, sdf, ml and asp but not edge-pipeline itself) and pyo3 (src/lib.rs:90, src/python.rs; built only by maturin in the python job, ci.yml:347, without clippy). The mutant above shows a banned call in src/edge_pipeline.rs passes every CI clippy run. A clippy run with edge-pipeline also fails today on clippy::type_complexity at src/edge_pipeline.rs:368, which no CI job sees. (2) No canary test injects a banned call and confirms the lint fires, and no check fails when clippy linted nothing."
+reference_repo = "ALICE-SDF"
+
+[G2]
+status = "fail-known"
+since = ""
+note = "unmet: no ban on f32::max / f32::min / f64::max / f64::min in clippy.toml, no Law helper and no default-deny manifest of raw_* sites. Library sites, measured by adding the four methods to clippy.toml temporarily and running cargo clippy --lib with every feature (std, zip, law, codec, db, ml, sdf, depth-camera, asp, sensors, mqtt, dashboard, ffi, edge-pipeline, pyo3): src/object_classifier.rs:86, :87, :88, :94, :104, :110 (2), :116, :134, :135, :136, :142, :148 (2), :152, :360, :367, :374 (fold(f32::max) / fold(f32::min)); src/sdf_compress.rs:287 to :292; src/edge_pipeline.rs:401 to :406 and :409 to :411; src/ml_bridge.rs:105. The fits are integer Q16.16 arithmetic and the SIMD kernels (src/simd_fit.rs, SSE2 / NEON) are integer, so no SIMD width does a float max/min."
+reference_repo = "ALICE-SDF"
+
+[G3]
+status = "unverified"
+since = ""
+note = "unverified: no violation is known; the only mul_add sites are src/sensors.rs:839 (lat_deg.mul_add(-100.0, lat_raw)) and src/sensors.rs:848 (lon_deg.mul_add(-100.0, lon_raw)), and neither negates the result. Missing: a syntax-tree checker for an outer negation of a fused multiply-add and a CI step running it, so nothing keeps this true."
+reference_repo = "ALICE-LOL"
+
+[G4]
+status = "fail-known"
+evidence = [
+    "tests/determinism_golden.rs (Q16 fits, det-math kernels, classifier, SEMANTICS_ID at line 888; the only float edge input is f32::MIN_POSITIVE at line 713)",
+    ".github/workflows/ci.yml test job (matrix line 47: macos-latest and ubuntu-24.04-arm aarch64, ubuntu-latest and windows-latest x86_64)",
+]
+since = ""
+note = "unmet: (1) no signed-zero or exact-cancellation case is checked against fixed bit patterns (tests/ has no -0.0 literal and no cancellation case; tests/determinism_golden.rs:713 is the nearest float edge case); (2) the goldens run only in the debug profile: .github/workflows/ci.yml:83, :86, :91 and :151 run cargo test --test determinism_golden without --release, so the release half of {debug, release} x {x86_64, aarch64} is missing. The only release runs are tests/panic_contract.rs (ci.yml:101 std, :159 full feature set)."
+reference_repo = "ALICE-LOL"
+
+[G5]
+status = "fail-known"
+since = ""
+note = "unmet: the release profile runs only tests/panic_contract.rs (.github/workflows/ci.yml:101 std and :159 full feature set, on the four-OS matrix including the aarch64 legs macos-latest and ubuntu-24.04-arm); the Law-bearing suite runs in debug only: tests/determinism_golden.rs (ci.yml:83, :86, :91, :151), tests/edge_law.rs (:112), tests/analytic_oracle.rs (:121), tests/robust_contract.rs (:126), tests/db_bridge_errors.rs (:131) and the lib tests (:72, :106, :142, :146)."
+reference_repo = "ALICE-LOL"
+
+[G6]
+status = "fail-known"
+evidence = [
+    "src/lib.rs:151 (pub use alice_det_math::SEMANTICS_ID)",
+    "tests/determinism_golden.rs golden_semantics_id (line 888, recorded hex at line 884)",
+]
+since = ""
+note = "unmet: src/lib.rs:151 re-exports alice-det-math's identifier instead of computing one that folds this crate's own pins (the Q16.16 normal equations, src/q16_linear.rs and src/simd_fit.rs; the MAD rejection constants, src/robust.rs) with the identifiers of its Law-bearing dependencies (alice-zip, alice-db, alice-analytics), so a change to this crate's own rounding rules moves no identifier, and nothing ties the identifier to this crate's version or toolchain. tests/determinism_golden.rs:888 pins the re-exported value to its hex and to alice_det_math::SEMANTICS_ID, which shows an arithmetic change in the dependency only."
+reference_repo = "ALICE-Zip"
+
+[G7]
+status = "unverified"
+since = ""
+note = "unverified: the boundaries within one exchange are listed but not ruled on: src/ffi.rs (22 #[no_mangle] extern \"C\" functions taking Q16.16 coefficients and sample arrays), src/python.rs (PyO3, e.g. evaluate_linear_batch at line 114), src/mqtt_bridge.rs (CoefficientPayload::to_json at 192 and to_binary at 211; OtaModelUpdate::from_json at 388, from_binary at 433 and to_binary_ext at 481, coefficients sent by another device), src/asp_bridge.rs:54 (encode_frame) and src/zip_bridge.rs:50 (decompress_coefficients). None carries an identifier. Whether integer Q16.16 coefficients are Law-bearing values here (SEMANTICS_ID covers alice-det-math's float kernels, which the fits do not use) needs a decision before the cell can be pass or fail-known."
+
+[G8]
+status = "unverified"
+since = ""
+note = "unverified: the durable forms are listed but not ruled on: src/object_classifier.rs:287 save_weights and :309 load_weights (float classifier weights in a file, no identifier field), src/zip_bridge.rs:15 CompressedModelBatch (alice-zip's format) and src/db_bridge.rs (alice-db's store, which carries alice-db's identifier and returns ResidualError::Mismatch through CoefficientStoreError::residual at src/db_bridge.rs:78, tested by tests/db_bridge_errors.rs:56). Same open question as G7 (which values are Law-bearing), and this crate defines no persisted identifier of its own (G6)."
+
+[G9]
+status = "unverified"
+since = ""
+note = "unverified: depends on G6 and G8; this crate defines no identifier of its own whose history could be audited (src/lib.rs:151 re-exports alice-det-math's, whose history belongs to that crate)."
+
+[G10]
+status = "unverified"
+evidence = [
+    "clippy.toml lines 85 to 87 (disallowed-methods std::time::Instant::now, std::time::SystemTime::now, std::collections::hash_map::RandomState::new) and line 95 (disallowed-types std::collections::hash_map::RandomState)",
+    "scripts/entropy_guard.py (src/ outside cfg(test): getrandom, OsRng, thread_rng, rand::random, from_entropy, SystemTime::now, Instant::now, UNIX_EPOCH, RandomState, Uuid::new_v4; allowed sites by exact count with a reason, lines 77 to 104)",
+    "scripts/test_entropy_guard.py (canary test_every_source_in_production_code_is_reported line 47; RandomState::default line 114; char-literal brace line 123; qualified Self line 135; raw-string brace line 154; zero-scan lines 189 and 201)",
+    ".github/workflows/ci.yml docs-lint job lines 342 to 345 (Entropy guard steps) and clippy job lines 217 to 227",
+    "scripts/preflight.sh lines 77 and 78 (guard and its tests) and lines 83 to 91 (clippy)",
+]
+note = "unverified: no production clock or entropy read outside the allowed sites is known, but the check has a measured hole: std::time::Instant::elapsed and std::time::SystemTime::elapsed are in neither clippy.toml nor scripts/entropy_guard.py (a production fn returning s.elapsed() added to src/ota.rs gives entropy_guard 30 files, 10 patterns, 0 problems; clippy.toml has no elapsed entry), so a wall-clock read can enter without either layer reporting it. What the layers do catch, measured in src/ota.rs: each added to src/ota.rs (feature std) and run separately through scripts/entropy_guard.py: std::time::SystemTime::now() -> exit 1 (SystemTime::now in production code); std::collections::hash_map::RandomState::default() -> exit 1 (RandomState in production code); #[cfg(test)] mod t { const C: char = '{'; } followed by a production std::time::Instant::now() -> exit 1; the same with r#\"{\"# in the test module -> exit 1; <std::time::Instant>::now() -> exit 1; one more Instant::now() in the allowed file src/sensors.rs -> exit 1 (11 call sites, ALLOWED says 10). The first four forms together under cargo clippy --lib --all-targets --features std -- -D warnings -> 5 errors (disallowed method SystemTime::now, disallowed type RandomState twice, disallowed method Instant::now for the plain and the qualified-Self call). All reverted; the unchanged tree reports 30 files, 10 patterns, 0 problems. the guard covers every file under src/ whatever its feature, so the clippy gap of G1 (edge-pipeline and pyo3 not linted) leaves the guard layer intact. 25 production clock reads are allowed by exact count with a reason (src/depth_capture.rs 2, src/dashboard.rs 3, src/edge_pipeline.rs 7, src/watchdog.rs 3, src/sensors.rs 10): stage latency, uptime, watchdog liveness, GPIO pulse width, and timestamps recorded beside a sample or frame (batch.timestamps, timestamp_ms at src/depth_capture.rs:256); no fit, compression, classification or encoded value is computed from them, and the simulated sensor values are index-driven since 04dcf3a. The allowed sites sit under 18 scoped clippy::disallowed_methods attributes with a reason (src/sensors.rs 10, src/watchdog.rs 3, src/dashboard.rs 2, src/edge_pipeline.rs 2, src/depth_capture.rs 1)."
+reference_repo = "ALICE-DB"
+
+[G11]
+status = "fail-known"
+evidence = [
+    "scripts/test_entropy_guard.py (canary line 47, zero-scan lines 189 and 201)",
+    "scripts/test_public_text.py and .github/public-text-pin (the pinned SHA-256 of ALICE-Law's checker is its cross-repository identity check)",
+]
+since = ""
+note = "unmet: the clippy ban that carries G1 and the compiled layer of G10 (clippy.toml lines 22 to 96, run by .github/workflows/ci.yml lines 217 to 227) has no canary that injects a banned call and confirms the lint fires, and no check that it linted anything; G2, G3, G13 and G14 have no checker here. Present: the entropy guard (G10) has a canary and zero-scan failures, and G12's checker is fetched at a pinned revision with its SHA-256 checked. scripts/entropy_guard.py was ported from ALICE-DB with this crate's own ALLOWED table, so it is not a byte-identical shared copy and has no copy check."
+reference_repo = "ALICE-LOL"
+
+[G12]
+status = "pass"
+evidence = [".github/workflows/public-text.yml", "scripts/public_text.sh", ".github/public-text-pin", "scripts/test_public_text.py", ".public-text.toml"]
+mutant = "in a throwaway clone at this commit, commit a README.md line naming an internal rules file and run PUBLIC_TEXT_BASE=<previous commit> scripts/public_text.sh: it reports 'README.md:331: private name' and exits 1; the unchanged tree reports '0 findings in 105 files at HEAD' and exits 0."
+since = "e11dfa4"
+note = "the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (ca96d9214ffe0da43e9cb034417a4f6c041ba4be) and refuses it unless its SHA-256 is 3aef3cdd095b374153dbb74f228828d559cb88f78b33f36570c96cbcb80eb6d5 (rechecked against the file at that revision); it reads the tree at HEAD and the commits since the base, exits 2 when it compared nothing, and runs on pushes to main and ci/** branches and on pull requests. .public-text.toml allows the words the docs linter and its test must contain, by exact line count per file."
+reference_repo = "ALICE-Law"
+
+[G13]
+status = "unverified"
+since = ""
+note = "unverified: no violation is known since d06f4da: src/edge_pipeline.rs:368 (voxel_grid_downsample) and src/telemetry.rs:158 (TelemetryHub, read by timed_out_devices at line 284) use BTreeMap, pinned by src/edge_pipeline.rs:421 voxel_downsample_order_is_function_of_input_only and src/telemetry.rs:437 hub_timed_out_order_is_sorted_and_stable. The remaining HashMap uses are membership only, no output order: src/depth_capture.rs:151 (voxel_downsample keeps the first point per cell in input order) and src/mqtt_bridge.rs:500 (OtaModelStore get / insert / len). No parallel reduction (no rayon; src/mqtt_bridge.rs:273 spawns one thread for the network loop). Missing: a machine check (a lint or scan for HashMap / HashSet iteration feeding an output) that keeps a new site out; the two order tests cover only the two sites they name."
+reference_repo = "ALICE-LOL"
+
+[G14]
+status = "unverified"
+since = ""
+note = "unverified: no flag is known; every place a flag can come from was read at this commit: Cargo.toml [profile.release] and [profile.bench] set opt-level, lto and codegen-units (and strip for release) only, there is no .cargo/config* and no build.rs, and no RUSTFLAGS with fast-math or target-cpu=native in .github/workflows or scripts. Missing: a CI scan step over those places, and tests that assert round-to-nearest-even and that subnormals are not flushed to zero (tests/ has no such assertion)."
+reference_repo = "ALICE-LOL"

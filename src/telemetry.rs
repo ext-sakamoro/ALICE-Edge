@@ -2,7 +2,7 @@
 //!
 //! 複数エッジデバイスのメトリクス集約と健全性監視。
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// テレメトリ設定。
 #[derive(Debug, Clone)]
@@ -155,7 +155,7 @@ struct DeviceState {
 #[derive(Debug)]
 pub struct TelemetryHub {
     /// デバイス ID → 状態。
-    devices: HashMap<String, DeviceState>,
+    devices: BTreeMap<String, DeviceState>,
     /// イベントバッファ。
     events: Vec<TelemetryEvent>,
     /// バッファ最大サイズ。
@@ -175,7 +175,7 @@ impl TelemetryHub {
     #[must_use]
     pub fn new(buffer_size: usize, heartbeat_timeout_secs: u64) -> Self {
         Self {
-            devices: HashMap::new(),
+            devices: BTreeMap::new(),
             events: Vec::with_capacity(buffer_size.min(1024)),
             buffer_size,
             heartbeat_timeout_secs,
@@ -279,7 +279,7 @@ impl TelemetryHub {
         self.devices.len()
     }
 
-    /// タイムアウトしたデバイスを検出。
+    /// タイムアウトしたデバイスを検出 (device_id の昇順)。
     #[must_use]
     pub fn timed_out_devices(&self, now_unix: u64) -> Vec<String> {
         self.devices
@@ -430,6 +430,26 @@ mod tests {
         let timed_out = hub.timed_out_devices(500);
         assert!(timed_out.contains(&"old".to_string()));
         assert!(!timed_out.contains(&"new".to_string()));
+    }
+
+    /// G13: タイムアウト一覧の順序は device_id の昇順 (挿入順・反復に依らない)
+    #[test]
+    fn hub_timed_out_order_is_sorted_and_stable() {
+        let ids = ["d07", "d02", "d19", "d00", "d11", "d05", "d13", "d03"];
+        let mut expect: Vec<String> = ids.iter().map(|s| (*s).to_string()).collect();
+        expect.sort();
+        for rot in 0..ids.len() {
+            let mut hub = TelemetryHub::new(100, 60);
+            for k in 0..ids.len() {
+                hub.record(TelemetryEvent::Heartbeat {
+                    device_id: ids[(k + rot) % ids.len()].into(),
+                    timestamp: 100,
+                });
+            }
+            for _ in 0..50 {
+                assert_eq!(hub.timed_out_devices(500), expect);
+            }
+        }
     }
 
     #[test]

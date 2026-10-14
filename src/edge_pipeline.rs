@@ -347,8 +347,8 @@ pub fn voxel_grid_downsample(points: &[[f32; 3]], voxel_size: f32) -> Vec<[f32; 
     }
 
     let inv_voxel = 1.0 / voxel_size;
-    let mut voxel_map: std::collections::HashMap<(i32, i32, i32), (f64, f64, f64, u32)> =
-        std::collections::HashMap::new();
+    let mut voxel_map: std::collections::BTreeMap<(i32, i32, i32), (f64, f64, f64, u32)> =
+        std::collections::BTreeMap::new();
 
     for p in points {
         let vx = (p[0] * inv_voxel).floor() as i32;
@@ -362,6 +362,7 @@ pub fn voxel_grid_downsample(points: &[[f32; 3]], voxel_size: f32) -> Vec<[f32; 
         entry.3 += 1;
     }
 
+    // BTreeMap は key (vx, vy, vz) の全順序で走査するので、出力順は入力だけで決まる
     voxel_map
         .values()
         .map(|&(sx, sy, sz, count)| {
@@ -395,6 +396,43 @@ fn compute_bounds_size(points: &[[f32; 3]]) -> [f32; 3] {
 
 #[cfg(test)]
 mod tests {
+    use super::voxel_grid_downsample;
+
+    /// G13: 出力順は入力だけの関数 (同一入力の反復・入力順の入れ替えで不変)
+    #[test]
+    fn voxel_downsample_order_is_function_of_input_only() {
+        // 1/8 の倍数なので f64 の総和は順序に依らず厳密 (byte 一致を比べられる)
+        let mut pts: Vec<[f32; 3]> = Vec::new();
+        for i in 0..40i32 {
+            for k in 0..2 {
+                pts.push([
+                    (i % 7) as f32 + 0.125 * k as f32,
+                    (i % 5) as f32 * 2.0 + 0.25,
+                    (i / 3) as f32 - 4.0 + 0.5 * k as f32,
+                ]);
+            }
+        }
+        let bytes = |v: &[[f32; 3]]| -> Vec<u32> {
+            v.iter()
+                .flat_map(|p| p.iter().map(|x| x.to_bits()))
+                .collect()
+        };
+        let base = bytes(&voxel_grid_downsample(&pts, 1.0));
+        assert!(base.len() > 3 * 8, "need many voxels");
+        for _ in 0..200 {
+            assert_eq!(bytes(&voxel_grid_downsample(&pts, 1.0)), base);
+        }
+        let mut shuffled = pts.clone();
+        for r in 1..50usize {
+            let n = shuffled.len();
+            shuffled.rotate_left(r % n);
+            if r % 2 == 0 {
+                shuffled.reverse();
+            }
+            assert_eq!(bytes(&voxel_grid_downsample(&shuffled, 1.0)), base);
+        }
+    }
+
     use super::*;
     use crate::depth_capture::{DepthFrame, PointNormal};
 

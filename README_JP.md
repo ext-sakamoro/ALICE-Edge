@@ -254,6 +254,60 @@ scripts/preflight.sh --quick    # static checks, clippy, builds, docs, cargo tes
 - [ALICE-Analytics](https://github.com/ext-sakamoro/ALICE-Analytics) — ダッシュボード用 sketch
 - [ALICE-Streaming-Protocol](https://github.com/ext-sakamoro/ALICE-Streaming-Protocol) — ストリーミングブリッジ
 
+<!-- law-integration:begin law=0bf8810b61770aa057c60817ed2a332c6db574ae -->
+## ALICE-Law との統合
+
+ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `0bf8810b6177` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
+
+| | |
+|---|---|
+| release train | alice-edge 0.2.1 (published)、Law への依存: あり |
+| 算術 | train の alice-det-math 0.5.0、算術の識別子 `135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000` この crate の要求は `alice-det-math = "0.5"` |
+| end to end 検査 | 対象 (`alice-edge = "0.2"`)、digest `966a78784bb4e3341ac6627d519db896f398176b71c2402b188294db6c8e3728`、aarch64 と x86_64 で同じ |
+
+### 適合 (G1-G14)
+
+この repository には `alice-law-conformance.toml` が無い すべての gate は未申告
+
+| gate | 状態 | 注記 |
+|---|---|---|
+| G1 no-libm-direct | 未申告 |  |
+| G2 ieee-max-min | 未申告 |  |
+| G3 no-outer-fneg-of-fma | 未申告 |  |
+| G4 debug-release-arch-goldens | 未申告 |  |
+| G5 release-profile-test-leg | 未申告 |  |
+| G6 semantics-id | 未申告 |  |
+| G7 handshake-carries-id | 未申告 |  |
+| G8 persisted-semantics-id | 未申告 |  |
+| G9 persisted-meaning-change-is-major | 未申告 |  |
+| G10 no-run-varying-artifacts | 未申告 |  |
+| G11 gate-self-tests | 未申告 |  |
+| G12 public-repo-text-rules | 未申告 |  |
+| G13 no-unspecified-order | 未申告 |  |
+| G14 float-environment-invariants | 未申告 |  |
+
+### feature と保証の範囲
+
+| feature | 保証 | 注記 |
+|---|---|---|
+| `asp` | 未申告 |  |
+| `codec` | 未申告 |  |
+| `dashboard` | 未申告 |  |
+| `db` | 未申告 |  |
+| `depth-camera` | 未申告 |  |
+| `edge-pipeline` | 未申告 |  |
+| `ffi` | 未申告 |  |
+| `law` | 未申告 |  |
+| `ml` | 未申告 |  |
+| `mqtt` | 未申告 |  |
+| `pyo3` | 未申告 |  |
+| `sdf` | 未申告 |  |
+| `sensors` | 未申告 |  |
+| `sensors-hw` | 未申告 |  |
+| `std` | 未申告 |  |
+| `zip` | 未申告 |  |
+<!-- law-integration:end -->
+
 ## ライセンス
 
 MIT OR Apache-2.0 ([LICENSE](LICENSE), [LICENSE-APACHE](LICENSE-APACHE))

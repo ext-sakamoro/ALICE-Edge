@@ -1,0 +1,86 @@
+# ALICE-Law conformance manifest for this crate (alice-edge). One entry per gate
+# defined in ALICE-Law's conformance/gates.toml. Schema (status / evidence /
+# mutant / since / note / reference_repo) is docs/CONFORMANCE.md's "Manifest"
+# section in that repository.
+#
+# Every entry is written from what this repository's files show, checked
+# directly. A gate is `pass` only with evidence and a mutant that was carried
+# out and turned it red; `fail-known` names the unmet part and where it is;
+# `unverified` says why it was not decided. Line numbers are those of the
+# commit that introduced this file.
+#
+# What this crate computes: the fits (q16_linear.rs, simd_fit.rs, robust.rs,
+# constant_fit.rs, delta.rs, piecewise.rs, ring_buffer.rs) are integer Q16.16
+# arithmetic; float transcendentals appear only through alice-det-math in the
+# simulated sensors (src/sensors.rs), the depth-capture simulation
+# (src/depth_capture.rs) and the classifier features (src/object_classifier.rs).
+
+[G1]
+status = "fail-known"
+note = "clippy.toml lists every method the G1 list bans for f32 and f64 (52 entries: the 25 banned names plus powi, for f32 and for f64; sin_cos was the one missing and is added on its own commit; the crate calls no powi and no banned method, found by grep over src/). Two parts of the gate are unmet: (1) the CI clippy jobs (ci.yml 'clippy' job, 'no-std-cross' job, the Linux 'test' step for sensors-hw) build no_std, law, std and the docs.rs feature set, but no job lints the `pyo3` feature (src/python.rs, 297 lines; `cargo clippy --lib --features pyo3 -- -D warnings` was run once by hand and is clean, but nothing runs it on a push); (2) there is no canary test that injects a direct call and confirms the lint catches it (the lint was only confirmed by hand: `x.sin_cos()` in src/delta.rs under `--features std` is refused with 'use of a disallowed method f32::sin_cos', and the same call passes before the sin_cos entry)."
+reference_repo = "ALICE-LOL"
+
+[G2]
+status = "fail-known"
+note = "No ban on f32::max / f32::min / f64::max / f64::min in clippy.toml, no Law helper and no default-deny manifest of raw_* sites. Lint-measured library sites (the four methods added temporarily to clippy.toml, full feature set plus edge-pipeline): src/object_classifier.rs 18 (86, 87, 88, 94, 104, 110 x2, 116, 134, 135, 136, 142, 148 x2, 152, 360, 367, 374 via fold(f32::max)), src/sdf_compress.rs 6 (287-292), src/edge_pipeline.rs 9 (382-387, 390-392), src/ml_bridge.rs 1 (105); tests/analytic_oracle.rs 300 and 304 are test code. The fit code is integer arithmetic and has no float max/min; no SIMD width does a float max/min (src/simd_fit.rs SSE2/NEON kernels are integer), so the per-width tests the gate asks for have no site to cover here."
+reference_repo = "ALICE-SDF"
+
+[G3]
+status = "fail-known"
+note = "No syntax-tree checker for the outer negation of a fused multiply-add and no CI step for it. Inspection: the only mul_add sites are src/sensors.rs:782 and src/sensors.rs:791 (`lat_deg.mul_add(-100.0, lat_raw)`, `lon_deg.mul_add(-100.0, lon_raw)`), neither negates the result, so the claim holds today but nothing keeps it true."
+reference_repo = "ALICE-LOL"
+
+[G4]
+status = "fail-known"
+note = "tests/determinism_golden.rs (golden_q16_linear, golden_det_math_kernels, golden_semantics_id and the others) runs on the four legs of the ci.yml test matrix (line 45: macos-latest, ubuntu-24.04-arm, ubuntu-latest, windows-latest; steps at lines 81, 84, 89, 149) in the debug profile only; the release profile runs tests/panic_contract.rs alone (lines 99, 157). The goldens contain no signed-zero or exact-cancellation case (no -0.0 literal in tests/; the nearest float edge case is f32::MIN_POSITIVE at tests/determinism_golden.rs:713). No branch protection was checked, so whether the legs are required jobs is not established."
+reference_repo = "ALICE-LOL"
+
+[G5]
+status = "fail-known"
+note = "Release-profile runs exist only for tests/panic_contract.rs on the test matrix (ci.yml lines 98-99 and 155-157, which includes the aarch64 runners macos-latest and ubuntu-24.04-arm). The Law-bearing suite (tests/determinism_golden.rs, tests/edge_law.rs, tests/analytic_oracle.rs) has no --release step."
+reference_repo = "ALICE-LOL"
+
+[G6]
+status = "fail-known"
+note = "src/lib.rs:151 re-exports alice_det_math::SEMANTICS_ID; the crate folds no pins of its own into an identifier. tests/determinism_golden.rs:888 (golden_semantics_id) pins the re-exported value to its hex and asserts it equals alice_det_math::SEMANTICS_ID, so an arithmetic change in the dependency is seen, but a change to this crate's own rounding rules (the Q16.16 normal equations, the MAD rejection constants) moves no identifier. What the crate's own pin would be is not decided."
+reference_repo = "ALICE-Zip"
+
+[G7]
+status = "unverified"
+note = "The boundaries that erase the Rust type were listed but not ruled on: src/ffi.rs (extern \"C\" functions taking Q16.16 coefficients and sample arrays), src/python.rs (PyO3 exports such as evaluate_linear_batch at line 114), src/mqtt_bridge.rs (OtaModelUpdate::from_json at 388 and from_binary at 433 read coefficients sent by another device), src/zip_bridge.rs:50 (decompress_coefficients) and src/db_bridge.rs. Only the last compares an identifier: it returns alice-db's ResidualError::Mismatch (CoefficientStoreError::residual, src/db_bridge.rs:73) and tests/db_bridge_errors.rs a_slope_read_of_foreign_arithmetic_is_an_error_not_an_empty_result feeds a store written under another identifier. The others carry integer Q16.16 coefficients; whether those count as Law-bearing values (they do not depend on SEMANTICS_ID, which covers float transcendentals) needs a decision by the crate owner before the cell can be pass or fail-known."
+
+[G8]
+status = "unverified"
+note = "Writers found: src/mqtt_bridge.rs CoefficientPayload::to_json (192) and to_binary (211, fixed 24 bytes), OtaModelUpdate::to_binary_ext (481), src/zip_bridge.rs CompressedModelBatch (15, alice-zip's format), src/db_bridge.rs (alice-db's format, which carries its own identifier). The three mqtt layouts have no identifier field, and to_json also writes float fields (slope_f32, residual_error). Same open question as G7: whether the payload values are Law-bearing; no decision was made, so the cell is not set to fail-known."
+
+[G9]
+status = "unverified"
+note = "The identifier this crate exposes is alice-det-math's (G6), and the crate defines no identifier of its own whose history could be audited; the history audit of that identifier belongs to alice-det-math. Depends on the G6 and G8 decisions."
+
+[G10]
+status = "fail-known"
+note = "No lint on clocks or random sources in clippy.toml and no scan. 25 Instant::now() reads in library code (all outside cfg(test)): src/sensors.rs 399, 508, 538, 545, 681, 827, 847, 965, 1120, 1227 (timestamps of simulated sensor samples and driver timing); src/edge_pipeline.rs 141, 144, 159, 165, 170, 212, 216 (stage timing); src/dashboard.rs 63, 64, 265 (uptime and reset); src/watchdog.rs 26, 37, 52 (heartbeat); src/depth_capture.rs 235, 240 (capture time). The fits read only sample values, so a fit coefficient does not depend on these reads; the timestamps that sensors.rs and depth_capture.rs write into the sample batches do. No SystemTime, Uuid or unseeded random source is used (grep over src/). Which of these paths are Law-bearing outputs is not decided."
+reference_repo = "ALICE-DB"
+
+[G11]
+status = "fail-known"
+note = "Of the gates this crate checks by machine, G12 has all three parts (the sha256 pin of the checker, exit 2 when nothing was compared, scripts/test_public_text.py) and G1 has none of the canary. The other checkers present (scripts/docs_lint.py with scripts/test_docs_lint.py, scripts/ffi_status_check.py with scripts/test_ffi_status_check.py, scripts/package_contents_check.py, scripts/workflow_timeouts.py) are not Law gates. G1 has no canary test; G2, G3, G10, G13 and G14 have no checker."
+reference_repo = "ALICE-LOL"
+
+[G12]
+status = "pass"
+evidence = [".github/workflows/public-text.yml", "scripts/public_text.sh", ".github/public-text-pin", "scripts/test_public_text.py", ".public-text.toml"]
+mutant = "commit a document line that names an internal rules file to README.md on a scratch branch and run PUBLIC_TEXT_BASE=origin/main scripts/public_text.sh: it reports 'README.md:276: private name' and exits 1; on the unchanged tree it exits 0 ('0 findings in 99 files at HEAD'). Carried out on the commit that introduced this file."
+since = "e11dfa4"
+note = "the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (ca96d9214ffe0da43e9cb034417a4f6c041ba4be) and refuses it unless its sha256 is 3aef3cdd095b374153dbb74f228828d559cb88f78b33f36570c96cbcb80eb6d5 (that is the hash of the file at that revision, checked with git show); it reads the tree at HEAD and the commits since the base, exits 2 when it compared nothing, and runs on pushes to main and ci/** branches and on pull requests. .public-text.toml allows the words the docs linter and its test must contain, by exact line count per file."
+reference_repo = "ALICE-Law"
+
+[G13]
+status = "fail-known"
+note = "src/edge_pipeline.rs:350-371 (voxel_grid_downsample, feature edge-pipeline) collects `voxel_map.values()` of a std HashMap into the returned point list, so the order of the output points depends on the map's random state; measured: two calls on the same 200 points in one process return the same set in different orders (same_order=false). The per-voxel sums are added in input order, so the values are stable, only the order varies. src/telemetry.rs:284-292 (timed_out_devices) also returns the keys of a HashMap in iteration order. Membership-only uses, no output order: src/depth_capture.rs:151 (voxel_downsample keeps the first point per cell, the map only answers 'seen'), src/mqtt_bridge.rs:500-541 (OtaModelStore: get / insert / len). No parallel reduction in the crate (no rayon; src/mqtt_bridge.rs:273 spawns one thread for the network loop)."
+reference_repo = "ALICE-LOL"
+
+[G14]
+status = "fail-known"
+note = "No fast-math-style flag and no target-cpu=native in the build configuration: Cargo.toml [profile.release] and [profile.bench] set opt-level, lto and codegen-units only; there is no .cargo/config, no build.rs and no RUSTFLAGS in .github/workflows or scripts. Unmet: no CI step scans these places (the absence is a snapshot, not a gate), and no test asserts round-to-nearest-even or that subnormals are not flushed to zero (grep of tests/ for subnormal, denormal, flush-to-zero and -0.0 finds nothing)."
+reference_repo = "ALICE-LOL"

@@ -4,9 +4,13 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `alice-law-conformance.toml`: ALICE-Law の 14 gate それぞれの状態を証跡つきで記録した (pass 1: G12 / fail-known 10: G1-G6, G10, G11, G13, G14 / unverified 3: G7-G9) fail-known には箇所を書いた (例: `src/edge_pipeline.rs:350` の HashMap の反復順が出力に出る、`Instant::now()` が 25 箇所) pass の G12 は変異 (非公開名を文書に足すと `scripts/public_text.sh` が exit 1) を実行して赤になることを確かめた
+
 ### Changed
 - CI: ci.yml / fuzz.yml / security-audit.yml の concurrency を、main では commit ごとに別の group にして止めないようにした (main 以外の branch は従来どおり同じ branch の新しい commit が古い run を止める)
 - CI: security-audit.yml の push trigger に `ci/**` を足した (ci.yml / fuzz.yml と揃え、main に入れる前の branch でも Security & Hygiene が走るように)
+- `clippy.toml`: `f32::sin_cos` / `f64::sin_cos` を `disallowed-methods` に追加した (ALICE-Law の G1 の一覧で唯一欠けていた) 呼び出しは元から無く、`x.sin_cos()` を足すと std feature の clippy が赤になることを確かめた
 
 ## [0.2.1] - 2026-10-14
 

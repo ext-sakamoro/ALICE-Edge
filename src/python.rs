@@ -118,6 +118,15 @@ fn evaluate_linear_batch<'py>(
 ) -> PyResult<Bound<'py, PyArray2<i32>>> {
     let c_shape = coeffs.as_array();
     let num_streams = c_shape.shape()[0];
+    // the rows are read as [slope, intercept]: any other width would index past the
+    // end (a Rust panic, raised as PanicException) or silently misread the columns
+    if c_shape.shape()[1] != 2 {
+        return Err(PyValueError::new_err(format!(
+            "coeffs must have shape (num_streams, 2), got ({}, {})",
+            num_streams,
+            c_shape.shape()[1]
+        )));
+    }
     let c_slice = coeffs
         .as_slice()
         .map_err(|e| PyValueError::new_err(e.to_string()))?;

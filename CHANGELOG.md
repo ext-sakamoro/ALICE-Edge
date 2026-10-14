@@ -10,6 +10,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ### Fixed
 - `fit_linear_fixed` / `fit_linear_simd` (SSE2 / NEON) が約 10 万点以上の窓で誤った直線を返していた 正規方程式の n·Σxy とその Q16 の shift が i64 を超え (傾き 3 の厳密な直線でも n = 10⁵ で超える)、分母 n²(n²−1)/12 の i64 への cast も n ≈ 1.02·10⁵ から桁あふれしていた debug build では乗算の桁あふれで panic し、release では黙って wrap した値を返していた 3 つの経路の解法を 1 つの関数 (`solve_linear_normal_q16`、i128 で計算) にまとめ、桁あふれの無い入力では結果の bit は変わらない 試験 `tests/analytic_oracle.rs` の `linear_fit_is_exact_for_long_windows` (n = 10⁵ / 2·10⁵ / 10⁶ の厳密な直線と、Q16.16 の範囲の雑音を含む 10⁶ 点を、この試験の中で i128 で書いた正規方程式と比べる) 版を 0.2.1 にした (公開済みの 0.2.0 と src が違うため)
+- Python の `evaluate_linear_batch` は `coeffs` の各行を `[slope, intercept]` として読むが、列の数を確かめていなかった 列が 1 なら範囲外の index で Rust が panic して `PanicException` (`BaseException` の派生で `except Exception` では捕まらない) になり、列が 3 以上なら列を読み違えた値を黙って返していた 列が 2 でない時は `ValueError` を返す
 
 ## [0.2.0] - 2026-10-13
 

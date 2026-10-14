@@ -4,6 +4,8 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-14
+
 ### Added
 - CI: `pyo3` feature (Python binding) を build する job が無かった python job を足した maturin で wheel を build し、wheel の `License-Expression` が `Cargo.toml` の license と等しいこと、import できること、binding の試験 `python/tests/test_bindings.py` (11 本、正確な直線・平均・Q16.16 の換算を閉形式で、batch は scalar 関数と一致することを比べる、1 本も集まらなければ失敗) と `examples/python_batch.py` が通ることを見る full の `scripts/preflight.sh` も使い捨ての venv で同じことをする
 - `scripts/check_py_license.py` (試験 `scripts/test_check_py_license.py`、6 通り): `pyproject.toml` の license が `Cargo.toml` の license と等しいことを見る 比べられなければ失敗する CI (python job) と preflight で走る

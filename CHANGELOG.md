@@ -4,6 +4,9 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- CI: 公開する文面の検査 (`Public text` workflow、`scripts/public_text.sh`) を追加 ALICE-Law の `scripts/public_text_check.py` を `.github/public-text-pin` の revision で取得し、SHA-256 が一致した時だけ使って、HEAD の全 tracked file (path と本文) と送った commit (message・追加行・追加 path) を読む 何も比較できなければ失敗する preflight でも走る `.public-text.toml` は文書の linter とその試験が意図して持つ語を、種類ごとの行数で許可する (行数が変われば失敗)
+
 ## [0.2.0] - 2026-10-13
 
 ### Fixed

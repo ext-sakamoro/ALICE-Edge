@@ -107,6 +107,10 @@ RUSTDOCFLAGS="-Dwarnings" cargo doc --lib --no-deps --features "$FULL"
 step "ci.yml / test: examples build (sensors + dashboard + mqtt)"
 cargo build --examples --features "std,sensors,dashboard,mqtt"
 
+step "public-text.yml / public-text: Public text (ALICE-Law checker at the pin; tree, then the commits)"
+python3 scripts/test_public_text.py
+scripts/public_text.sh
+
 if [[ $quick -eq 1 ]]; then
   step "cargo test --lib (quick: no_std, std, law)"
   cargo test --lib --no-default-features

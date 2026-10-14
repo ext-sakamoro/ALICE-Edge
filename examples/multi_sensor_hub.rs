@@ -15,7 +15,6 @@
 
 use alice_edge::sensors::{SensorDriver, SimulatedSensor};
 use alice_edge::{fit_linear_fixed, should_use_linear};
-use std::time::Instant;
 
 struct SensorHub {
     sensors: Vec<(&'static str, SimulatedSensor)>,
@@ -54,12 +53,6 @@ impl SensorHub {
         println!("├──────────────┼──────────┼──────────┼──────┼───────────┼──────────┤");
 
         for (name, sensor) in &mut self.sensors {
-            #[allow(
-                clippy::disallowed_methods,
-                reason = "demo-only print of fit latency, never fed into \
-                           the printed slope/intercept/compression ratio"
-            )]
-            let start = Instant::now();
             let batch = sensor
                 .read_samples(samples_per_sensor)
                 .expect("read failed");
@@ -71,7 +64,6 @@ impl SensorHub {
             let model = if use_linear { "linear" } else { "const" };
 
             let (_slope, _intercept) = fit_linear_fixed(data);
-            let _elapsed = start.elapsed();
 
             total_raw += raw_bytes;
             total_compressed += compressed_bytes;

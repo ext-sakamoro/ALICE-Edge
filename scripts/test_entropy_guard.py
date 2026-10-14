@@ -37,6 +37,20 @@ class EntropyGuard(unittest.TestCase):
     def problems(self, files):
         return eg.check(tree(files))[0]
 
+    def test_clippy_toml_bans_elapsed(self):
+        # `.elapsed()` reads the wall clock exactly like `::now()`, but a
+        # lexical guard pattern for it would be too broad (any value named
+        # `elapsed` anywhere); clippy's disallowed-methods is type-resolved
+        # and carries this one instead -- this canary only confirms the ban
+        # is actually present, not absent-by-typo.
+        clippy_toml = (ROOT / "clippy.toml").read_text(encoding="utf-8")
+        for path in ("std::time::Instant::elapsed", "std::time::SystemTime::elapsed"):
+            self.assertIn(
+                f'path = "{path}"',
+                clippy_toml,
+                f"clippy.toml must disallow {path}",
+            )
+
     def test_the_repository_passes(self):
         eg.ALLOWED.update(self._allowed)
         problems, files, patterns = eg.check(ROOT)

@@ -173,6 +173,13 @@ impl EdgeDashboard {
 
     /// Uptime in seconds
     #[must_use]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "uptime is wall-clock time by definition; reads `start`, \
+                   whose reason on new() covers this live monitoring \
+                   telemetry (never read back into a compression/\
+                   classification/encoding value)"
+    )]
     pub fn uptime_secs(&self) -> f64 {
         self.start.elapsed().as_secs_f64()
     }
@@ -180,6 +187,13 @@ impl EdgeDashboard {
     /// Models per second
     #[inline(always)]
     #[must_use]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "throughput per wall-clock second for the same live \
+                   monitoring telemetry as uptime_secs (see the reason on \
+                   new()); never read back into a compression/\
+                   classification/encoding value"
+    )]
     pub fn models_per_sec(&self) -> f64 {
         let elapsed = self.start.elapsed().as_secs_f64();
         if elapsed > 0.0 {

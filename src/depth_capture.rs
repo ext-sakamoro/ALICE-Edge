@@ -253,6 +253,12 @@ impl DepthCameraDriver for DolphinD5Driver {
             return Err(CaptureError::NotInitialized);
         }
 
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "reads start_time for timestamp_ms, the per-frame \
+                       diagnostic metadata described on init(); the point \
+                       cloud is derived from frame_counter, never from the clock"
+        )]
         let timestamp_ms = self
             .start_time
             .map(|t| t.elapsed().as_millis() as u64)

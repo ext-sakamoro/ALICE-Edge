@@ -52,6 +52,11 @@ fn main() {
             )]
             let start = Instant::now();
             let (_slope, _intercept) = fit_linear_fixed(data);
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "reads `start` for the same demo-only latency \
+                           measurement, see its reason above"
+            )]
             let latency_us = start.elapsed().as_micros() as u64;
 
             let raw_bytes = data.len() * 4;

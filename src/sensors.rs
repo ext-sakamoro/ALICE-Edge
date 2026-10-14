@@ -412,6 +412,10 @@ impl SensorDriver for Bme280Sensor {
             // `i` only drives the simulated waveform below
             #[cfg(feature = "sensors-hw")]
             let _ = i;
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "reads `start` for batch.timestamps metadata only, see the reason on `start` above"
+            )]
             let ts = start.elapsed().as_millis() as u64;
 
             #[cfg(feature = "sensors-hw")]
@@ -537,6 +541,10 @@ impl SensorDriver for Dht22Sensor {
             // `i` only drives the simulated waveform below
             #[cfg(feature = "sensors-hw")]
             let _ = i;
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "reads `start` for batch.timestamps metadata only, see the reason on `start` above"
+            )]
             let ts = start.elapsed().as_millis() as u64;
 
             #[cfg(feature = "sensors-hw")]
@@ -576,6 +584,10 @@ impl SensorDriver for Dht22Sensor {
                                        hardware)"
                         )]
                         let start_wait = Instant::now();
+                        #[allow(
+                            clippy::disallowed_methods,
+                            reason = "reads start_wait, the GPIO pulse-width timer above (see its reason)"
+                        )]
                         while pin.is_low() {
                             if start_wait.elapsed() > Duration::from_micros(100) {
                                 return Err(SensorError::Timeout);
@@ -587,11 +599,19 @@ impl SensorDriver for Dht22Sensor {
                             reason = "same GPIO pulse-width measurement as start_wait above"
                         )]
                         let high_start = Instant::now();
+                        #[allow(
+                            clippy::disallowed_methods,
+                            reason = "reads high_start, the GPIO pulse-width timer above (see its reason)"
+                        )]
                         while pin.is_high() {
                             if high_start.elapsed() > Duration::from_micros(100) {
                                 break;
                             }
                         }
+                        #[allow(
+                            clippy::disallowed_methods,
+                            reason = "the measured high-pulse width IS the DHT22 bit (sensor's own encoding), see start_wait's reason"
+                        )]
                         if high_start.elapsed() > Duration::from_micros(40) {
                             *slot |= 1 << bit;
                         }
@@ -748,6 +768,10 @@ impl SensorDriver for Adxl345Sensor {
             // `i` only drives the simulated waveform below
             #[cfg(feature = "sensors-hw")]
             let _ = i;
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "reads `start` for batch.timestamps metadata only, see the reason on `start` above"
+            )]
             let ts = start.elapsed().as_millis() as u64;
 
             #[cfg(feature = "sensors-hw")]
@@ -923,6 +947,10 @@ impl SensorDriver for GpsSensor {
                                 continue;
                             }
                             next_accept = now + interval;
+                            #[allow(
+                                clippy::disallowed_methods,
+                                reason = "reads `start` for batch.timestamps metadata only, see the reason on `start` above"
+                            )]
                             let ts = start.elapsed().as_millis() as u64;
                             batch.latitude.push(lat);
                             batch.longitude.push(lon);
@@ -942,6 +970,10 @@ impl SensorDriver for GpsSensor {
         {
             // Simulated GPS data (Tokyo, moving north)
             for i in 0..count {
+                #[allow(
+                    clippy::disallowed_methods,
+                    reason = "reads `start` for batch.timestamps metadata only, see the reason on `start` above"
+                )]
                 let ts = start.elapsed().as_millis() as u64;
                 batch.latitude.push(35_681_236 + i as i32 * 10); // ~35.681°N
                 batch.longitude.push(139_767_125 + i as i32 * 5); // ~139.767°E
@@ -1050,6 +1082,10 @@ impl SensorDriver for Bno055Sensor {
             // `i` only drives the simulated waveform below
             #[cfg(feature = "sensors-hw")]
             let _ = i;
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "reads `start` for batch.timestamps metadata only, see the reason on `start` above"
+            )]
             let ts = start.elapsed().as_millis() as u64;
 
             #[cfg(not(feature = "sensors-hw"))]
@@ -1212,6 +1248,10 @@ impl SensorDriver for Max30102Sensor {
             // `i` only drives the simulated waveform below
             #[cfg(feature = "sensors-hw")]
             let _ = i;
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "reads `start` for batch.timestamps metadata only, see the reason on `start` above"
+            )]
             let ts = start.elapsed().as_millis() as u64;
 
             #[cfg(not(feature = "sensors-hw"))]
@@ -1324,6 +1364,10 @@ impl SensorDriver for SimulatedSensor {
         let start = Instant::now();
 
         for i in 0..count {
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "reads `start` for batch.timestamps metadata only, see the reason on `start` above"
+            )]
             let ts = start.elapsed().as_millis() as u64;
             let t = i as f32;
             let noise = if self.noise_amplitude > 0 {

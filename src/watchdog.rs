@@ -74,6 +74,13 @@ impl Watchdog {
     ///
     /// Panics if the internal mutex is poisoned.
     #[must_use]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "reads the same liveness/safety timer as new() (see its \
+                   reason): elapsed() measures real wall-clock time since \
+                   the last kick; the bool is consulted live, never stored, \
+                   transmitted or compared for equality"
+    )]
     pub fn is_expired(&self) -> bool {
         if !self.running.load(Ordering::Acquire) {
             return false;
@@ -100,6 +107,12 @@ impl Watchdog {
     ///
     /// Panics if the internal mutex is poisoned.
     #[must_use]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "reads the same liveness/safety timer as new() (see its \
+                   reason) and reports it to the caller for monitoring; \
+                   no value this crate computes is derived from it"
+    )]
     pub fn elapsed_since_kick(&self) -> Duration {
         self.last_kick.lock().unwrap().elapsed()
     }

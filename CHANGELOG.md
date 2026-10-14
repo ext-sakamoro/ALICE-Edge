@@ -6,6 +6,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ### Changed
 - CI: ci.yml / fuzz.yml / security-audit.yml の concurrency を、main では commit ごとに別の group にして止めないようにした (main 以外の branch は従来どおり同じ branch の新しい commit が古い run を止める)
+- CI: security-audit.yml の push trigger に `ci/**` を足した (ci.yml / fuzz.yml と揃え、main に入れる前の branch でも Security & Hygiene が走るように)
 
 ## [0.2.1] - 2026-10-14
 

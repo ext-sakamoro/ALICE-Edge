@@ -17,6 +17,8 @@
 #            release-profile panic contract, MSRV, feature powerset, fuzz
 #            build and the security jobs
 #
+# The python job runs in the full mode only (it needs network for pip).
+#
 # Not reproduced here (CI only): the ubuntu-24.04-arm / windows-latest legs of
 # the test matrix, sensors-hw clippy off Linux, coverage, semver-checks,
 # package-integrity and the time-boxed fuzz runs.
@@ -56,6 +58,10 @@ cargo fmt -- --check
 step "ci.yml / docs-lint: tests + public documents / CHANGELOG structure"
 python3 scripts/test_docs_lint.py
 python3 scripts/docs_lint.py --check
+
+step "ci.yml / python: pyproject license equals the crate license"
+python3 scripts/test_check_py_license.py
+python3 scripts/check_py_license.py
 
 step "ci.yml / docs-lint: FFI status codes agree in Rust / C / C#"
 python3 scripts/test_ffi_status_check.py
@@ -206,5 +212,17 @@ cargo audit --db "${CARGO_TARGET_DIR:-target}/advisory-db" --deny yanked \
   --ignore RUSTSEC-2025-0134
 cargo deny --features "$FULL" check all
 cargo machete
+
+step "ci.yml / python: maturin build + import + binding tests + example (throwaway venv)"
+venv="${CARGO_TARGET_DIR:-target}/preflight-python"
+python3 -m venv "$venv"
+"$venv/bin/python" -m pip install -q --upgrade pip 'maturin>=1.5,<2.0' numpy pytest
+"$venv/bin/maturin" build --out "$venv/dist"
+"$venv/bin/pip" install -q --force-reinstall --no-deps "$venv"/dist/alice_edge-"$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"-*.whl
+"$venv/bin/python" -c "import alice_edge"
+collected=$("$venv/bin/python" -m pytest python/tests --collect-only -q 2>/dev/null | grep -c '::' || true)
+[[ "$collected" -gt 0 ]] || { echo "no python tests collected" >&2; exit 1; }
+"$venv/bin/python" -m pytest python/tests -q
+"$venv/bin/python" examples/python_batch.py >/dev/null
 
 echo; echo "preflight OK"

@@ -79,10 +79,13 @@ def main():
         # Rust via PyO3
         if alice_edge:
             start = time.perf_counter()
-            rust_slope, rust_intercept = alice_edge.fit_linear_fixed(data)
+            rust_slope, rust_intercept = alice_edge.fit_linear(data)
             rust_time = (time.perf_counter() - start) * 1e6
             speedup = py_time / rust_time if rust_time > 0 else float("inf")
-            print(f"  Rust+SIMD:  slope={rust_slope} intercept={rust_intercept} ({rust_time:.0f} µs) [{speedup:.0f}x faster]")
+            # fit_linear returns Q16.16 fixed point
+            slope_f = alice_edge.q16_to_f32(rust_slope)
+            intercept_f = alice_edge.q16_to_f32(rust_intercept)
+            print(f"  Rust:       slope={slope_f:.4f} intercept={intercept_f:.2f} ({rust_time:.0f} µs) [{speedup:.0f}x faster]")
 
         # Compression stats
         raw_bytes = n * 4
@@ -98,7 +101,7 @@ def main():
         iterations = 100
         start = time.perf_counter()
         for _ in range(iterations):
-            alice_edge.fit_linear_fixed(data)
+            alice_edge.fit_linear(data)
         elapsed = time.perf_counter() - start
 
         samples_per_sec = (n * iterations) / elapsed

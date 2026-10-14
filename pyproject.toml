@@ -1,12 +1,17 @@
 [build-system]
-requires = ["maturin>=1.0,<2.0"]
+requires = ["maturin>=1.5,<2.0"]
 build-backend = "maturin"
 
 [project]
 name = "alice-edge"
+# maturin reads the version from Cargo.toml, so the wheel cannot drift from the crate
+dynamic = ["version"]
 requires-python = ">=3.8"
 description = "Embedded Model Generator — Don't send data, send the law"
-license = { text = "MIT" }
+# the SPDX expression from Cargo.toml (checked by scripts/check_py_license.py);
+# the crate is dual-licensed, the two files below are the terms
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE", "LICENSE-APACHE"]
 authors = [{ name = "Moroya Sakamoto" }]
 classifiers = [
     "Programming Language :: Rust",

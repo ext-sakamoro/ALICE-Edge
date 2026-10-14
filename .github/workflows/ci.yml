@@ -335,6 +335,67 @@ jobs:
       - name: Package contents (cargo package --list)
         run: python scripts/package_contents_check.py
 
+  python:
+    # the `pyo3` feature (Python bindings) is built only here: maturin builds the
+    # wheel with the features in pyproject.toml [tool.maturin], the wheel's
+    # license metadata must equal the crate's, and the binding tests must collect
+    # at least one test (0 collected is red)
+    name: Python (maturin build + binding tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install maturin and test dependencies
+        run: python -m pip install --upgrade pip 'maturin>=1.5,<2.0' numpy pytest
+
+      - name: Build the wheel (maturin)
+        run: maturin build --out dist
+
+      - name: Install the built wheel
+        run: pip install dist/*.whl
+
+      - name: Wheel license metadata equals the crate license
+        run: |
+          python scripts/test_check_py_license.py
+          python scripts/check_py_license.py
+          python - <<'PY'
+          import glob, sys, tomllib, zipfile
+          want = tomllib.load(open("Cargo.toml", "rb"))["package"]["license"]
+          wheels = glob.glob("dist/*.whl")
+          if len(wheels) != 1:
+              sys.exit(f"expected one wheel, found {wheels}")
+          with zipfile.ZipFile(wheels[0]) as z:
+              meta = next(n for n in z.namelist() if n.endswith(".dist-info/METADATA"))
+              lines = z.read(meta).decode("utf-8").splitlines()
+          got = [l.split(":", 1)[1].strip() for l in lines if l.startswith("License-Expression:")]
+          if got != [want]:
+              sys.exit(f"wheel License-Expression {got} != Cargo.toml license {want!r}")
+          print(f"wheel License-Expression: {want}")
+          PY
+
+      - name: Import smoke
+        run: python -c "import alice_edge; print('alice_edge imported, Q16_ONE =', alice_edge.Q16_ONE)"
+
+      - name: Python binding tests, fail on 0 tests
+        run: |
+          collected=$(python -m pytest python/tests --collect-only -q 2>/dev/null | grep -c '::')
+          echo "collected ${collected} python test(s)"
+          [ "${collected}" -gt 0 ] || { echo "no python tests collected"; exit 1; }
+          python -m pytest python/tests -v
+
+      - name: Python example runs
+        run: python examples/python_batch.py
+
   actionlint:
     name: actionlint (workflow YAML)
     runs-on: ubuntu-latest

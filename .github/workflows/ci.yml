@@ -336,6 +336,13 @@ jobs:
         run: python scripts/test_package_contents_check.py
       - name: Package contents (cargo package --list)
         run: python scripts/package_contents_check.py
+      # no part of src/**/*.rs may read OS entropy or the wall clock in a way
+      # that affects a stored/computed/transmitted value (G10); clippy's
+      # disallowed-methods is the first, compiled layer, this is the second
+      - name: Entropy guard (tests)
+        run: python scripts/test_entropy_guard.py
+      - name: Entropy guard (no OS entropy / wall clock in production code)
+        run: python scripts/entropy_guard.py
 
   python:
     # the `pyo3` feature (Python bindings) is built only here: maturin builds the

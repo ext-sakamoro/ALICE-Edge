@@ -71,6 +71,10 @@ step "ci.yml / docs-lint: package contents (include allowlist)"
 python3 scripts/test_package_contents_check.py
 python3 scripts/package_contents_check.py
 
+step "ci.yml / docs-lint: entropy guard (no OS entropy / wall clock in production code)"
+python3 scripts/test_entropy_guard.py
+python3 scripts/entropy_guard.py
+
 step "security-audit.yml / stub-guard"
 scripts/stub_guard.sh
 

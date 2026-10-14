@@ -54,6 +54,11 @@ impl SensorHub {
         println!("├──────────────┼──────────┼──────────┼──────┼───────────┼──────────┤");
 
         for (name, sensor) in &mut self.sensors {
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "demo-only print of fit latency, never fed into \
+                           the printed slope/intercept/compression ratio"
+            )]
             let start = Instant::now();
             let batch = sensor
                 .read_samples(samples_per_sensor)

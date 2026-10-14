@@ -10,6 +10,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 ### Changed
 - CI: ci.yml / fuzz.yml / security-audit.yml の concurrency を、main では commit ごとに別の group にして止めないようにした (main 以外の branch は従来どおり同じ branch の新しい commit が古い run を止める)
 - CI: security-audit.yml の push trigger に `ci/**` を足した (ci.yml / fuzz.yml と揃え、main に入れる前の branch でも Security & Hygiene が走るように)
+- CI / `clippy.toml`: 決定論 gate (G10) として `std::time::Instant::now` / `std::time::SystemTime::now` / `std::collections::hash_map::RandomState::new` を disallowed-methods に追加 このクレートが送受する値 (fit した係数、点群フレーム、圧縮・分類・符号化したパケット) が OS のランダム性や壁時計に依存すると、同じ入力から別の機械・別の瞬間で別の値になる `scripts/entropy_guard.py` (試験 `scripts/test_entropy_guard.py`) が同じ対象を compile 無しで静的に検査する 監査した 25 箇所のうち、パイプラインの段階ごとの遅延計測・ダッシュボードの稼働時間・ウォッチドッグの生存監視・DHT22 の GPIO パルス幅計測は正当な壁時計の使用として許可した 一方で `Bme280Sensor` / `Dht22Sensor` / `Adxl345Sensor` の sensors-hw 無し (模擬) 経路は、同じ file 内の `Bno055Sensor` / `Max30102Sensor` / `GpsSensor` / `SimulatedSensor` と違い、模擬センサー値そのものを経過時間から計算していた (ループの添字を使うべきところ) この監査で見つかった未修正の欠陥として明示の reason を付けて許可し、修正は別途行う (`src/sensors.rs` の該当箇所参照)
 
 ## [0.2.1] - 2026-10-14
 

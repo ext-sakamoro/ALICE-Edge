@@ -135,6 +135,15 @@ impl EdgePipeline {
     /// Process a single frame through the pipeline
     ///
     /// Returns the encoded ASP packet and compression statistics.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the 5 wall-clock timers here only measure per-stage \
+                   latency fed into self.stats (PipelineStats, diagnostic \
+                   averages); packet and compress_stats, the values this \
+                   function returns, are computed by compress_point_cloud / \
+                   classify_compressed / encode_frame from points and \
+                   compressed alone, never from these timers"
+    )]
     pub fn process_frame(
         &mut self,
     ) -> Result<(AspEdgePacket, CompressStats), crate::depth_capture::CaptureError> {
@@ -207,6 +216,15 @@ impl EdgePipeline {
     }
 
     /// Run the pipeline loop for a specified duration
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "this loop's own contract is to run for `duration` of real \
+                   wall-clock time and pace frames to target_fps; the \
+                   resulting packet count varies with real-time scheduling \
+                   by design (same as any real-time device's frame loop), \
+                   but each packet's content comes from process_frame, which \
+                   computes it without reading these timers"
+    )]
     pub fn run_for(&mut self, duration: Duration) -> Vec<(AspEdgePacket, CompressStats)> {
         let frame_interval = Duration::from_secs_f64(1.0 / self.config.target_fps as f64);
         let start = Instant::now();

@@ -211,6 +211,13 @@ impl DolphinD5Driver {
 }
 
 impl DepthCameraDriver for DolphinD5Driver {
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "start_time only backs timestamp_ms, a per-frame diagnostic \
+                   metadata field that no code in this crate reads back; the \
+                   point cloud itself is derived from frame_counter (see \
+                   capture_frame's simulation branch), never from the clock"
+    )]
     fn init(&mut self) -> Result<(), CaptureError> {
         // Attempt to open Dolphin D5 Lite via rusb
         let context = rusb::Context::new()

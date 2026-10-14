@@ -43,6 +43,13 @@ fn main() {
     let batch = sensor.read_samples(1000).expect("read failed");
     let (slope, intercept) = fit_linear_fixed(&batch.temperature);
 
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "send-time metadata attached to the payload after \
+                   fit_linear_fixed already computed slope/intercept from \
+                   batch; the model itself does not depend on this clock \
+                   read"
+    )]
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()

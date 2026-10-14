@@ -269,7 +269,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 
 | gate | 状態 | 注記 |
 |---|---|---|
-| G1 no-libm-direct | 未確認 | unverified: no banned call is known (a hand run of cargo clippy --lib --features pyo3 -- -D warnings is clean, and the temporary max/min measurement under G2 … |
+| G1 no-libm-direct | 未確認 | unverified: no banned call is known, and every feature is now linted (edge-pipeline and pyo3 were not, until the two clippy steps at ci.yml lines 232 and 239), … |
 | G2 ieee-max-min | 未達 | unmet: no ban on f32::max / f32::min / f64::max / f64::min in clippy.toml, no Law helper and no default-deny manifest of raw_* sites. Library sites, measured … |
 | G3 no-outer-fneg-of-fma | 未確認 | unverified: no violation is known; the only mul_add sites are src/sensors.rs:839 (lat_deg.mul_add(-100.0, lat_raw)) and src/sensors.rs:848 … |
 | G4 debug-release-arch-goldens | 未達 | unmet: (1) no signed-zero or exact-cancellation case is checked against fixed bit patterns (tests/ has no -0.0 literal and no cancellation case; … |
@@ -278,7 +278,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 | G7 handshake-carries-id | 未確認 | unverified: the boundaries within one exchange are listed but not ruled on: src/ffi.rs (22 #[no_mangle] extern "C" functions taking Q16.16 coefficients and … |
 | G8 persisted-semantics-id | 未確認 | unverified: the durable forms are listed but not ruled on: src/object_classifier.rs:287 save_weights and :309 load_weights (float classifier weights in a file, … |
 | G9 persisted-meaning-change-is-major | 未確認 | unverified: depends on G6 and G8; this crate defines no identifier of its own whose history could be audited (src/lib.rs:151 re-exports alice-det-math's, whose … |
-| G10 no-run-varying-artifacts | 未確認 | unverified: no production clock or entropy read outside the allowed sites is known, but the check has a measured hole: std::time::Instant::elapsed and … |
+| G10 no-run-varying-artifacts | 適合 | the 24 production .elapsed() reads sit under scoped clippy::disallowed_methods allows with a reason (stage latency and frame pacing in edge_pipeline.rs, … |
 | G11 gate-self-tests | 未達 | unmet: the clippy ban that carries G1 and the compiled layer of G10 (clippy.toml lines 22 to 96, run by .github/workflows/ci.yml lines 217 to 227) has no … |
 | G12 public-repo-text-rules | 適合 | the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (ca96d9214ffe0da43e9cb034417a4f6c041ba4be) and refuses … |
 | G13 no-unspecified-order | 未確認 | unverified: no violation is known since d06f4da: src/edge_pipeline.rs:368 (voxel_grid_downsample) and src/telemetry.rs:158 (TelemetryHub, read by … |

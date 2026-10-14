@@ -357,6 +357,10 @@ impl EdgePipeline {
 ///
 /// # Returns
 ///
+/// Per-voxel running sums (x, y, z, count), keyed by voxel index in a
+/// `BTreeMap` so the output order depends only on the input
+type VoxelSums = std::collections::BTreeMap<(i32, i32, i32), (f64, f64, f64, u32)>;
+
 /// Downsampled point cloud
 #[must_use]
 pub fn voxel_grid_downsample(points: &[[f32; 3]], voxel_size: f32) -> Vec<[f32; 3]> {
@@ -365,8 +369,7 @@ pub fn voxel_grid_downsample(points: &[[f32; 3]], voxel_size: f32) -> Vec<[f32; 
     }
 
     let inv_voxel = 1.0 / voxel_size;
-    let mut voxel_map: std::collections::BTreeMap<(i32, i32, i32), (f64, f64, f64, u32)> =
-        std::collections::BTreeMap::new();
+    let mut voxel_map: VoxelSums = std::collections::BTreeMap::new();
 
     for p in points {
         let vx = (p[0] * inv_voxel).floor() as i32;

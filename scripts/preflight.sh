@@ -80,7 +80,7 @@ python3 scripts/entropy_guard.py
 step "security-audit.yml / stub-guard"
 scripts/stub_guard.sh
 
-step "ci.yml / clippy: no_std, no_std + law, std, full feature set"
+step "ci.yml / clippy: no_std, no_std + law, std, full feature set, + edge-pipeline, pyo3"
 relint
 cargo clippy --lib --no-default-features -- -D warnings
 relint
@@ -89,6 +89,10 @@ relint
 cargo clippy --lib --all-targets --features "std" -- -D warnings
 relint
 cargo clippy --lib --all-targets --features "$FULL" -- -D warnings
+relint
+cargo clippy --lib --all-targets --features "$FULL,edge-pipeline" -- -D warnings
+relint
+cargo clippy --lib --features "pyo3" -- -D warnings
 
 step "x86_64 no_std / std clippy (CI runs on x86_64; is_x86_feature_detected! is std-only)"
 add_target x86_64-unknown-linux-gnu

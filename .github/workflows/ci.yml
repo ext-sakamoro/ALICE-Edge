@@ -226,6 +226,19 @@ jobs:
       - name: Clippy (full feature set, lib + all targets)
         run: cargo clippy --lib --all-targets --features "$FULL_FEATURES" -- -D warnings
 
+      # edge-pipeline gates code of its own (FULL_FEATURES enables its parts but
+      # not the feature itself), and pyo3 gates the Python bindings: lint both so
+      # no source file escapes the disallowed-methods list (G1 / G10)
+      - name: Clippy (full feature set + edge-pipeline, lib + all targets)
+        run: cargo clippy --lib --all-targets --features "$FULL_FEATURES,edge-pipeline" -- -D warnings
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Clippy (pyo3 bindings, lib)
+        run: cargo clippy --lib --features "pyo3" -- -D warnings
+
   msrv:
     name: MSRV (rust-version = 1.87)
     runs-on: ubuntu-latest

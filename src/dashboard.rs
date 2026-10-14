@@ -48,6 +48,14 @@ pub struct EdgeDashboard {
 impl EdgeDashboard {
     /// Create a new dashboard
     #[must_use]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "start/last_reset only back uptime_secs/models_per_sec, \
+                   live monitoring telemetry (printed or pushed to a \
+                   dashboard viewer) that is never read back into a \
+                   compression/classification/encoding value this crate \
+                   computes elsewhere"
+    )]
     pub fn new() -> Self {
         Self {
             hll_sensors: HyperLogLog::new(),
@@ -257,6 +265,10 @@ impl EdgeDashboard {
 
     /// Reset periodic counters (keep HLL and CMS state)
     #[allow(dead_code)]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "last_reset is the same uptime-telemetry timer as new(), never read back into a computed value"
+    )]
     pub fn reset_periodic(&mut self) {
         self.latencies_us.clear();
         self.sorted_latencies.clear();

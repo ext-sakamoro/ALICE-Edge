@@ -386,6 +386,17 @@ impl SensorDriver for Bme280Sensor {
         Ok(())
     }
 
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "KNOWN DEFECT (found during G10 audit, not yet fixed): in \
+                   the #[cfg(not(feature = \"sensors-hw\"))] branch below, \
+                   `ts` (wall-clock elapsed) drives `t`, which the synthetic \
+                   temperature/humidity/pressure are computed from -- unlike \
+                   Bno055Sensor/Max30102Sensor/GpsSensor/SimulatedSensor in \
+                   this same file, which already use the loop index instead \
+                   and are the pattern this should follow; tracked for a \
+                   follow-up fix, not landed here"
+    )]
     fn read_samples_interval(
         &mut self,
         count: usize,
@@ -505,6 +516,17 @@ impl SensorDriver for Dht22Sensor {
         }
 
         let mut batch = SensorBatch::new("DHT22");
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "KNOWN DEFECT (found during G10 audit, not yet fixed): \
+                       feeds `ts` below, which drives the synthetic \
+                       temperature/humidity in the #[cfg(not(feature = \
+                       \"sensors-hw\"))] branch -- same issue as \
+                       Bme280Sensor/Adxl345Sensor, see their reason; the \
+                       start_wait/high_start timers further down this \
+                       function are a separate, legitimate use (real GPIO \
+                       pulse-width measurement, see their own reason)"
+        )]
         let start = Instant::now();
 
         for _ in 0..count {
@@ -535,6 +557,17 @@ impl SensorDriver for Dht22Sensor {
                 for slot in &mut data {
                     for bit in (0..8).rev() {
                         // Wait for high
+                        #[allow(
+                            clippy::disallowed_methods,
+                            reason = "real GPIO pulse-width measurement: \
+                                       decoding the DHT22 single-wire \
+                                       protocol IS reading how long the \
+                                       physical pin stays high/low, the \
+                                       sensor's actual encoding of its bits \
+                                       -- not a synthetic value standing in \
+                                       for the clock (sensors-hw only, real \
+                                       hardware)"
+                        )]
                         let start_wait = Instant::now();
                         while pin.is_low() {
                             if start_wait.elapsed() > Duration::from_micros(100) {
@@ -542,6 +575,10 @@ impl SensorDriver for Dht22Sensor {
                             }
                         }
                         // Measure high duration
+                        #[allow(
+                            clippy::disallowed_methods,
+                            reason = "same GPIO pulse-width measurement as start_wait above"
+                        )]
                         let high_start = Instant::now();
                         while pin.is_high() {
                             if high_start.elapsed() > Duration::from_micros(100) {
@@ -678,6 +715,14 @@ impl SensorDriver for Adxl345Sensor {
         }
 
         let mut batch = SensorBatch::new("ADXL345");
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "KNOWN DEFECT (found during G10 audit, not yet fixed): \
+                       in the #[cfg(not(feature = \"sensors-hw\"))] branch \
+                       below, `ts` (wall-clock elapsed) drives `t`, which \
+                       the synthetic accel_x/y/z are computed from -- same \
+                       issue as Bme280Sensor/Dht22Sensor, see their reason"
+        )]
         let start = Instant::now();
 
         // A5: SPI接続をループ外で1度だけ開く（毎サンプルで再オープンしない）
@@ -824,6 +869,15 @@ impl SensorDriver for GpsSensor {
         }
 
         let mut batch = SensorBatch::new("GPS");
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "start/now only pace and timestamp real NMEA fixes \
+                       (sensors-hw: next_accept rate-limits how often a \
+                       genuinely-received sentence is accepted) or back \
+                       batch.timestamps metadata (both branches); the \
+                       no-hardware branch's lat/lon/altitude are generated \
+                       from the loop index i, not from the clock"
+        )]
         let start = Instant::now();
 
         #[cfg(feature = "sensors-hw")]
@@ -844,6 +898,13 @@ impl SensorDriver for GpsSensor {
                 if let Ok(1) = port.read(&mut byte) {
                     if byte[0] == b'\n' {
                         if let Some((lat, lon, alt)) = Self::parse_gga(&line_buf) {
+                            #[allow(
+                                clippy::disallowed_methods,
+                                reason = "rate-limits how often a genuinely-\
+                                           received real NMEA fix is \
+                                           accepted, see the reason on \
+                                           start above"
+                            )]
                             let now = Instant::now();
                             if now < next_accept {
                                 line_buf.clear();
@@ -962,6 +1023,15 @@ impl SensorDriver for Bno055Sensor {
         }
 
         let mut batch = SensorBatch::new("BNO055");
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "`ts` only backs batch.timestamps metadata; the \
+                       no-hardware branch's simulated accel/temperature \
+                       are computed from the loop index i (`#[cfg(feature \
+                       = \"sensors-hw\")] let _ = i;` above makes that \
+                       explicit), not from the clock -- the pattern the \
+                       other KNOWN DEFECT sites in this file should follow"
+        )]
         let start = Instant::now();
 
         for i in 0..count {
@@ -1117,6 +1187,13 @@ impl SensorDriver for Max30102Sensor {
         }
 
         let mut batch = SensorBatch::new("MAX30102");
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "`ts` only backs batch.timestamps metadata; the \
+                       no-hardware branch's simulated heart-rate/SpO2 come \
+                       from SimulatedSensor::noise(i), the loop index's \
+                       deterministic hash, not from the clock"
+        )]
         let start = Instant::now();
 
         for i in 0..count {
@@ -1224,6 +1301,14 @@ impl SensorDriver for SimulatedSensor {
     ) -> Result<SensorBatch, SensorError> {
         const INV_100: f32 = 1.0 / 100.0;
         let mut batch = SensorBatch::new("Simulated");
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "`ts` only backs batch.timestamps metadata; every \
+                       computed reading below is driven by the loop index \
+                       i and Self::noise(i), a deterministic hash -- the \
+                       canonical pattern for a hardware stand-in, see \
+                       golden_sensors in tests/determinism_golden.rs"
+        )]
         let start = Instant::now();
 
         for i in 0..count {

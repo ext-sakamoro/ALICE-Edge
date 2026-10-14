@@ -44,6 +44,12 @@ fn main() {
             let batch = sensor.read_samples(1000).expect("read failed");
             let data = &batch.temperature;
 
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "demo-only latency measurement fed to the \
+                           dashboard's live telemetry display, never into \
+                           the fitted slope/intercept"
+            )]
             let start = Instant::now();
             let (_slope, _intercept) = fit_linear_fixed(data);
             let latency_us = start.elapsed().as_micros() as u64;

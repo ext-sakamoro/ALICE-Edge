@@ -20,6 +20,14 @@ pub struct Watchdog {
 impl Watchdog {
     /// 指定タイムアウトでウォッチドッグを作成
     #[must_use]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "liveness/safety mechanism: is_expired() asks whether real \
+                   wall-clock time since the last kick exceeds timeout, a \
+                   hardware-hang detector that is inherently wall-clock- \
+                   driven; the result is consulted live (a bool) and never \
+                   stored, transmitted or compared for equality"
+    )]
     pub fn new(timeout: Duration) -> Self {
         Self {
             timeout,
@@ -33,6 +41,10 @@ impl Watchdog {
     /// # Panics
     ///
     /// Panics if the internal mutex is poisoned.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "same liveness/safety timer as new(), see its reason"
+    )]
     pub fn start(&self) {
         *self.last_kick.lock().unwrap() = Instant::now();
         self.running.store(true, Ordering::Release);
@@ -48,6 +60,10 @@ impl Watchdog {
     /// # Panics
     ///
     /// Panics if the internal mutex is poisoned.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "same liveness/safety timer as new(), see its reason"
+    )]
     pub fn kick(&self) {
         *self.last_kick.lock().unwrap() = Instant::now();
     }

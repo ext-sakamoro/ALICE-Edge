@@ -22,6 +22,7 @@
 disallowed-methods = [
     { path = "f32::sin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
     { path = "f32::cos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
+    { path = "f32::sin_cos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
     { path = "f32::tan", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
     { path = "f32::asin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
     { path = "f32::acos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
@@ -47,6 +48,7 @@ disallowed-methods = [
     { path = "f32::powi", reason = "lowers to a multiplication tree of unspecified association order; write the multiplications out or use alice_det_math::powi" },
     { path = "f64::sin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
     { path = "f64::cos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
+    { path = "f64::sin_cos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
     { path = "f64::tan", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
     { path = "f64::asin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
     { path = "f64::acos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },

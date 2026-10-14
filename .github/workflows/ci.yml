@@ -31,6 +31,7 @@ jobs:
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -172,6 +173,7 @@ jobs:
   no-std-cross:
     name: no_std cross-compile (thumbv7em)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -199,6 +201,7 @@ jobs:
   clippy:
     name: Clippy (-D warnings)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -224,6 +227,7 @@ jobs:
   msrv:
     name: MSRV (rust-version = 1.87)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -245,6 +249,7 @@ jobs:
   feature-powerset:
     name: Feature powerset (cargo-hack, depth 2)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -265,6 +270,7 @@ jobs:
   fmt:
     name: Format
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -279,6 +285,7 @@ jobs:
   doc:
     name: Doc (RUSTDOCFLAGS=-Dwarnings)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -299,6 +306,7 @@ jobs:
     # shows up here rather than as a silent pass
     name: Docs lint (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -330,6 +338,7 @@ jobs:
   actionlint:
     name: actionlint (workflow YAML)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - name: Run actionlint
@@ -337,3 +346,9 @@ jobs:
         with:
           fail_level: error
           reporter: github-check
+      # every job has a job-level timeout-minutes (a hung step otherwise holds a shared
+      # runner for GitHub's 6-hour limit); the checker's own tests run first
+      - name: workflow-timeouts
+        run: |
+          python3 scripts/test_workflow_timeouts.py
+          python3 scripts/workflow_timeouts.py

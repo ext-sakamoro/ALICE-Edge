@@ -46,6 +46,10 @@ need python3 "python 3.9+"
 step "ci.yml / actionlint: workflow YAML"
 actionlint .github/workflows/*.yml
 
+step "ci.yml / actionlint: workflow-timeouts (every job has timeout-minutes)"
+python3 scripts/test_workflow_timeouts.py
+python3 scripts/workflow_timeouts.py
+
 step "ci.yml / fmt: cargo fmt --check"
 cargo fmt -- --check
 

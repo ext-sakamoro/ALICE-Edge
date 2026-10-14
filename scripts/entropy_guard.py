@@ -81,13 +81,11 @@ ALLOWED: dict[tuple[str, str], tuple[int, str]] = {
     ),
     ("src/sensors.rs", "Instant::now"): (
         10,
-        "7 of 10 sites: ts only backs batch.timestamps metadata or paces/rate-limits real hardware reads "
-        "(Bno055Sensor, Max30102Sensor, GpsSensor, SimulatedSensor use the loop index or a deterministic hash "
-        "for every computed reading; DHT22's start_wait/high_start measure a real GPIO pulse width, the "
-        "sensor's actual bit encoding). 3 sites are a KNOWN DEFECT found during this audit, not fixed here: "
-        "Bme280Sensor/Dht22Sensor/Adxl345Sensor's #[cfg(not(feature = \"sensors-hw\"))] branch computes its "
-        "synthetic temperature/humidity/pressure/accel from ts (wall-clock elapsed) instead of the loop index "
-        "like their siblings; see the per-site reason in src/sensors.rs for the exact call sites",
+        "ts only backs batch.timestamps metadata or paces/rate-limits real hardware reads -- every "
+        "no-hardware branch's simulated reading is computed from the loop index or a deterministic hash "
+        "(Bno055Sensor, Max30102Sensor, GpsSensor, SimulatedSensor, and -- since this audit found and fixed "
+        "them to match -- Bme280Sensor, Dht22Sensor, Adxl345Sensor); DHT22's start_wait/high_start measure a "
+        "real GPIO pulse width, the sensor's actual bit encoding",
     ),
 }
 STRING_RE = re.compile(r'"(?:\\.|[^"\\])*"')

@@ -386,17 +386,6 @@ impl SensorDriver for Bme280Sensor {
         Ok(())
     }
 
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "KNOWN DEFECT (found during G10 audit, not yet fixed): in \
-                   the #[cfg(not(feature = \"sensors-hw\"))] branch below, \
-                   `ts` (wall-clock elapsed) drives `t`, which the synthetic \
-                   temperature/humidity/pressure are computed from -- unlike \
-                   Bno055Sensor/Max30102Sensor/GpsSensor/SimulatedSensor in \
-                   this same file, which already use the loop index instead \
-                   and are the pattern this should follow; tracked for a \
-                   follow-up fix, not landed here"
-    )]
     fn read_samples_interval(
         &mut self,
         count: usize,
@@ -407,9 +396,22 @@ impl SensorDriver for Bme280Sensor {
         }
 
         let mut batch = SensorBatch::new("BME280");
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "`ts` only backs batch.timestamps metadata; the \
+                       no-hardware branch's simulated temperature/humidity/\
+                       pressure are computed from the loop index i \
+                       (`#[cfg(feature = \"sensors-hw\")] let _ = i;` below \
+                       makes that explicit), not from the clock -- matches \
+                       Bno055Sensor/Max30102Sensor/GpsSensor/SimulatedSensor \
+                       in this same file"
+        )]
         let start = Instant::now();
 
-        for _ in 0..count {
+        for i in 0..count {
+            // `i` only drives the simulated waveform below
+            #[cfg(feature = "sensors-hw")]
+            let _ = i;
             let ts = start.elapsed().as_millis() as u64;
 
             #[cfg(feature = "sensors-hw")]
@@ -436,7 +438,7 @@ impl SensorDriver for Bme280Sensor {
             {
                 // Simulated data for testing without hardware
                 const INV_1000: f32 = 1.0 / 1000.0;
-                let t = ts as f32 * INV_1000;
+                let t = i as f32 * INV_1000;
                 batch.temperature.push(2500 + (t * 10.0) as i32); // 25.00°C rising
                 batch.humidity.push(6500 - (t * 5.0) as i32); // 65.00% falling
                 batch.pressure.push(10132 + (t * 2.0) as i32); // 1013.2 hPa rising
@@ -518,18 +520,23 @@ impl SensorDriver for Dht22Sensor {
         let mut batch = SensorBatch::new("DHT22");
         #[allow(
             clippy::disallowed_methods,
-            reason = "KNOWN DEFECT (found during G10 audit, not yet fixed): \
-                       feeds `ts` below, which drives the synthetic \
-                       temperature/humidity in the #[cfg(not(feature = \
-                       \"sensors-hw\"))] branch -- same issue as \
-                       Bme280Sensor/Adxl345Sensor, see their reason; the \
-                       start_wait/high_start timers further down this \
-                       function are a separate, legitimate use (real GPIO \
-                       pulse-width measurement, see their own reason)"
+            reason = "`ts` only backs batch.timestamps metadata; the \
+                       no-hardware branch's simulated temperature/humidity \
+                       are computed from the loop index i (`#[cfg(feature \
+                       = \"sensors-hw\")] let _ = i;` below makes that \
+                       explicit), not from the clock -- matches \
+                       Bno055Sensor/Max30102Sensor/GpsSensor/SimulatedSensor \
+                       in this same file; the start_wait/high_start timers \
+                       further down this function are a separate, \
+                       legitimate use (real GPIO pulse-width measurement, \
+                       see their own reason)"
         )]
         let start = Instant::now();
 
-        for _ in 0..count {
+        for i in 0..count {
+            // `i` only drives the simulated waveform below
+            #[cfg(feature = "sensors-hw")]
+            let _ = i;
             let ts = start.elapsed().as_millis() as u64;
 
             #[cfg(feature = "sensors-hw")]
@@ -611,7 +618,7 @@ impl SensorDriver for Dht22Sensor {
             #[cfg(not(feature = "sensors-hw"))]
             {
                 const INV_1000: f32 = 1.0 / 1000.0;
-                let t = ts as f32 * INV_1000;
+                let t = i as f32 * INV_1000;
                 batch.temperature.push(2200 + (t * 15.0) as i32);
                 batch.humidity.push(7000 - (t * 8.0) as i32);
             }
@@ -717,11 +724,13 @@ impl SensorDriver for Adxl345Sensor {
         let mut batch = SensorBatch::new("ADXL345");
         #[allow(
             clippy::disallowed_methods,
-            reason = "KNOWN DEFECT (found during G10 audit, not yet fixed): \
-                       in the #[cfg(not(feature = \"sensors-hw\"))] branch \
-                       below, `ts` (wall-clock elapsed) drives `t`, which \
-                       the synthetic accel_x/y/z are computed from -- same \
-                       issue as Bme280Sensor/Dht22Sensor, see their reason"
+            reason = "`ts` only backs batch.timestamps metadata; the \
+                       no-hardware branch's simulated accel_x/y/z are \
+                       computed from the loop index i (`#[cfg(feature = \
+                       \"sensors-hw\")] let _ = i;` below makes that \
+                       explicit), not from the clock -- matches \
+                       Bno055Sensor/Max30102Sensor/GpsSensor/SimulatedSensor \
+                       in this same file"
         )]
         let start = Instant::now();
 
@@ -735,7 +744,10 @@ impl SensorDriver for Adxl345Sensor {
         )
         .map_err(|e| SensorError::Spi(format!("{}", e)))?;
 
-        for _ in 0..count {
+        for i in 0..count {
+            // `i` only drives the simulated waveform below
+            #[cfg(feature = "sensors-hw")]
+            let _ = i;
             let ts = start.elapsed().as_millis() as u64;
 
             #[cfg(feature = "sensors-hw")]
@@ -759,7 +771,7 @@ impl SensorDriver for Adxl345Sensor {
             #[cfg(not(feature = "sensors-hw"))]
             {
                 const INV_1000: f32 = 1.0 / 1000.0;
-                let t = ts as f32 * INV_1000;
+                let t = i as f32 * INV_1000;
                 batch.accel_x.push((alice_det_math::sin(t) * 100.0) as i32);
                 batch.accel_y.push((alice_det_math::cos(t) * 100.0) as i32);
                 batch.accel_z.push(1000 + (t * 5.0) as i32); // ~1g + drift
@@ -1496,6 +1508,61 @@ mod tests {
     fn test_adxl345_sensor_name() {
         let sensor = Adxl345Sensor::new();
         assert_eq!(sensor.name(), "ADXL345");
+    }
+
+    /// G10 oracle: Bme280Sensor/Dht22Sensor/Adxl345Sensor's simulated
+    /// readings must be a function of the sample index alone, not of how
+    /// much real time the read took -- reading the same count twice, with
+    /// two clearly different intervals (so the two runs take measurably
+    /// different amounts of wall-clock time), must give byte-for-byte
+    /// identical readings. Before this fix, the simulated branch computed
+    /// its reading from `start.elapsed()`, which scales with the interval;
+    /// two runs a few milliseconds apart (as back-to-back `Duration::ZERO`
+    /// calls always are, with no real sleep between samples) can coincide
+    /// to the same millisecond and pass vacuously -- the interval has to
+    /// actually differ, and by enough that OS sleep-timer jitter can't
+    /// explain away a difference this large, for the comparison to mean
+    /// anything.
+    #[test]
+    fn simulated_sensor_readings_are_index_driven_not_clock_driven() {
+        let mut bme_a = Bme280Sensor::new(1, 0x76);
+        let a = bme_a
+            .read_samples_interval(5, Duration::from_millis(1))
+            .expect("simulated branch cannot fail");
+        let mut bme_b = Bme280Sensor::new(1, 0x76);
+        let b = bme_b
+            .read_samples_interval(5, Duration::from_millis(50))
+            .expect("simulated branch cannot fail");
+        assert_eq!(a.temperature, b.temperature, "Bme280Sensor temperature");
+        assert_eq!(a.humidity, b.humidity, "Bme280Sensor humidity");
+        assert_eq!(a.pressure, b.pressure, "Bme280Sensor pressure");
+
+        // DHT22 enforces its own 2-second floor on any interval below it
+        // (see read_samples_interval below), so a below-floor request and
+        // an above-floor request take genuinely different real time per
+        // sample (2s vs 4s) despite both being "a small interval" on paper.
+        let mut dht_a = Dht22Sensor::new(4);
+        let a = dht_a
+            .read_samples_interval(2, Duration::ZERO)
+            .expect("simulated branch cannot fail");
+        let mut dht_b = Dht22Sensor::new(4);
+        let b = dht_b
+            .read_samples_interval(2, Duration::from_secs(4))
+            .expect("simulated branch cannot fail");
+        assert_eq!(a.temperature, b.temperature, "Dht22Sensor temperature");
+        assert_eq!(a.humidity, b.humidity, "Dht22Sensor humidity");
+
+        let mut adxl_a = Adxl345Sensor::new();
+        let a = adxl_a
+            .read_samples_interval(5, Duration::from_millis(1))
+            .expect("simulated branch cannot fail");
+        let mut adxl_b = Adxl345Sensor::new();
+        let b = adxl_b
+            .read_samples_interval(5, Duration::from_millis(50))
+            .expect("simulated branch cannot fail");
+        assert_eq!(a.accel_x, b.accel_x, "Adxl345Sensor accel_x");
+        assert_eq!(a.accel_y, b.accel_y, "Adxl345Sensor accel_y");
+        assert_eq!(a.accel_z, b.accel_z, "Adxl345Sensor accel_z");
     }
 
     #[test]

@@ -109,6 +109,55 @@ fn linear_fit_recovers_exact_integer_lines_and_matches_the_simd_path() {
     );
 }
 
+/// The least squares normal equations in exact `i128` arithmetic, written here
+/// independently of the crate: Σx² is summed term by term (the crate uses the
+/// identity n²(n²−1)/12 for the denominator), and the Q16.16 rounding is the
+/// crate's documented one (shift the numerator, then truncating division)
+fn reference_linear_fit(data: &[i32]) -> (i32, i32) {
+    let n = data.len() as i128;
+    let (mut sx, mut sxx, mut sy, mut sxy) = (0i128, 0i128, 0i128, 0i128);
+    for (x, &y) in data.iter().enumerate() {
+        let (x, y) = (x as i128, i128::from(y));
+        sx += x;
+        sxx += x * x;
+        sy += y;
+        sxy += x * y;
+    }
+    let slope = ((n * sxy - sx * sy) << 16) / (n * sxx - sx * sx);
+    let intercept = ((sy << 16) - slope * sx) / n;
+    (slope as i32, intercept as i32)
+}
+
+#[test]
+fn linear_fit_is_exact_for_long_windows() {
+    // n·Σxy, its Q16 shift and n²(n²−1)/12 all exceed i64 here (n·Σxy at
+    // n = 10⁵ for an exact line with slope 3; the denominator from n ≈ 1.02·10⁵);
+    // the fit must still return the exact line, not a wrapped value
+    for n in [100_000i64, 200_000, 1_000_000] {
+        for (a, b) in [(3i64, 7i64), (-2, 1000), (0, -5)] {
+            let data: Vec<i32> = (0..n).map(|x| (a * x + b) as i32).collect();
+            let want = ((a << 16) as i32, (b << 16) as i32);
+            assert_eq!(fit_linear_fixed(&data), want, "a={a} b={b} n={n}");
+            assert_eq!(fit_linear_simd(&data), want, "SIMD path a={a} b={b} n={n}");
+        }
+    }
+    // noisy data inside the Q16.16 contract (|y| < 2¹⁵), against the i128 reference
+    let mut state = 0x2545_f491_u32;
+    for n in [99_999usize, 1_000_000] {
+        let data: Vec<i32> = (0..n)
+            .map(|x| {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                (x / 64) as i32 % 20_000 + (state % 2001) as i32 - 1000
+            })
+            .collect();
+        let want = reference_linear_fit(&data);
+        assert_eq!(fit_linear_fixed(&data), want, "noisy n={n}");
+        assert_eq!(fit_linear_simd(&data), want, "SIMD path noisy n={n}");
+    }
+}
+
 #[test]
 fn quadratic_and_cubic_fits_recover_exact_integer_polynomials() {
     // capacities measured in the fuzz campaign: cubic ≤ 64 samples,

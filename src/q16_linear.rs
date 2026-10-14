@@ -61,17 +61,8 @@ pub fn fit_linear_fixed(data: &[i32]) -> (i32, i32) {
         return (0, 0);
     }
 
-    let n64 = n as i64;
-
-    // ========================================
-    // 1. O(1) Calculation of Sum(x)
-    // ========================================
-    // Sum(x) = 0 + 1 + 2 + ... + (n-1) = n(n-1)/2
-    let sum_x = (n64 * (n64 - 1)) >> 1;
-
-    // NOTE: sum_xx is NO LONGER NEEDED!
-    // Denominator is calculated directly using identity: D = n²(n²-1)/12
-
+    // Σx and the denominator are closed forms of n (see `solve_linear_normal_q16`);
+    // the loop only accumulates Σy and Σxy
     // ========================================
     // 2. O(N) Loop: Only Sum(y) and Sum(xy)
     // ========================================
@@ -120,36 +111,39 @@ pub fn fit_linear_fixed(data: &[i32]) -> (i32, i32) {
         i += 1;
     }
 
-    // ========================================
-    // 3. Solve Normal Equations
-    // ========================================
-    // Denominator = n * Sum(x²) - Sum(x)²
-    //
-    // THE DIVINE OPTIMIZATION:
-    // D = n²(n²-1)/12  (mathematical identity)
-    // This eliminates sum_xx entirely!
-    //
-    // Use i128 for the intermediate n⁴ product to avoid overflow when
-    // n > 55,000 (n² overflows i64 at n > ~3B, but n_sq * (n_sq-1) can
-    // still be large; i128 keeps correctness for arbitrarily large slices
-    // such as those passed from the Python binding).
-    let n_sq = n64 as i128 * n64 as i128;
-    let denominator = ((n_sq * (n_sq - 1)) / 12) as i64;
+    solve_linear_normal_q16(n, sum_y, sum_xy)
+}
 
-    if denominator == 0 {
-        return (0, (sum_y / n64) as i32);
-    }
+/// Solve the least squares normal equations on `x = 0..n−1` from `Σy` and `Σxy`
+/// and return `(slope, intercept)` in Q16.16 (shared by [`fit_linear_fixed`] and
+/// the SIMD kernels in `simd_fit`, so every path rounds the same way).
+///
+/// - slope = ((n·Σxy − Σx·Σy) << 16) / D, with Σx = n(n−1)/2 and
+///   D = n·Σx² − (Σx)² = n²(n²−1)/12
+/// - intercept = ((Σy << 16) − slope·Σx) / n
+///
+/// The divisions truncate toward zero. Everything is computed in `i128`: in
+/// `i64`, n·Σxy and its Q16 shift overflow from about n = 10⁵ (an exact line
+/// with slope 3 already does), and D itself from n ≈ 1.02·10⁵, which made the
+/// fit return a wrapped line (and panic on the overflow in debug builds).
+/// `i128` holds every intermediate for any `n` whose `Σxy` fits the `i64`
+/// accumulator (|y| < 2¹⁵, the Q16.16 contract, keeps it exact up to
+/// n ≈ 2.4·10⁷). The result keeps the low 32 bits (`as i32`), as before.
+///
+/// `n` must be at least 2 (D = 0 otherwise).
+#[inline]
+#[must_use]
+pub(crate) fn solve_linear_normal_q16(n: usize, sum_y: i64, sum_xy: i64) -> (i32, i32) {
+    let n = n as i128;
+    let sum_y = i128::from(sum_y);
+    let sum_xy = i128::from(sum_xy);
+    let sum_x = (n * (n - 1)) >> 1;
+    let n_sq = n * n;
+    let denominator = (n_sq * (n_sq - 1)) / 12;
+    debug_assert!(denominator > 0, "solve_linear_normal_q16 needs n >= 2");
 
-    // Slope (Q16.16)
-    // slope = (n * Sum(xy) - Sum(x) * Sum(y)) / denominator
-    let slope_num = (n64 * sum_xy).wrapping_sub(sum_x * sum_y);
-    let slope = (slope_num << Q16_SHIFT) / denominator;
-
-    // Intercept (Q16.16)
-    // intercept = (Sum(y) - slope * Sum(x)) / n
-    let sum_y_fixed = sum_y << Q16_SHIFT;
-    let slope_term = slope.wrapping_mul(sum_x);
-    let intercept = (sum_y_fixed.wrapping_sub(slope_term)) / n64;
+    let slope = ((n * sum_xy - sum_x * sum_y) << Q16_SHIFT) / denominator;
+    let intercept = ((sum_y << Q16_SHIFT) - slope * sum_x) / n;
 
     (slope as i32, intercept as i32)
 }

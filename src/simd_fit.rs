@@ -1,10 +1,10 @@
 //! SIMD-accelerated linear fitting (`fit_linear_simd`).
 
 use crate::q16_linear::fit_linear_fixed;
-// Only the x86_64 / aarch64 kernels shift into Q16.16; the scalar fallback
-// on other targets (thumbv7em etc.) delegates to `fit_linear_fixed`.
+// The x86_64 / aarch64 kernels accumulate Σy and Σxy themselves and solve with
+// the scalar path's solver; other targets (thumbv7em etc.) delegate entirely
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-use crate::q16_linear::Q16_SHIFT;
+use crate::q16_linear::solve_linear_normal_q16;
 
 pub fn fit_linear_simd(data: &[i32]) -> (i32, i32) {
     #[cfg(target_arch = "x86_64")]
@@ -45,17 +45,6 @@ unsafe fn fit_linear_sse2(data: &[i32]) -> (i32, i32) {
 
     let n = data.len();
     if n < 8 {
-        return fit_linear_fixed(data);
-    }
-
-    let n64 = n as i64;
-
-    // Σx = n(n-1)/2, denominator = n²(n²-1)/12
-    let sum_x = (n64 * (n64 - 1)) >> 1;
-    let n_sq = n64 as i128 * n64 as i128;
-    let denominator = ((n_sq * (n_sq - 1)) / 12) as i64;
-
-    if denominator == 0 {
         return fit_linear_fixed(data);
     }
 
@@ -118,13 +107,7 @@ unsafe fn fit_linear_sse2(data: &[i32]) -> (i32, i32) {
         i += 1;
     }
 
-    let slope_num = (n64 * sum_xy).wrapping_sub(sum_x * sum_y);
-    let slope = (slope_num << Q16_SHIFT) / denominator;
-    let sum_y_fixed = sum_y << Q16_SHIFT;
-    let slope_term = slope.wrapping_mul(sum_x);
-    let intercept = (sum_y_fixed.wrapping_sub(slope_term)) / n64;
-
-    (slope as i32, intercept as i32)
+    solve_linear_normal_q16(n, sum_y, sum_xy)
 }
 
 /// SSE2 の符号付き i64 乗算ヘルパー（両オペランドが i32 範囲の場合）
@@ -170,15 +153,6 @@ unsafe fn fit_linear_neon(data: &[i32]) -> (i32, i32) {
         return fit_linear_fixed(data);
     }
 
-    let n64 = n as i64;
-    let sum_x = (n64 * (n64 - 1)) >> 1;
-    let n_sq = n64 as i128 * n64 as i128;
-    let denominator = ((n_sq * (n_sq - 1)) / 12) as i64;
-
-    if denominator == 0 {
-        return fit_linear_fixed(data);
-    }
-
     let mut sum_y_vec = vdupq_n_s64(0);
     let mut sum_xy_vec = vdupq_n_s64(0);
 
@@ -221,11 +195,5 @@ unsafe fn fit_linear_neon(data: &[i32]) -> (i32, i32) {
         i += 1;
     }
 
-    let slope_num = (n64 * sum_xy).wrapping_sub(sum_x * sum_y);
-    let slope = (slope_num << Q16_SHIFT) / denominator;
-    let sum_y_fixed = sum_y << Q16_SHIFT;
-    let slope_term = slope.wrapping_mul(sum_x);
-    let intercept = (sum_y_fixed.wrapping_sub(slope_term)) / n64;
-
-    (slope as i32, intercept as i32)
+    solve_linear_normal_q16(n, sum_y, sum_xy)
 }

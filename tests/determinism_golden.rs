@@ -874,7 +874,11 @@ fn golden_depth_capture() {
 //     a stored or transmitted result is recorded with.
 // ---------------------------------------------------------------------------
 
-/// `alice_det_math::SEMANTICS_ID` of the alice-det-math 0.4 series
+/// `alice_det_math::SEMANTICS_ID` of alice-det-math 0.5.1
+///
+/// 0.5.1 moved it from `135c407d…` (0.5.0, kept in
+/// `alice_det_math::PREVIOUS_SEMANTICS_IDS`): the golden scenario hashes above
+/// did not change, only the identifier input did
 ///
 /// Matches `alice_zip::law::SEMANTICS_ID`, `alice_db::SEMANTICS_ID` and
 /// `alice_analytics::SEMANTICS_ID` resolved against the same alice-det-math.
@@ -882,7 +886,7 @@ fn golden_depth_capture() {
 /// the scenario hashes above are unchanged (or explained), then update this
 /// constant and record both in CHANGELOG.
 const GOLDEN_SEMANTICS_ID: &str =
-    "135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000";
+    "85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315";
 
 #[test]
 fn golden_semantics_id() {
@@ -932,10 +936,62 @@ fn golden_semantics_id() {
 /// rather than whatever happened to come out.
 #[cfg(feature = "law")]
 const GOLDEN_LAW_ID_RISING: &str =
-    "041fc4a2e15b589cc6284d65900d996427a30232a7df1a904c6937f652a45c35";
+    "20a700605df5ef03b40b4a377fcf358f1cd21406afbd5f75f2f7e470cd8249a9";
 #[cfg(feature = "law")]
 const GOLDEN_LAW_ID_FALLING: &str =
+    "04a44eccba6f65321d42eba5b07c19edf543296c396b2a3825f4b63b443c09d2";
+
+/// The identifiers recorded under alice-det-math 0.5.0 (`135c407d…`), kept to
+/// show that re-recording `GOLDEN_LAW_ID_*` for 0.5.1 moved the identifier
+/// input only: the same fits under 0.5.0's identifier (taken from
+/// `alice_det_math::PREVIOUS_SEMANTICS_IDS`) still give these values, which were
+/// computed outside this toolchain from the same encoding
+#[cfg(feature = "law")]
+const PREVIOUS_GOLDEN_LAW_ID_RISING: &str =
+    "041fc4a2e15b589cc6284d65900d996427a30232a7df1a904c6937f652a45c35";
+#[cfg(feature = "law")]
+const PREVIOUS_GOLDEN_LAW_ID_FALLING: &str =
     "c0619c429284d441321d5df1e52ad7e5b2a412a31d2c18d18d201f9aa0fc07c9";
+
+#[cfg(feature = "law")]
+#[test]
+fn golden_law_id_under_the_previous_identifier_is_unchanged() {
+    use alice_edge::law::{linear_law, Provenance};
+
+    let previous = alice_det_math::PREVIOUS_SEMANTICS_IDS
+        .iter()
+        .find(|id| {
+            let mut hex = String::with_capacity(64);
+            for b in *id {
+                write!(hex, "{b:02x}").expect("writing to a String cannot fail");
+            }
+            hex == "135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000"
+        })
+        .expect("alice-det-math keeps the identifier of 0.5.0 as a previous one");
+    for (name, samples, expected) in [
+        (
+            "rising",
+            [2500, 2510, 2520, 2530, 2540],
+            PREVIOUS_GOLDEN_LAW_ID_RISING,
+        ),
+        (
+            "falling",
+            [40, 30, 20, 10, 0],
+            PREVIOUS_GOLDEN_LAW_ID_FALLING,
+        ),
+    ] {
+        let law = linear_law(&samples, Provenance::new("golden", name))
+            .expect("five samples are enough for a line");
+        let mut hex = String::with_capacity(64);
+        for b in law.law_id(previous) {
+            write!(hex, "{b:02x}").expect("writing to a String cannot fail");
+        }
+        assert_eq!(
+            hex, expected,
+            "{name}: the identifier under 0.5.0's arithmetic id"
+        );
+    }
+}
 
 #[cfg(feature = "law")]
 #[test]

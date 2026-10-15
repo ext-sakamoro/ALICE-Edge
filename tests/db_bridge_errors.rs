@@ -5,10 +5,12 @@
 //! store written by alice-db 0.3.0 on alice-det-math 0.4 (arithmetic
 //! identifier d2209b30…): 64 slopes `0.5 sin(0.2 k) + 1` at `100 k` ms. Its
 //! residual was measured under another arithmetic than this build's, so the
-//! exact values cannot be reconstructed. Oracle: alice-db 0.4 documents that
+//! exact values cannot be reconstructed. Oracle: alice-db documents that
 //! such a read fails with `InvalidData` carrying `ResidualError::Mismatch`
 //! (default `ResidualPolicy::Refuse`), and returns the model only under
-//! `ResidualPolicy::ModelOnly`.
+//! `ResidualPolicy::ModelOnly`. From alice-db 0.5 a residual is also accepted
+//! under an identifier in `alice_det_math::PREVIOUS_SEMANTICS_IDS` (same bits);
+//! d2209b30… is not one of them, the 0.4 arithmetic giving different bits.
 
 #![cfg(feature = "db")]
 

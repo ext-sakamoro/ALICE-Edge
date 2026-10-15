@@ -181,10 +181,29 @@ impl CoefficientStore {
         dir: &str,
         residual_policy: ResidualPolicy,
     ) -> Result<Self, CoefficientStoreError> {
+        Self::open_with_options(dir, residual_policy, 0)
+    }
+
+    /// Open with an explicit residual policy and the `created_at` metadata
+    /// (Unix milliseconds) that ALICE-DB stamps on every segment this store
+    /// flushes. Neither this crate nor ALICE-DB reads the wall clock: the
+    /// value is the caller's, and the same samples written with the same
+    /// `created_at` give the same bytes on disk. [`CoefficientStore::open`]
+    /// and [`CoefficientStore::open_with_policy`] pass `0`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoefficientStoreError::Db`] if either database fails to open.
+    pub fn open_with_options(
+        dir: &str,
+        residual_policy: ResidualPolicy,
+        created_at: u64,
+    ) -> Result<Self, CoefficientStoreError> {
         let open = |series: Series| {
             AliceDB::with_config(StorageConfig {
                 data_dir: PathBuf::from(dir).join(series.to_string()),
                 residual_policy,
+                created_at,
                 ..StorageConfig::default()
             })
             .map_err(db(series, "open"))
@@ -320,6 +339,66 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("alice_edge_db_test_{}_{}", std::process::id(), n));
         dir.to_string_lossy().into_owned()
+    }
+
+    /// The bytes of every file the store wrote, keyed by path under `dir`
+    fn stored_bytes(dir: &str) -> Vec<(String, Vec<u8>)> {
+        let mut out = Vec::new();
+        let mut todo = vec![std::path::PathBuf::from(dir)];
+        while let Some(p) = todo.pop() {
+            for e in std::fs::read_dir(&p).expect("read_dir") {
+                let path = e.expect("entry").path();
+                if path.is_dir() {
+                    todo.extend([path]);
+                } else {
+                    let name = path
+                        .strip_prefix(dir)
+                        .expect("under dir")
+                        .to_string_lossy()
+                        .into_owned();
+                    let bytes = std::fs::read(&path).expect("read");
+                    out.extend([(name, bytes)]);
+                }
+            }
+        }
+        out.sort();
+        out
+    }
+
+    fn write_fixed_series(dir: &str, created_at: u64) {
+        let store = CoefficientStore::open_with_options(dir, ResidualPolicy::Refuse, created_at)
+            .expect("open failed");
+        let entries: Vec<(u64, f32, f32)> = (0..64u64)
+            .map(|k| {
+                (
+                    k * 100,
+                    k as f32 * 0.25 + 1.0,
+                    (k % 7) as f32 - k as f32 * 0.5,
+                )
+            })
+            .collect();
+        store.record_batch(&entries).expect("record_batch failed");
+        store.flush().expect("flush failed");
+    }
+
+    // oracle: ALICE-DB 0.5 stamps segments with StorageConfig::created_at and
+    // reads no clock, so the stored bytes are a function of the samples and
+    // created_at alone (under alice-db 0.4 the segment files differed between
+    // two runs a second apart, the metadata being SystemTime::now())
+    #[test]
+    fn stored_bytes_are_a_function_of_samples_and_created_at() {
+        let (a, b, c) = (temp_dir(), temp_dir(), temp_dir());
+        write_fixed_series(&a, 1_700_000_000_000);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        write_fixed_series(&b, 1_700_000_000_000);
+        write_fixed_series(&c, 1_700_000_000_001);
+        let (a, b, c) = (stored_bytes(&a), stored_bytes(&b), stored_bytes(&c));
+        assert!(
+            a.iter().any(|(_, bytes)| !bytes.is_empty()),
+            "nothing was written"
+        );
+        assert_eq!(a, b, "same samples and created_at must give the same bytes");
+        assert_ne!(a, c, "created_at must reach the stored segments");
     }
 
     #[test]

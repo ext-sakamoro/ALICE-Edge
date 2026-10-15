@@ -82,9 +82,9 @@ numpy = { version = "0.29", optional = true }
 # `zip` turns on alice-zip's std + lzma, `law` uses it without them (no_std)
 alice_core = { package = "alice-zip", version = "0.10", optional = true, default-features = false }
 alice-codec = { version = "0.1", optional = true, default-features = false, features = ["std"] }
-# alice-db 0.4 moved its file backend behind the default `fs` feature; this
+# alice-db (from 0.4) keeps its file backend behind the default `fs` feature; this
 # crate opens on-disk stores, so `fs` is named explicitly
-alice-db = { version = "0.4", optional = true, default-features = false, features = ["fs"] }
+alice-db = { version = "0.5", optional = true, default-features = false, features = ["fs"] }
 rusb = { version = "0.9", optional = true }
 alice-sdf = { version = "6", optional = true, default-features = false, features = ["svo"] }
 alice-ml = { version = "0.2", optional = true, default-features = false, features = ["std"] }

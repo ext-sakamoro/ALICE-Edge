@@ -28,7 +28,7 @@ ignore = [
     "RUSTSEC-2026-0098",  # rustls-webpki: URI name constraints
     "RUSTSEC-2026-0099",  # rustls-webpki: wildcard name constraints
     "RUSTSEC-2026-0104",  # rustls-webpki: reachable panic in CRL parsing
-    # alice-db 0.4 depends on rkyv 0.7; fix is rkyv >= 0.8.17 upstream. `db` feature only.
+    # alice-db 0.4 and 0.5 depend on rkyv 0.7; fix is rkyv >= 0.8.17 upstream. `db` feature only.
     "RUSTSEC-2026-0235",  # rkyv: archive validation OOB read
     # --- unmaintained warnings (informational, not CVEs) ---
     "RUSTSEC-2025-0141",  # bincode 1.x / 2.x unmaintained (transitive via ALICE siblings)

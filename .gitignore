@@ -1,7 +1,11 @@
 # Build artifacts
 /target/
 **/*.rs.bk
+# the root Cargo.lock is tracked: the golden tests pin the arithmetic identifier
+# of the resolved alice-det-math, so CI must build with the recorded versions
+# (nested crates such as fuzz/ and scripts/gen_db_fixture/ keep theirs untracked)
 Cargo.lock
+!/Cargo.lock
 
 # IDE
 .idea/

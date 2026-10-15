@@ -116,6 +116,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      # the lock-free check below builds the pyo3 bindings, which need a Python
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
 
       # publish される .crate に必要な file が全部入っているかを見る
       #
@@ -146,12 +150,18 @@ jobs:
           printf '\n[workspace]\n' >> Cargo.toml
           # sensors-hw が libudev-sys を引き、runner に system library libudev が無いと
           # build script が panic する packaging 検査としては default features で成立する
-          cargo check
+          cargo check --locked
           # cargo package の verify も上の check も test target を build しない
           # tests/ が include! する file や実行時に開く fixture が欠けると、
           # 展開した crate の test だけが壊れるので、展開先で test を実行する
           # (docs.rs の feature 集合、sensors-hw は上と同じ理由で外す)
-          cargo test --tests --features "$FULL_FEATURES"
+          cargo test --locked --tests --features "$FULL_FEATURES"
+          # a consumer resolves dependencies afresh, not from this repository's lock:
+          # drop the shipped lock and check that the newest compatible versions still
+          # build, every feature except sensors-hw (libudev, as above)
+          rm -f Cargo.lock
+          cargo check --lib --features "$FULL_FEATURES,edge-pipeline,pyo3"
+          grep -q '^name = "alice-det-math"$' Cargo.lock || { echo "::error::lock 無しの check で alice-det-math が解決されていない"; exit 1; }
 
   coverage:
     name: Coverage (cargo-llvm-cov, informational)

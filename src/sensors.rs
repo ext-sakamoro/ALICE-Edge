@@ -584,12 +584,13 @@ impl SensorDriver for Dht22Sensor {
                                        hardware)"
                         )]
                         let start_wait = Instant::now();
-                        #[allow(
-                            clippy::disallowed_methods,
-                            reason = "reads start_wait, the GPIO pulse-width timer above (see its reason)"
-                        )]
                         while pin.is_low() {
-                            if start_wait.elapsed() > Duration::from_micros(100) {
+                            #[allow(
+                                clippy::disallowed_methods,
+                                reason = "reads start_wait, the GPIO pulse-width timer above (see its reason)"
+                            )]
+                            let waited = start_wait.elapsed();
+                            if waited > Duration::from_micros(100) {
                                 return Err(SensorError::Timeout);
                             }
                         }
@@ -599,12 +600,13 @@ impl SensorDriver for Dht22Sensor {
                             reason = "same GPIO pulse-width measurement as start_wait above"
                         )]
                         let high_start = Instant::now();
-                        #[allow(
-                            clippy::disallowed_methods,
-                            reason = "reads high_start, the GPIO pulse-width timer above (see its reason)"
-                        )]
                         while pin.is_high() {
-                            if high_start.elapsed() > Duration::from_micros(100) {
+                            #[allow(
+                                clippy::disallowed_methods,
+                                reason = "reads high_start, the GPIO pulse-width timer above (see its reason)"
+                            )]
+                            let high_so_far = high_start.elapsed();
+                            if high_so_far > Duration::from_micros(100) {
                                 break;
                             }
                         }

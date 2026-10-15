@@ -135,23 +135,31 @@ impl EdgePipeline {
     /// Process a single frame through the pipeline
     ///
     /// Returns the encoded ASP packet and compression statistics.
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "the 5 wall-clock timers here only measure per-stage \
-                   latency fed into self.stats (PipelineStats, diagnostic \
-                   averages); packet and compress_stats, the values this \
-                   function returns, are computed by compress_point_cloud / \
-                   classify_compressed / encode_frame from points and \
-                   compressed alone, never from these timers"
-    )]
     pub fn process_frame(
         &mut self,
     ) -> Result<(AspEdgePacket, CompressStats), crate::depth_capture::CaptureError> {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "the 5 wall-clock timers here only measure per-stage \
+                       latency fed into self.stats (PipelineStats, diagnostic \
+                       averages); packet and compress_stats, the values this \
+                       function returns, are computed by compress_point_cloud / \
+                       classify_compressed / encode_frame from points and \
+                       compressed alone, never from these timers"
+        )]
         let total_start = Instant::now();
 
         // Stage 1: Capture
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same per-stage latency timer as total_start, see its reason"
+        )]
         let capture_start = Instant::now();
         let frame = self.driver.capture_frame()?;
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same per-stage latency timer as total_start, see its reason"
+        )]
         let capture_ms = capture_start.elapsed().as_secs_f64() * 1000.0;
 
         // Downsample
@@ -165,21 +173,49 @@ impl EdgePipeline {
         let point_arrays: Vec<[f32; 3]> = points.iter().map(|p| [p.x, p.y, p.z]).collect();
 
         // Stage 2: Compress
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same per-stage latency timer as total_start, see its reason"
+        )]
         let compress_start = Instant::now();
         let (compressed, compress_stats) =
             compress_point_cloud(&point_arrays, &self.config.compress);
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same per-stage latency timer as total_start, see its reason"
+        )]
         let compress_ms = compress_start.elapsed().as_secs_f64() * 1000.0;
 
         // Stage 3: Classify
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same per-stage latency timer as total_start, see its reason"
+        )]
         let classify_start = Instant::now();
         let classifications = self.classify_compressed(&compressed, &point_arrays);
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same per-stage latency timer as total_start, see its reason"
+        )]
         let classify_ms = classify_start.elapsed().as_secs_f64() * 1000.0;
 
         // Stage 4: Encode to ASP
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same per-stage latency timer as total_start, see its reason"
+        )]
         let encode_start = Instant::now();
         let packet = self.encoder.encode_frame(&compressed, &classifications);
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same per-stage latency timer as total_start, see its reason"
+        )]
         let encode_ms = encode_start.elapsed().as_secs_f64() * 1000.0;
 
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same per-stage latency timer as total_start, see its reason"
+        )]
         let total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
 
         // Update stats
@@ -216,21 +252,33 @@ impl EdgePipeline {
     }
 
     /// Run the pipeline loop for a specified duration
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "this loop's own contract is to run for `duration` of real \
-                   wall-clock time and pace frames to target_fps; the \
-                   resulting packet count varies with real-time scheduling \
-                   by design (same as any real-time device's frame loop), \
-                   but each packet's content comes from process_frame, which \
-                   computes it without reading these timers"
-    )]
     pub fn run_for(&mut self, duration: Duration) -> Vec<(AspEdgePacket, CompressStats)> {
         let frame_interval = Duration::from_secs_f64(1.0 / self.config.target_fps as f64);
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "this loop's own contract is to run for `duration` of real \
+                       wall-clock time and pace frames to target_fps; the \
+                       resulting packet count varies with real-time scheduling \
+                       by design (same as any real-time device's frame loop), \
+                       but each packet's content comes from process_frame, which \
+                       computes it without reading these timers"
+        )]
         let start = Instant::now();
         let mut results = Vec::new();
 
-        while start.elapsed() < duration {
+        loop {
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "same frame-pacing timer as `start` above, see its reason"
+            )]
+            let run_elapsed = start.elapsed();
+            if run_elapsed >= duration {
+                break;
+            }
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "same frame-pacing timer as `start` above, see its reason"
+            )]
             let frame_start = Instant::now();
 
             match self.process_frame() {
@@ -239,6 +287,10 @@ impl EdgePipeline {
             }
 
             // Maintain target frame rate
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "same frame-pacing timer as `start` above, see its reason"
+            )]
             let frame_elapsed = frame_start.elapsed();
             if frame_elapsed < frame_interval {
                 std::thread::sleep(frame_interval - frame_elapsed);

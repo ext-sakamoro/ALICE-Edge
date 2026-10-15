@@ -48,14 +48,6 @@ pub struct EdgeDashboard {
 impl EdgeDashboard {
     /// Create a new dashboard
     #[must_use]
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "start/last_reset only back uptime_secs/models_per_sec, \
-                   live monitoring telemetry (printed or pushed to a \
-                   dashboard viewer) that is never read back into a \
-                   compression/classification/encoding value this crate \
-                   computes elsewhere"
-    )]
     pub fn new() -> Self {
         Self {
             hll_sensors: HyperLogLog::new(),
@@ -68,7 +60,19 @@ impl EdgeDashboard {
             total_bytes_saved: 0,
             total_bytes_sent: 0,
             total_models: 0,
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "start/last_reset only back uptime_secs/models_per_sec, \
+                           live monitoring telemetry (printed or pushed to a \
+                           dashboard viewer) that is never read back into a \
+                           compression/classification/encoding value this crate \
+                           computes elsewhere"
+            )]
             start: Instant::now(),
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "same uptime-telemetry timer as `start` above, see its reason"
+            )]
             last_reset: Instant::now(),
         }
     }
@@ -173,28 +177,29 @@ impl EdgeDashboard {
 
     /// Uptime in seconds
     #[must_use]
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "uptime is wall-clock time by definition; reads `start`, \
-                   whose reason on new() covers this live monitoring \
-                   telemetry (never read back into a compression/\
-                   classification/encoding value)"
-    )]
     pub fn uptime_secs(&self) -> f64 {
-        self.start.elapsed().as_secs_f64()
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "uptime is wall-clock time by definition; reads `start`, \
+                       whose reason on new() covers this live monitoring \
+                       telemetry (never read back into a compression/\
+                       classification/encoding value)"
+        )]
+        let uptime = self.start.elapsed();
+        uptime.as_secs_f64()
     }
 
     /// Models per second
     #[inline(always)]
     #[must_use]
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "throughput per wall-clock second for the same live \
-                   monitoring telemetry as uptime_secs (see the reason on \
-                   new()); never read back into a compression/\
-                   classification/encoding value"
-    )]
     pub fn models_per_sec(&self) -> f64 {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "throughput per wall-clock second for the same live \
+                       monitoring telemetry as uptime_secs (see the reason on \
+                       new()); never read back into a compression/\
+                       classification/encoding value"
+        )]
         let elapsed = self.start.elapsed().as_secs_f64();
         if elapsed > 0.0 {
             self.total_models as f64 / elapsed
@@ -279,16 +284,17 @@ impl EdgeDashboard {
 
     /// Reset periodic counters (keep HLL and CMS state)
     #[allow(dead_code)]
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "last_reset is the same uptime-telemetry timer as new(), never read back into a computed value"
-    )]
     pub fn reset_periodic(&mut self) {
         self.latencies_us.clear();
         self.sorted_latencies.clear();
         self.sorted_dirty = true;
         self.compression_ratios.clear();
-        self.last_reset = Instant::now();
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "last_reset is the same uptime-telemetry timer as new(), never read back into a computed value"
+        )]
+        let now = Instant::now();
+        self.last_reset = now;
     }
 
     // ── E10: WebSocket 配信 ──────────────────────────────────────────

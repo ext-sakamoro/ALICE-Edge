@@ -20,18 +20,19 @@ pub struct Watchdog {
 impl Watchdog {
     /// 指定タイムアウトでウォッチドッグを作成
     #[must_use]
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "liveness/safety mechanism: is_expired() asks whether real \
-                   wall-clock time since the last kick exceeds timeout, a \
-                   hardware-hang detector that is inherently wall-clock- \
-                   driven; the result is consulted live (a bool) and never \
-                   stored, transmitted or compared for equality"
-    )]
     pub fn new(timeout: Duration) -> Self {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "liveness/safety mechanism: is_expired() asks whether real \
+                       wall-clock time since the last kick exceeds timeout, a \
+                       hardware-hang detector that is inherently wall-clock- \
+                       driven; the result is consulted live (a bool) and never \
+                       stored, transmitted or compared for equality"
+        )]
+        let now = Instant::now();
         Self {
             timeout,
-            last_kick: Arc::new(Mutex::new(Instant::now())),
+            last_kick: Arc::new(Mutex::new(now)),
             running: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -41,12 +42,13 @@ impl Watchdog {
     /// # Panics
     ///
     /// Panics if the internal mutex is poisoned.
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "same liveness/safety timer as new(), see its reason"
-    )]
     pub fn start(&self) {
-        *self.last_kick.lock().unwrap() = Instant::now();
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same liveness/safety timer as new(), see its reason"
+        )]
+        let now = Instant::now();
+        *self.last_kick.lock().unwrap() = now;
         self.running.store(true, Ordering::Release);
     }
 
@@ -60,12 +62,13 @@ impl Watchdog {
     /// # Panics
     ///
     /// Panics if the internal mutex is poisoned.
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "same liveness/safety timer as new(), see its reason"
-    )]
     pub fn kick(&self) {
-        *self.last_kick.lock().unwrap() = Instant::now();
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same liveness/safety timer as new(), see its reason"
+        )]
+        let now = Instant::now();
+        *self.last_kick.lock().unwrap() = now;
     }
 
     /// タイムアウトが経過したかどうか
@@ -74,19 +77,20 @@ impl Watchdog {
     ///
     /// Panics if the internal mutex is poisoned.
     #[must_use]
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "reads the same liveness/safety timer as new() (see its \
-                   reason): elapsed() measures real wall-clock time since \
-                   the last kick; the bool is consulted live, never stored, \
-                   transmitted or compared for equality"
-    )]
     pub fn is_expired(&self) -> bool {
         if !self.running.load(Ordering::Acquire) {
             return false;
         }
         let last = *self.last_kick.lock().unwrap();
-        last.elapsed() > self.timeout
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "reads the same liveness/safety timer as new() (see its \
+                       reason): elapsed() measures real wall-clock time since \
+                       the last kick; the bool is consulted live, never stored, \
+                       transmitted or compared for equality"
+        )]
+        let since_kick = last.elapsed();
+        since_kick > self.timeout
     }
 
     /// 実行中かどうか
@@ -107,14 +111,16 @@ impl Watchdog {
     ///
     /// Panics if the internal mutex is poisoned.
     #[must_use]
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "reads the same liveness/safety timer as new() (see its \
-                   reason) and reports it to the caller for monitoring; \
-                   no value this crate computes is derived from it"
-    )]
     pub fn elapsed_since_kick(&self) -> Duration {
-        self.last_kick.lock().unwrap().elapsed()
+        let last = *self.last_kick.lock().unwrap();
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "reads the same liveness/safety timer as new() (see its \
+                       reason) and reports it to the caller for monitoring; \
+                       no value this crate computes is derived from it"
+        )]
+        let since_kick = last.elapsed();
+        since_kick
     }
 }
 

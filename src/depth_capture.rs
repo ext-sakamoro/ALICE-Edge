@@ -211,13 +211,6 @@ impl DolphinD5Driver {
 }
 
 impl DepthCameraDriver for DolphinD5Driver {
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "start_time only backs timestamp_ms, a per-frame diagnostic \
-                   metadata field that no code in this crate reads back; the \
-                   point cloud itself is derived from frame_counter (see \
-                   capture_frame's simulation branch), never from the clock"
-    )]
     fn init(&mut self) -> Result<(), CaptureError> {
         // Attempt to open Dolphin D5 Lite via rusb
         let context = rusb::Context::new()
@@ -239,12 +232,25 @@ impl DepthCameraDriver for DolphinD5Driver {
             // デバイス不在時はシミュレーションモードにフォールバック
             self.simulation_mode = true;
             self.initialized = true;
-            self.start_time = Some(Instant::now());
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "start_time only backs timestamp_ms, a per-frame diagnostic \
+                           metadata field that no code in this crate reads back; the \
+                           point cloud itself is derived from frame_counter (see \
+                           capture_frame's simulation branch), never from the clock"
+            )]
+            let now = Instant::now();
+            self.start_time = Some(now);
             return Ok(());
         }
 
         self.initialized = true;
-        self.start_time = Some(Instant::now());
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same per-frame diagnostic timer as the simulation branch above, see its reason"
+        )]
+        let now = Instant::now();
+        self.start_time = Some(now);
         Ok(())
     }
 

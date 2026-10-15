@@ -376,6 +376,13 @@ jobs:
         run: python scripts/test_entropy_guard.py
       - name: Entropy guard (no OS entropy / wall clock in production code)
         run: python scripts/entropy_guard.py
+      # RUSTSEC-2026-0235 is ignored in security-audit.yml / deny.toml because
+      # rkyv is reached only through a dependency; no manifest here may declare
+      # rkyv and no .rs file may use it (0 manifests or 0 .rs files is red)
+      - name: No direct rkyv (tests)
+        run: python scripts/test_no_direct_rkyv.py
+      - name: No direct rkyv (manifests and Rust sources)
+        run: python scripts/no_direct_rkyv.py
 
   python:
     # the `pyo3` feature (Python bindings) is built only here: maturin builds the

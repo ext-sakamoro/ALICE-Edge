@@ -43,7 +43,7 @@ relint() { touch src/lib.rs; }
 add_target() { rustup target list --installed | grep -qx "$1" || rustup target add "$1"; }
 
 need actionlint "brew install actionlint"
-need python3 "python 3.9+"
+need python3 "python 3.11+ (tomllib)"
 
 step "ci.yml / actionlint: workflow YAML"
 actionlint .github/workflows/*.yml
@@ -76,6 +76,10 @@ python3 scripts/package_contents_check.py
 step "ci.yml / docs-lint: entropy guard (no OS entropy / wall clock in production code)"
 python3 scripts/test_entropy_guard.py
 python3 scripts/entropy_guard.py
+
+step "ci.yml / docs-lint: no direct rkyv (manifests and Rust sources)"
+python3 scripts/test_no_direct_rkyv.py
+python3 scripts/no_direct_rkyv.py
 
 step "ci.yml / docs-lint: run_tests.sh (zero-test guard) tests"
 python3 scripts/test_run_tests.py

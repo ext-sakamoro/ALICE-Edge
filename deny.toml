@@ -21,15 +21,20 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 version = 2
 yanked = "deny"
 ignore = [
-    # --- transitive, not fixable from this crate (tracked in the ALICE backlog) ---
+    # --- transitive, not fixable from this crate ---
     # rumqttc 0.25.1 (latest) pins rustls-webpki 0.102 directly; the fixed
     # 0.103.x line is only reachable once rumqttc bumps. `mqtt` feature only.
     "RUSTSEC-2026-0049",  # rustls-webpki: CRL distribution-point matching
     "RUSTSEC-2026-0098",  # rustls-webpki: URI name constraints
     "RUSTSEC-2026-0099",  # rustls-webpki: wildcard name constraints
     "RUSTSEC-2026-0104",  # rustls-webpki: reachable panic in CRL parsing
-    # alice-db 0.4 and 0.5 depend on rkyv 0.7; fix is rkyv >= 0.8.17 upstream. `db` feature only.
-    "RUSTSEC-2026-0235",  # rkyv: archive validation OOB read
+    # rkyv 0.7 Rc/Arc archive validation: rkyv is reached only through alice-db
+    # (`db` feature), whose archived types (SegmentMetadata / DataSegment /
+    # ModelType / DataType) hold no Rc / Arc, so the advisory does not apply.
+    # This crate neither depends on rkyv nor archives anything
+    # (scripts/no_direct_rkyv.py fails if either changes). Root fix: alice-db
+    # moving off rkyv 0.7 (pending); drop the entry when that release is consumed.
+    "RUSTSEC-2026-0235",  # rkyv: Rc/Arc archive validation
     # --- unmaintained warnings (informational, not CVEs) ---
     "RUSTSEC-2025-0141",  # bincode 1.x / 2.x unmaintained (transitive via ALICE siblings)
     "RUSTSEC-2025-0134",  # rustls-pemfile unmaintained (transitive via rumqttc)

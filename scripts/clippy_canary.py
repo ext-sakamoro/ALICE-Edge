@@ -7,8 +7,9 @@ A throwaway crate is built in a temporary directory with an exact copy of the
 repository's clippy.toml, rust-toolchain.toml and `[lints.*]` tables. It holds
 one library function per row of scripts/clippy_canary_calls.tsv, each planting
 one banned call, plus one clean control function. `cargo clippy --lib` runs
-with the CI clippy job's flags (`-W clippy::pedantic -D warnings`) and the
-script fails unless
+with fixed flags (`-W clippy::pedantic -D warnings`), whatever flags the
+repository's own clippy job uses (a disallowed-method lint fires under any of
+them), and the script fails unless
 
   (i)   clippy exits non-zero,
   (ii)  every row's function gets exactly one `disallowed_*` diagnostic naming
@@ -41,7 +42,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CALLS = ROOT / "scripts" / "clippy_canary_calls.tsv"
 KEYS = ("disallowed-methods", "disallowed-types")
 LINTS = {"clippy::disallowed_methods", "clippy::disallowed_types"}
-# the same flags as the clippy job in .github/workflows/ci.yml
+# fixed flags, independent of the repository's own clippy job (see the module doc)
 CLIPPY_FLAGS = ["-W", "clippy::pedantic", "-D", "warnings"]
 CONTROL = "canary_control"
 

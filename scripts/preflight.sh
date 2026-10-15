@@ -77,6 +77,12 @@ step "ci.yml / docs-lint: entropy guard (no OS entropy / wall clock in productio
 python3 scripts/test_entropy_guard.py
 python3 scripts/entropy_guard.py
 
+step "ci.yml / docs-lint: run_tests.sh (zero-test guard) tests"
+python3 scripts/test_run_tests.py
+
+step "ci.yml / clippy: clippy canary tests (parser and zero logic, no cargo)"
+python3 scripts/test_clippy_canary.py
+
 step "security-audit.yml / stub-guard"
 scripts/stub_guard.sh
 
@@ -140,13 +146,16 @@ if [[ $quick -eq 1 ]]; then
   # cover the two properties that are easiest to break without noticing
   # (cross-platform bit-exactness, degenerate-input behaviour), so --quick
   # includes them. The remaining integration suites do not run here.
-  step "quick: determinism goldens + panic contract (std)"
-  cargo test --test determinism_golden --no-default-features
-  cargo test --test determinism_golden --features "std"
-  cargo test --test determinism_golden --features "law"
+  step "quick: determinism goldens (must run tests) + panic contract (std)"
+  scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --no-default-features
+  scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "std"
+  scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "law"
   cargo test --test panic_contract --features "std"
   echo; echo "preflight --quick OK (the other test suites, the release-profile panic contract, MSRV, powerset, fuzz build and security jobs are skipped)"; exit 0
 fi
+
+step "ci.yml / clippy: clippy canary (every planted banned call is flagged)"
+python3 scripts/clippy_canary.py
 
 step "ci.yml / test: no_std core, std, doc tests"
 cargo check --lib --no-default-features
@@ -171,11 +180,11 @@ cargo test --test robust_contract --features "std"
 step "ci.yml / test: db bridge errors (tests/db_bridge_errors.rs, db)"
 cargo test --test db_bridge_errors --features "db"
 
-step "ci.yml / test: determinism goldens (no features, std, full)"
-cargo test --test determinism_golden --no-default-features
-cargo test --test determinism_golden --features "std"
-cargo test --test determinism_golden --features "law"
-cargo test --test determinism_golden --features "$FULL"
+step "ci.yml / test: determinism goldens (no features, std, law, full; each must run tests)"
+scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --no-default-features
+scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "std"
+scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "law"
+scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "$FULL"
 
 step "ci.yml / test: panic contract (std + full, debug and release)"
 cargo test --test panic_contract --features "std"

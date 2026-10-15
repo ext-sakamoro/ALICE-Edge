@@ -79,16 +79,23 @@ jobs:
       # this matrix, so a platform-dependent float operation fails here. The
       # no-feature run covers the no_std core; the std run adds the modules
       # that need alloc, and the full-feature run below adds law and ml.
+      #
+      # scripts/run_tests.sh fails the step when no test ran or when
+      # determinism_golden ran none (a feature or target mismatch would
+      # otherwise pass as an empty run)
       - name: Test — determinism goldens (no default features)
-        run: cargo test --test determinism_golden --no-default-features
+        shell: bash
+        run: scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --no-default-features
 
       - name: Test — determinism goldens (std)
-        run: cargo test --test determinism_golden --features "std"
+        shell: bash
+        run: scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "std"
 
       # law_id goldens need only `law` (no_std + alloc), so they run on every
       # leg here; the full-feature run below is skipped on Windows.
       - name: Test — determinism goldens (law)
-        run: cargo test --test determinism_golden --features "law"
+        shell: bash
+        run: scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "law"
 
       # Degenerate inputs: empty / length-one windows, the guarded divisions,
       # out-of-range and non-finite arguments, the Q16 wrap and the integer
@@ -148,7 +155,8 @@ jobs:
       # law and ml add their own golden scenarios and panic cases
       - name: Test — determinism goldens (full feature set)
         if: runner.os != 'Windows'
-        run: cargo test --test determinism_golden --features "$FULL_FEATURES"
+        shell: bash
+        run: scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "$FULL_FEATURES"
 
       - name: Test — panic contract (full feature set, debug)
         if: runner.os != 'Windows'
@@ -238,6 +246,14 @@ jobs:
 
       - name: Clippy (pyo3 bindings, lib)
         run: cargo clippy --lib --features "pyo3" -- -D warnings
+
+      # the lists in clippy.toml only gate anything if clippy flags a call to
+      # them: a throwaway crate with the same clippy.toml plants one banned call
+      # per row of scripts/clippy_canary_calls.tsv (0 rows fail)
+      - name: Clippy canary (tests)
+        run: python3 scripts/test_clippy_canary.py
+      - name: Clippy canary (every planted banned call is flagged)
+        run: python3 scripts/clippy_canary.py
 
   msrv:
     name: MSRV (rust-version = 1.87)
@@ -352,6 +368,10 @@ jobs:
       # no part of src/**/*.rs may read OS entropy or the wall clock in a way
       # that affects a stored/computed/transmitted value (G10); clippy's
       # disallowed-methods is the first, compiled layer, this is the second
+      # the zero-test guard shared with ALICE-DB / ALICE-Analytics, on each
+      # OS's own bash
+      - name: run_tests.sh (tests)
+        run: python scripts/test_run_tests.py
       - name: Entropy guard (tests)
         run: python scripts/test_entropy_guard.py
       - name: Entropy guard (no OS entropy / wall clock in production code)

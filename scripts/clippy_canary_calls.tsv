@@ -1,0 +1,10 @@
+# Banned calls the clippy canary plants (scripts/clippy_canary.py), one per row.
+# Columns (tab separated): clippy.toml key, the banned path as written there,
+# a Rust statement that calls it inside a library function.
+# Kept free of repository-specific logic so it can later be generated from
+# the ALICE-Law gate list (G1 / G10).
+disallowed-methods	f64::sin	let _ = core::hint::black_box(0.5_f64).sin();
+disallowed-methods	f64::sin_cos	let _ = core::hint::black_box(0.5_f64).sin_cos();
+disallowed-methods	std::time::Instant::now	let _ = std::time::Instant::now();
+disallowed-methods	std::time::SystemTime::now	let _ = std::time::SystemTime::now();
+disallowed-types	std::collections::hash_map::RandomState	let _ = std::collections::hash_map::RandomState::default();

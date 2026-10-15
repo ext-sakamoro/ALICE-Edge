@@ -1042,3 +1042,38 @@ fn golden_law_id() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// The checker's own canaries: `assert_golden` must reject a sink shorter than
+// its floor and a hash that differs from the pin. The accepting case first,
+// so the two rejections cannot pass by panicking for another reason.
+// ---------------------------------------------------------------------------
+
+/// SHA-256 of eight zero bytes, computed outside this crate
+/// (`head -c 8 /dev/zero | shasum -a 256`).
+const SHA256_OF_8_ZERO_BYTES: &str =
+    "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc";
+
+fn eight_zero_bytes() -> Sink {
+    let mut s = Sink::default();
+    s.u64(0);
+    s
+}
+
+#[test]
+fn checker_accepts_the_reference_sink() {
+    assert_golden("canary", eight_zero_bytes(), 8, SHA256_OF_8_ZERO_BYTES);
+}
+
+#[test]
+#[should_panic(expected = "the scenario stopped exercising the module")]
+fn checker_rejects_a_too_short_sink() {
+    assert_golden("canary", eight_zero_bytes(), 9, SHA256_OF_8_ZERO_BYTES);
+}
+
+#[test]
+#[should_panic(expected = "Golden hash mismatch for scenario `canary`")]
+fn checker_rejects_a_wrong_hash() {
+    let wrong = "0".repeat(64);
+    assert_golden("canary", eight_zero_bytes(), 8, &wrong);
+}

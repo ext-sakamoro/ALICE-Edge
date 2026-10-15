@@ -16,14 +16,16 @@
 # (src/depth_capture.rs) and the classifier features (src/object_classifier.rs).
 
 [G1]
-status = "unverified"
+status = "pass"
 evidence = [
     "clippy.toml lines 22 to 74 (every method the G1 list marks banned, for f32 and f64, sin_cos at lines 25 and 51; powi, the pending default, is banned too)",
-    ".github/workflows/ci.yml clippy job: no_std; no_std + law; std, all targets; FULL_FEATURES, all targets; FULL_FEATURES + edge-pipeline, all targets (line 232); pyo3 (line 239); no-std-cross job line 201 (thumbv7em, law + ffi); test job line 173 (std + sensors-hw, Linux); scripts/preflight.sh lines 83 to 95 run the same sets",
+    ".github/workflows/ci.yml clippy job: no_std (line 226); no_std + law (line 229); std, all targets (line 232); FULL_FEATURES, all targets (line 235); FULL_FEATURES + edge-pipeline, all targets (line 241); pyo3 (line 248); no-std-cross job line 209 (thumbv7em, law + ffi); test job line 181 (std + sensors-hw, Linux); scripts/preflight.sh lines 89 to 101 run the same sets",
+    "scripts/clippy_canary.py with scripts/clippy_canary_calls.tsv lines 6 and 7 (f64::sin and f64::sin_cos planted in a throwaway crate that copies clippy.toml: each must get exactly one disallowed-methods diagnostic naming it and must be listed in clippy.toml; 0 rows or 0 entries fail) and scripts/test_clippy_canary.py; run by .github/workflows/ci.yml lines 254 and 256 and scripts/preflight.sh lines 84 and 158",
+    "Cargo.toml has no libm dependency (grep -n libm Cargo.toml finds only comments at lines 73 and 104), so no libm free function can be named from this crate's source; every float transcendental is a method on f32 / f64, which the list covers",
 ]
-mutant = "x.sin() added to a library function in src/delta.rs: cargo clippy --lib --all-targets --features std -- -D warnings fails (disallowed method f32::sin); the same call added to src/edge_pipeline.rs passes the FULL_FEATURES step and fails the FULL_FEATURES + edge-pipeline step (the step that closes that gap); reverted"
+mutant = "measured 2026-10-15, each reverted: deleting the f64::sin entry (line 49) from clippy.toml makes scripts/clippy_canary.py exit 1 with 'data line 6: `f64::sin` is not listed under disallowed-methods in clippy.toml'; adding `let _ = core::hint::black_box(0.5_f64).sin();` to compute_bounds_size in src/edge_pipeline.rs passes the FULL_FEATURES clippy step (rc 0) and fails the FULL_FEATURES + edge-pipeline step (rc 101, disallowed method `f64::sin` at src/edge_pipeline.rs:398)"
 since = ""
-note = "unverified: no banned call is known, and every feature is now linted (edge-pipeline and pyo3 were not, until the two clippy steps at ci.yml lines 232 and 239), but the lint has no canary: no committed test plants a banned call and asserts that clippy rejects it, and nothing fails when the list is empty (see G11)."
+note = "every banned method of the G1 list is in clippy.toml, every feature is linted with -D warnings (edge-pipeline and pyo3 included), and the canary plants f64::sin and f64::sin_cos to confirm the lint still fires. The form a method list cannot reach, a call of a libm free function such as libm::sin, is not available here because the crate does not depend on libm."
 reference_repo = "ALICE-SDF"
 
 [G2]
@@ -95,11 +97,15 @@ reference_repo = "ALICE-DB"
 [G11]
 status = "fail-known"
 evidence = [
+    "scripts/clippy_canary.py with scripts/clippy_canary_calls.tsv and scripts/test_clippy_canary.py (the clippy lists of G1 and G10: one planted banned call per row must get exactly one disallowed diagnostic naming it, a clean control none; 0 rows or 0 clippy.toml entries fail as compared nothing; CI clippy job and scripts/preflight.sh)",
+    "scripts/run_tests.sh and scripts/test_run_tests.py (each determinism_golden leg of the CI test job and of scripts/preflight.sh fails when the golden file ran no test)",
+    "tests/determinism_golden.rs (checker_accepts_the_reference_sink, checker_rejects_a_too_short_sink, checker_rejects_a_wrong_hash: the canaries of assert_golden)",
     "scripts/test_entropy_guard.py (canary line 47, zero-scan lines 189 and 201)",
     "scripts/test_public_text.py and .github/public-text-pin (the pinned SHA-256 of ALICE-Law's checker is its cross-repository identity check)",
 ]
+mutant = "measured 2026-10-15, each reverted: dropping the 0-row check or the exactly-one-diagnostic check in scripts/clippy_canary.py fails scripts/test_clippy_canary.py; an empty scripts/clippy_canary_calls.tsv makes the canary exit 1 with 'compared nothing: the data file has no rows'; deleting f64::sin_cos (or the RandomState type) from clippy.toml makes it exit 1 naming that row; a determinism_golden leg filtered to 0 tests, run against another test target, or with every test cfg'd out makes scripts/run_tests.sh exit 1; removing the min_bytes check or the hash comparison in assert_golden fails checker_rejects_a_too_short_sink or checker_rejects_a_wrong_hash"
 since = ""
-note = "unmet: the clippy ban that carries G1 and the compiled layer of G10 (clippy.toml lines 22 to 96, run by .github/workflows/ci.yml lines 217 to 227) has no canary that injects a banned call and confirms the lint fires, and no check that it linted anything; G2, G3, G13 and G14 have no checker here. Present: the entropy guard (G10) has a canary and zero-scan failures, and G12's checker is fetched at a pinned revision with its SHA-256 checked. scripts/entropy_guard.py was ported from ALICE-DB with this crate's own ALLOWED table, so it is not a byte-identical shared copy and has no copy check."
+note = "unmet: clause (c). scripts/clippy_canary.py, scripts/test_clippy_canary.py, scripts/clippy_canary_calls.tsv, scripts/run_tests.sh and scripts/test_run_tests.py are byte-identical copies of ALICE-Analytics' files (run_tests.sh also of ALICE-DB's), but nothing in this repository or its CI compares them with their source, so a drift would pass. G2, G3, G13 and G14 have no checker here. Met: (a) and (b) for the clippy lists, for assert_golden and the golden legs' zero-test guard, and for the entropy guard (its ALLOWED table is this crate's own, so it is not a shared copy); G12's checker is fetched at a pinned revision with its SHA-256 checked."
 reference_repo = "ALICE-LOL"
 
 [G12]

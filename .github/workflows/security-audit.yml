@@ -5,10 +5,12 @@ name: Security & Hygiene
 # - block license drift in the dependency tree (GPL entering etc.)
 # - unused dependency detection
 # - CI gate for placeholder implementations (todo! / unimplemented! / panic!(STUB) / dbg!)
-# - API compatibility against the crates.io release (semver-checks)
 #
 # ci.yml stays focused on build / test / clippy / doc; this workflow is the
 # security + hygiene lane, triggered on push + PR + weekly cron.
+#
+# The public API check against the latest crates.io release is semver-checks.yml,
+# which gates.
 # scripts/preflight.sh runs the same commands with the same arguments.
 
 on:
@@ -200,36 +202,6 @@ jobs:
           name: coverage-summary
           path: coverage-summary.txt
           retention-days: 30
-
-  semver-checks:
-    name: cargo-semver-checks (API compat vs crates.io)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
-      # Pinned: `@latest` tracks rustc MSRV faster than rust-toolchain.toml.
-      - name: Install cargo-semver-checks
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-semver-checks@0.50.0
-
-      # Compares HEAD against the latest crates.io release (0.1.0). A breaking
-      # change must ship with a version bump, which makes this job green again.
-      #
-      # `law` is excluded because the baseline release has no such feature.
-      # `dashboard` is excluded until the next publish: 0.1.0 imports
-      # `alice_analytics::{CountMinSketch, HyperLogLog}` from the crate root,
-      # which alice-analytics 0.1.0 does not export, so the baseline cannot be
-      # documented with that feature (fixed on main, see CHANGELOG).
-      - name: Run cargo semver-checks
-        run: |
-          feats=$(echo "$FULL_FEATURES" | tr ',' '\n' | grep -vx -e dashboard -e law | paste -sd, -)
-          echo "features: $feats"
-          cargo semver-checks check-release --package alice-edge \
-            --only-explicit-features --features "$feats"
 
   stub-guard:
     name: Stub / mock / dbg guard (grep)

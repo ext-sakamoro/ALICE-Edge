@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Local reproduction of the CI gates before `git push`: every command below is
-# the one .github/workflows/ci.yml or security-audit.yml runs, with the same
+# the one .github/workflows/ci.yml, security-audit.yml or semver-checks.yml runs, with the same
 # arguments. A step this script does not cover is a step that can only fail
 # remotely, so a step added to a workflow is added here in the same commit.
 #
@@ -9,18 +9,18 @@
 #            builds, rustdoc, examples, the full test suites (no_std, std,
 #            law, analytic oracles, determinism goldens, panic contract in
 #            both profiles, full feature set, edge-pipeline), MSRV, feature
-#            powerset, fuzz build and the security jobs (cargo audit / deny /
-#            machete)
+#            powerset, fuzz build, the security jobs (cargo audit / deny /
+#            machete) and the semver gate
 #   --quick  static checks, docs lint, clippy, no_std / thumbv7em builds,
 #            rustdoc, `cargo test --lib`, the determinism goldens and the
 #            debug-profile panic contract; skips the other test suites, the
 #            release-profile panic contract, MSRV, feature powerset, fuzz
-#            build and the security jobs
+#            build, the security jobs and the semver gate
 #
 # The python job runs in the full mode only (it needs network for pip).
 #
 # Not reproduced here (CI only): the ubuntu-24.04-arm / windows-latest legs of
-# the test matrix, sensors-hw clippy off Linux, coverage, semver-checks,
+# the test matrix, sensors-hw clippy off Linux, coverage,
 # package-integrity and the time-boxed fuzz runs.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -239,6 +239,11 @@ cargo audit --db "${CARGO_TARGET_DIR:-target}/advisory-db" --deny yanked \
   --ignore RUSTSEC-2025-0134
 cargo deny --features "$FULL" check all
 cargo machete
+
+step "semver-checks.yml: semver gate tests + cargo semver-checks against the latest crates.io release"
+need cargo-semver-checks "cargo install cargo-semver-checks --version 0.50.0 --locked"
+python3 scripts/test_semver_gate.py
+python3 scripts/semver_gate.py --config .github/semver-gate.toml --target-dir "${CARGO_TARGET_DIR:-target}/semver"
 
 step "ci.yml / python: maturin build + import + binding tests + example (throwaway venv)"
 venv="${CARGO_TARGET_DIR:-target}/preflight-python"

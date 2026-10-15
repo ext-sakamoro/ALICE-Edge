@@ -1,0 +1,15 @@
+# scripts/semver_gate.py: the consumer feature sets of alice-edge and the equal-version mode
+#
+# The sets are the `consumer-features` / `consumer-features-why` / `exclude-features` of
+# [crate.alice-edge] in ALICE-Law release-train.toml, the roster its publish gate builds the
+# packaged crate with; keep them equal. The gate also runs the default features and no
+# default features
+consumer-features = [["asp", "codec", "dashboard", "db", "depth-camera", "edge-pipeline", "ffi", "law", "ml", "mqtt", "pyo3", "sdf", "sensors", "std", "zip"]]
+consumer-features-why = "外す feature: sensors-hw (rppal は特定の Linux board の GPIO 専用で他の target では build できない)"
+exclude-features = { sensors-hw = "rppal は特定の Linux board の GPIO 専用で、他の target では build できない" }
+
+# Cargo.toml keeps the released version while changes accumulate under [Unreleased]; the
+# version is raised when the release is cut. An equal version is checked as the smallest
+# next release (0.3.0 -> 0.3.1, a minor step under Cargo's 0.x rules), so a change that
+# needs a larger step fails on every push until Cargo.toml carries that bump
+equal-version = "next-smallest-step"

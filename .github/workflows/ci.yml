@@ -376,6 +376,12 @@ jobs:
         run: python scripts/test_entropy_guard.py
       - name: Entropy guard (no OS entropy / wall clock in production code)
         run: python scripts/entropy_guard.py
+      # G1, libm half: a direct libm dependency must come with the libm:: ban
+      # in clippy.toml and scripts/libm_ban_check.py (0 manifests read fails)
+      - name: libm dependency guard (test, then check)
+        run: |
+          python scripts/test_libm_dependency_guard.py
+          python scripts/libm_dependency_guard.py
       # RUSTSEC-2026-0235 is ignored in security-audit.yml / deny.toml because
       # rkyv is reached only through a dependency; no manifest here may declare
       # rkyv and no .rs file may use it (0 manifests or 0 .rs files is red)

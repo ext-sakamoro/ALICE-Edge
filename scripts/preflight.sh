@@ -77,6 +77,10 @@ step "ci.yml / docs-lint: entropy guard (no OS entropy / wall clock in productio
 python3 scripts/test_entropy_guard.py
 python3 scripts/entropy_guard.py
 
+step "ci.yml / docs-lint: libm dependency guard (test, then check)"
+python3 scripts/test_libm_dependency_guard.py
+python3 scripts/libm_dependency_guard.py
+
 step "ci.yml / docs-lint: no direct rkyv (manifests and Rust sources)"
 python3 scripts/test_no_direct_rkyv.py
 python3 scripts/no_direct_rkyv.py

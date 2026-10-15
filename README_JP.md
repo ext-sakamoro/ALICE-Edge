@@ -278,7 +278,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 | G7 handshake-carries-id | 未確認 | unverified: the boundaries within one exchange are listed but not ruled on: src/ffi.rs (22 #[no_mangle] extern "C" functions taking Q16.16 coefficients and … |
 | G8 persisted-semantics-id | 未確認 | unverified: the durable forms are listed but not ruled on: src/object_classifier.rs:287 save_weights and :309 load_weights (float classifier weights in a file, … |
 | G9 persisted-meaning-change-is-major | 未確認 | unverified: depends on G6 and G8; this crate defines no identifier of its own whose history could be audited (src/lib.rs:151 re-exports alice-det-math's, whose … |
-| G10 no-run-varying-artifacts | 適合 | the 24 production .elapsed() reads sit under scoped clippy::disallowed_methods allows with a reason (stage latency and frame pacing in edge_pipeline.rs, … |
+| G10 no-run-varying-artifacts | 適合 | the 23 production .elapsed() reads (a 24th grep hit, src/sensors.rs:1563, is a doc comment) sit under scoped clippy::disallowed_methods allows with a reason … |
 | G11 gate-self-tests | 未達 | unmet: clause (c). scripts/clippy_canary.py, scripts/test_clippy_canary.py, scripts/clippy_canary_calls.tsv, scripts/run_tests.sh and scripts/test_run_tests.py … |
 | G12 public-repo-text-rules | 適合 | the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (ca96d9214ffe0da43e9cb034417a4f6c041ba4be) and refuses … |
 | G13 no-unspecified-order | 未確認 | unverified: no violation is known since d06f4da: src/edge_pipeline.rs:368 (voxel_grid_downsample) and src/telemetry.rs:158 (TelemetryHub, read by … |

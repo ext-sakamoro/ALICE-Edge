@@ -7,4 +7,6 @@ disallowed-methods	f64::sin	let _ = core::hint::black_box(0.5_f64).sin();
 disallowed-methods	f64::sin_cos	let _ = core::hint::black_box(0.5_f64).sin_cos();
 disallowed-methods	std::time::Instant::now	let _ = std::time::Instant::now();
 disallowed-methods	std::time::SystemTime::now	let _ = std::time::SystemTime::now();
+disallowed-methods	std::time::Instant::elapsed	let _ = core::hint::black_box(None::<std::time::Instant>).map(|t| t.elapsed());
+disallowed-methods	std::time::SystemTime::elapsed	let _ = core::hint::black_box(None::<std::time::SystemTime>).map(|t| t.elapsed());
 disallowed-types	std::collections::hash_map::RandomState	let _ = std::collections::hash_map::RandomState::default();

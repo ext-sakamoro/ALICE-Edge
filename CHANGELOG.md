@@ -4,6 +4,10 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- CI: 公開する文面の検査の pin を ALICE-Law 5de698e (checker sha256 4b3d9542…) に進めた 新しい版で HEAD の全 file に指摘 0 件
+
 ## [0.3.0] - 2026-10-15
 
 ### Fixed

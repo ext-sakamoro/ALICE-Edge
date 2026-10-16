@@ -4,6 +4,11 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- CI (ALICE-Law G14): 浮動小数点の結果を変える build の flag を静的と動的の 2 段で検査する (ALICE-DB と同一の `scripts/build_config_guard.py` / `scripts/build_flags_check.py` と test) 静的は target/ 以外の設定・script・Rust を comment を除いて読み、`target-cpu=native`、素の literal でない target-cpu / target-feature / llvm-args の値、command や file から取った RUSTFLAGS、fast-math 系の flag、sse / sse2 を外す target-feature を検出する (意図的な出現は `scripts/build_config_allowlist.toml` に理由付きで書く) 動的は新しい target dir で `cargo check -v` を走らせ、cargo が rustc に実際に渡した flag を読む 静的は docs-lint job (ubuntu / macOS / Windows)、動的は新しい build-flags job (ubuntu / macOS、no_std / std / full feature set) と preflight で実行
+- `tests/float_environment.rs` (ALICE-DB と同一): round-to-nearest-even と subnormal が flush されないことを実行時に確かめる test test job (4 OS) の debug と release で `scripts/run_tests.sh` を通して実行 `alice-law-conformance.toml` の G14 を pass にした
+
 ### Changed
 
 - CI: 公開 API の互換性の検査を `.github/workflows/semver-checks.yml` (`scripts/semver_gate.py`、ALICE-Law / ALICE-DB / ALICE-Analytics と同一) に置き換えた crates.io の最新の alice-edge を baseline にし、ALICE-Law release-train.toml の consumer の feature の組 (`sensors-hw` 以外の全 feature) と既定・既定なしの 3 組で cargo semver-checks を走らせる 版が公開済みの 0.3.0 と同じ間は次の最小の版 0.3.1 として検査する 旧 job (security-audit.yml、`dashboard` と `law` を外した 1 組) は外し、preflight の full に同じ step を置いた

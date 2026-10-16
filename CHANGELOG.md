@@ -8,6 +8,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 - CI: 公開 API の互換性の検査を `.github/workflows/semver-checks.yml` (`scripts/semver_gate.py`、ALICE-Law / ALICE-DB / ALICE-Analytics と同一) に置き換えた crates.io の最新の alice-edge を baseline にし、ALICE-Law release-train.toml の consumer の feature の組 (`sensors-hw` 以外の全 feature) と既定・既定なしの 3 組で cargo semver-checks を走らせる 版が公開済みの 0.3.0 と同じ間は次の最小の版 0.3.1 として検査する 旧 job (security-audit.yml、`dashboard` と `law` を外した 1 組) は外し、preflight の full に同じ step を置いた
 - CI: 公開する文面の検査の pin を ALICE-Law 5de698e (checker sha256 4b3d9542…) に進めた 新しい版で HEAD の全 file に指摘 0 件
+- CI: `scripts/semver_gate.py` が cargo-semver-checks の出力を読む parser であることを `CARGO_OUTPUT_PARSER = True` で宣言し、`scripts/test_semver_gate.py` は module を `import semver_gate` で読むようにした (色の付いた出力を試験する検査器が parser とその試験を見つけられる形 実行時は従来どおり `CARGO_TERM_COLOR=never` と escape の除去) 共有 file の中身を揃える変更で、検査の挙動は変わらない
 
 ## [0.3.0] - 2026-10-15
 

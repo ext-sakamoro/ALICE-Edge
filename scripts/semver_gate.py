@@ -276,6 +276,13 @@ def feature_specs(manifest: dict, entry: dict | None,
     return specs
 
 
+# This module parses cargo-semver-checks output (the `Checking ... change` claim, the
+# `N checks:` count, the `--- failure` lints). Every run forces CARGO_TERM_COLOR=never
+# (run_semver_checks) and the output is read through ANSI.sub (semver_verdict), and
+# test_semver_gate.py checks a coloured sample; the declaration below is what
+# scripts/cargo_output_parser_check.py reads where a repository has that checker
+CARGO_OUTPUT_PARSER = True
+
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 

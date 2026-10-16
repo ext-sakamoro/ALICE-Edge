@@ -12,7 +12,6 @@ Shared file: holds no repository-specific name; keep every copy byte-identical.
 from __future__ import annotations
 
 import contextlib
-import importlib.util
 import io
 import shutil
 import sys
@@ -22,10 +21,11 @@ import urllib.error
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-spec = importlib.util.spec_from_file_location("semver_gate", HERE / "semver_gate.py")
-sg = importlib.util.module_from_spec(spec)
-sys.modules["semver_gate"] = sg
-spec.loader.exec_module(sg)
+# the module next to this file, first on the path (also under python -I, which leaves
+# the script directory out); a plain import is what scripts/cargo_output_parser_check.py
+# looks for where a repository has that checker
+sys.path.insert(0, str(HERE))
+import semver_gate as sg  # noqa: E402
 
 
 def semver_output(step: str, total: int, failed: int, lints=(), from_v="1.0.0", to_v="1.1.0",

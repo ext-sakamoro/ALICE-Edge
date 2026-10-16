@@ -114,7 +114,7 @@ status = "pass"
 evidence = [".github/workflows/public-text.yml", "scripts/public_text.sh", ".github/public-text-pin", "scripts/test_public_text.py", ".public-text.toml"]
 mutant = "in a throwaway clone at this commit, commit a README.md line naming an internal rules file and run PUBLIC_TEXT_BASE=<previous commit> scripts/public_text.sh: it reports 'README.md:331: private name' and exits 1; the unchanged tree reports '0 findings in 105 files at HEAD' and exits 0."
 since = "e11dfa4"
-note = "the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (ca96d9214ffe0da43e9cb034417a4f6c041ba4be) and refuses it unless its SHA-256 is 3aef3cdd095b374153dbb74f228828d559cb88f78b33f36570c96cbcb80eb6d5 (rechecked against the file at that revision); it reads the tree at HEAD and the commits since the base, exits 2 when it compared nothing, and runs on pushes to main and ci/** branches and on pull requests. .public-text.toml allows the words the docs linter and its test must contain, by exact line count per file."
+note = "the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (779fa443f95bc0caca5ca2d5bdb9156051fd6143) and refuses it unless its SHA-256 is e439fdd7495e45486b67d57d227f828426b703c0224b8a00d2e8a1c2f1e66594 (rechecked against the file at that revision); it reads the tree at HEAD and the commits since the base, exits 2 when it compared nothing, and runs on pushes to main and ci/** branches and on pull requests. .public-text.toml allows the words the docs linter and its test must contain, by exact line count per file."
 reference_repo = "ALICE-Law"
 
 [G13]

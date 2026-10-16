@@ -280,7 +280,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 | G9 persisted-meaning-change-is-major | 未確認 | unverified: depends on G6 and G8; this crate defines no identifier of its own whose history could be audited (src/lib.rs:151 re-exports alice-det-math's, whose … |
 | G10 no-run-varying-artifacts | 適合 | the 23 production .elapsed() reads (a 24th grep hit, src/sensors.rs:1565, is a doc comment) sit under scoped clippy::disallowed_methods allows with a reason … |
 | G11 gate-self-tests | 未達 | unmet: clause (c). scripts/clippy_canary.py, scripts/test_clippy_canary.py, scripts/gen_clippy_canary_calls.py, scripts/test_gen_clippy_canary_calls.py, … |
-| G12 public-repo-text-rules | 適合 | the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (ca96d9214ffe0da43e9cb034417a4f6c041ba4be) and refuses … |
+| G12 public-repo-text-rules | 適合 | the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (779fa443f95bc0caca5ca2d5bdb9156051fd6143) and refuses … |
 | G13 no-unspecified-order | 未確認 | unverified: no violation is known since d06f4da: src/edge_pipeline.rs:418 (voxel_grid_downsample) and src/telemetry.rs:158 (TelemetryHub, read by … |
 | G14 float-environment-invariants | 適合 | the static scan covers the files of this repository and the dynamic check covers the builds CI runs on ubuntu and macOS; a flag passed by a build outside this … |
 

@@ -17,6 +17,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 - CI: clippy の禁止一覧の canary (`scripts/clippy_canary.py`) が `clippy.toml` の全 entry を植えて確かめるようにした 植える呼び出しの表 `scripts/clippy_canary_calls.tsv` は `scripts/gen_clippy_canary_calls.py` が `clippy.toml` から 1 entry 1 行で生成し (この repo は 58 件、以前は手書きの 7 件)、CI が再生成して byte で比べる canary は全 entry に行があること (植えるか、理由付きで飛ばすか) を確かめ、外部 crate の path は `Cargo.lock` の版を固定して依存に足す 型も禁止された inherent method (`RandomState::new`) は、その型の診断を 1 件だけ許す
 - `mqtt_bridge` の module doc の例の client id を `"edge-node-1"` にした
 - CI: `scripts/run_tests.sh` が名前ごとの最低の件数 (`float_environment=2`) を受け付けるようにし (ALICE-DB と同じ中身)、G14 の `tests/float_environment.rs` を名指す全 step を `float_environment=2` にした 2 つの試験の片方を `#[ignore]` にする・cfg で外す・名前を変えると、その step が失敗する
+- CI: 公開する文面の検査の pin を ALICE-Law 779fa44 (checker sha256 e439fdd7…) に進めた 新しい版で HEAD の全 file に指摘 0 件
 
 ## [0.3.0] - 2026-10-15
 

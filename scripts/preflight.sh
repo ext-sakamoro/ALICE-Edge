@@ -88,7 +88,11 @@ python3 scripts/no_direct_rkyv.py
 step "ci.yml / docs-lint: run_tests.sh (zero-test guard) tests"
 python3 scripts/test_run_tests.py
 
-step "ci.yml / clippy: clippy canary tests (parser and zero logic, no cargo)"
+step "ci.yml / clippy: clippy canary data (generator tests, generated from clippy.toml, no drift)"
+python3 scripts/test_gen_clippy_canary_calls.py
+python3 scripts/gen_clippy_canary_calls.py --check
+
+step "ci.yml / clippy: clippy canary tests (parsers, accounting, one end-to-end run)"
 python3 scripts/test_clippy_canary.py
 
 step "security-audit.yml / stub-guard"

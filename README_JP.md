@@ -269,17 +269,17 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 
 | gate | 状態 | 注記 |
 |---|---|---|
-| G1 no-libm-direct | 適合 | every banned method of the G1 list is in clippy.toml, every feature is linted with -D warnings (edge-pipeline and pyo3 included), and the canary plants … |
+| G1 no-libm-direct | 適合 | every banned method of the G1 list is in clippy.toml, every feature is linted with -D warnings (edge-pipeline and pyo3 included), and the canary plants every … |
 | G2 ieee-max-min | 未達 | unmet: no ban on f32::max / f32::min / f64::max / f64::min in clippy.toml, no Law helper and no default-deny manifest of raw_* sites. Library sites, measured … |
 | G3 no-outer-fneg-of-fma | 未確認 | unverified: no violation is known; the only mul_add sites are src/sensors.rs:865 (lat_deg.mul_add(-100.0, lat_raw)) and src/sensors.rs:874 … |
 | G4 debug-release-arch-goldens | 未達 | unmet: (1) no signed-zero or exact-cancellation case is checked against fixed bit patterns (tests/ has no -0.0 literal and no cancellation case; … |
-| G5 release-profile-test-leg | 未達 | unmet: the release profile runs only tests/panic_contract.rs (.github/workflows/ci.yml:101 std and :159 full feature set, on the four-OS matrix including the … |
+| G5 release-profile-test-leg | 未達 | unmet: the release profile runs only tests/panic_contract.rs (.github/workflows/ci.yml:108 std and :167 full feature set, on the four-OS matrix including the … |
 | G6 semantics-id | 未達 | unmet: src/lib.rs:151 re-exports alice-det-math's identifier instead of computing one that folds this crate's own pins (the Q16.16 normal equations, … |
 | G7 handshake-carries-id | 未確認 | unverified: the boundaries within one exchange are listed but not ruled on: src/ffi.rs (22 #[no_mangle] extern "C" functions taking Q16.16 coefficients and … |
 | G8 persisted-semantics-id | 未確認 | unverified: the durable forms are listed but not ruled on: src/object_classifier.rs:287 save_weights and :309 load_weights (float classifier weights in a file, … |
 | G9 persisted-meaning-change-is-major | 未確認 | unverified: depends on G6 and G8; this crate defines no identifier of its own whose history could be audited (src/lib.rs:151 re-exports alice-det-math's, whose … |
 | G10 no-run-varying-artifacts | 適合 | the 23 production .elapsed() reads (a 24th grep hit, src/sensors.rs:1565, is a doc comment) sit under scoped clippy::disallowed_methods allows with a reason … |
-| G11 gate-self-tests | 未達 | unmet: clause (c). scripts/clippy_canary.py, scripts/test_clippy_canary.py, scripts/clippy_canary_calls.tsv, scripts/run_tests.sh and scripts/test_run_tests.py … |
+| G11 gate-self-tests | 未達 | unmet: clause (c). scripts/clippy_canary.py, scripts/test_clippy_canary.py, scripts/gen_clippy_canary_calls.py, scripts/test_gen_clippy_canary_calls.py, … |
 | G12 public-repo-text-rules | 適合 | the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (ca96d9214ffe0da43e9cb034417a4f6c041ba4be) and refuses … |
 | G13 no-unspecified-order | 未確認 | unverified: no violation is known since d06f4da: src/edge_pipeline.rs:418 (voxel_grid_downsample) and src/telemetry.rs:158 (TelemetryHub, read by … |
 | G14 float-environment-invariants | 未確認 | unverified: no flag is known; every place a flag can come from was read at this commit: Cargo.toml [profile.release] and [profile.bench] set opt-level, lto and … |

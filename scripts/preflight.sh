@@ -173,8 +173,8 @@ step "ci.yml / clippy: clippy canary (every planted banned call is flagged)"
 python3 scripts/clippy_canary.py
 
 step "ci.yml / test: float environment (debug and release)"
-scripts/run_tests.sh float_environment -- cargo test --test float_environment --no-default-features
-scripts/run_tests.sh float_environment -- cargo test --release --test float_environment --no-default-features
+scripts/run_tests.sh float_environment=2 -- cargo test --test float_environment --no-default-features
+scripts/run_tests.sh float_environment=2 -- cargo test --release --test float_environment --no-default-features
 
 step "ci.yml / build-flags: effective rustc flags (fresh target directory)"
 python3 scripts/build_flags_check.py -- cargo check --release --lib --no-default-features

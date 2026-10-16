@@ -1,21 +1,52 @@
 #!/usr/bin/env bash
-# scripts/run_tests.sh <required-test-binary>[,<more>...] -- <cargo test command...>
+# scripts/run_tests.sh <required-test-binary>[=<min>][,<more>...] -- <cargo test command...>
 #
 # Runs the given cargo test command and fails unless
 #   - the command itself succeeds,
 #   - at least one test passed in total, and
-#   - every named integration test binary ran and passed at least one test.
+#   - every named integration test binary ran and passed at least its minimum
+#     number of tests (1 when no minimum is given).
 # A feature or target mismatch otherwise turns a test step into a silent
 # no-op that still reports success.
 #
 # Several names are given comma separated. Naming a binary is what keeps a
 # suite from disappearing: `cargo test` without `--test` runs every target, so
 # a suite that stops being built reports nothing rather than failing.
+#
+# A minimum (`float_environment=2`) is for a binary whose every test carries
+# the claim: with only "at least one passed", an `#[ignore]`, a `#[cfg]` that
+# drops a test, or a rename would leave the step green with fewer tests than
+# the claim needs. The minimum is a positive integer; `name=0`, `name=`,
+# `name=x` and an empty name are refused before the command runs (exit 2).
 set -euo pipefail
 
-IFS=',' read -r -a required <<< "$1"
+IFS=',' read -r -a specs <<< "$1"
 shift
 [[ "${1:-}" == "--" ]] && shift
+
+# ⚠️ Indexed arrays, not an associative one: `declare -A` needs bash 4, and the
+# macOS runner's /bin/bash is 3.2 — the CI step failed with
+# `declare: -A: invalid option` while a Homebrew bash 5 ran it locally.
+required=()
+required_min=()
+for spec in "${specs[@]}"; do
+  name="${spec%%=*}"
+  if [[ "$spec" == *=* ]]; then
+    min="${spec#*=}"
+    if [[ ! "$min" =~ ^[1-9][0-9]*$ ]]; then
+      echo "run_tests: '${spec}': the minimum after '=' must be a positive integer" >&2
+      exit 2
+    fi
+  else
+    min=1
+  fi
+  if [[ -z "$name" ]]; then
+    echo "run_tests: '${spec}': empty test binary name" >&2
+    exit 2
+  fi
+  required+=("$name")
+  required_min+=("$min")
+done
 
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
@@ -23,9 +54,6 @@ trap 'rm -f "$log"' EXIT
 "$@" 2>&1 | tee "$log"
 
 total=0
-# ⚠️ Indexed arrays, not an associative one: `declare -A` needs bash 4, and the
-# macOS runner's /bin/bash is 3.2 — the CI step failed with
-# `declare: -A: invalid option` while a Homebrew bash 5 ran it locally.
 required_passed=()
 for i in "${!required[@]}"; do required_passed[$i]=0; done
 current=""
@@ -62,6 +90,9 @@ missing=0
 for i in "${!required[@]}"; do
   if [[ "${required_passed[$i]}" -eq 0 ]]; then
     echo "run_tests: ${required[$i]} did not run any test" >&2
+    missing=1
+  elif [[ "${required_passed[$i]}" -lt "${required_min[$i]}" ]]; then
+    echo "run_tests: ${required[$i]} passed ${required_passed[$i]} test(s), needs at least ${required_min[$i]}" >&2
     missing=1
   fi
 done

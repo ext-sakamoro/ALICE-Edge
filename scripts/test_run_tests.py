@@ -2,9 +2,11 @@
 """Tests for scripts/run_tests.sh: a cargo-shaped log is replayed through the
 script with `cat`, and the exit code and messages are checked for a passing
 run, a run in which no test ran, a named file that ran none (or was not built
-at all), a failing command, and Windows output (backslash paths, CRLF, ANSI
-colour). The script itself is shared byte for byte with ALICE-DB and is not
-modified here."""
+at all), a failing command, Windows output (backslash paths, CRLF, ANSI
+colour), and a per-binary minimum (`name=N`: met, missed because a test is
+ignored, a missing binary, and the refused forms `=0`, `=`, a non-number and
+an empty name). The script itself is shared byte for byte with ALICE-DB and
+is not modified here."""
 import os
 import shutil
 import subprocess
@@ -37,8 +39,9 @@ def running(name, sep="/"):
     return f"     Running tests{sep}{name}.rs (target/debug/deps/{name}-0123abcd)"
 
 
-def result(n):
-    return f"test result: ok. {n} passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s"
+def result(n, ignored=0):
+    return (f"test result: ok. {n} passed; 0 failed; {ignored} ignored; 0 measured; 0 filtered out; "
+            "finished in 0.01s")
 
 
 UNIT = ["     Running unittests src/lib.rs (target/debug/deps/alice_analytics-0123abcd)", result(7)]
@@ -105,6 +108,39 @@ class RunTests(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         self.assertIn("12 tests passed in total, 5 in alpha", out)
 
+
+    def test_a_minimum_that_is_met_passes(self):
+        rc, out, err = self.run_log("alpha=2", UNIT + [running("alpha"), result(2)])
+        self.assertEqual(rc, 0, err)
+        self.assertIn("2 in alpha", out)
+
+    def test_a_minimum_missed_because_a_test_is_ignored_fails(self):
+        rc, out, err = self.run_log("alpha=2", UNIT + [running("alpha"), result(1, ignored=1)])
+        self.assertEqual(rc, 1)
+        self.assertIn("1 in alpha", out)
+        self.assertIn("run_tests: alpha passed 1 test(s), needs at least 2", err)
+
+    def test_a_missing_binary_with_a_minimum_fails(self):
+        rc, _, err = self.run_log("alpha=2", UNIT)
+        self.assertEqual(rc, 1)
+        self.assertIn("run_tests: alpha did not run any test", err)
+
+    def test_a_mixed_list_checks_each_minimum(self):
+        lines = UNIT + [running("alpha"), result(1), running("beta"), result(2)]
+        rc, _, err = self.run_log("alpha,beta=3", lines)
+        self.assertEqual(rc, 1)
+        self.assertIn("beta passed 2 test(s), needs at least 3", err)
+        self.assertNotIn("alpha", err)
+        rc, _, err = self.run_log("alpha,beta=2", lines)
+        self.assertEqual(rc, 0, err)
+
+    def test_refused_minimums_exit_2_before_the_command_runs(self):
+        for spec in ("alpha=0", "alpha=", "alpha=x", "alpha=-1", "alpha=01", "=2", "beta,alpha=0"):
+            with self.subTest(spec=spec):
+                rc, out, err = self.run_log(spec, UNIT + [running("alpha"), result(3)])
+                self.assertEqual(rc, 2, err)
+                self.assertNotIn("tests passed in total", out)
+                self.assertIn("run_tests: ", err)
 
 if __name__ == "__main__":
     unittest.main()

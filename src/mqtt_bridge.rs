@@ -9,7 +9,7 @@
 //! ```no_run
 //! use alice_edge::mqtt_bridge::{MqttPublisher, MqttConfig, CoefficientPayload};
 //!
-//! let config = MqttConfig::local("raspberry-pi-5");
+//! let config = MqttConfig::local("edge-node-1");
 //! let mut publisher = MqttPublisher::new(config).unwrap();
 //!
 //! // Publish compressed coefficients

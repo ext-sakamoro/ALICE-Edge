@@ -124,7 +124,18 @@ note = "unverified: no violation is known since d06f4da: src/edge_pipeline.rs:41
 reference_repo = "ALICE-LOL"
 
 [G14]
-status = "unverified"
+status = "pass"
+evidence = [
+    "scripts/build_config_guard.py, static half (byte-identical to ALICE-DB's: every .cargo/config*, *.toml, build.rs, *.rs, *.yml / *.yaml, *.json and script kind outside target/, plus any rustc wrapper named in them, comments and YAML name values blanked, TOML / JSON decoded values too: target-cpu=native, a target-cpu / target-feature / llvm-args value that is not a plain literal, a RUSTFLAGS value from a command or a file, LLVM and C fast-math-style flags, a target-feature list disabling sse / sse2, and in src/ the fast and algebraic float intrinsics; an exclude of a file a build reads is refused; nothing read or no root Cargo.toml is exit 2)",
+    "scripts/build_flags_check.py, dynamic half (byte-identical to ALICE-DB's: runs cargo check -v in a fresh target directory and reads every rustc command line; fails when no command line, or none for alice_edge, was seen)",
+    "scripts/build_config_allowlist.toml (five excludes with reasons: the two G14 scripts, their tests, this manifest; no allow entry)",
+    "scripts/test_build_config_guard.py and scripts/test_build_flags_check.py",
+    ".github/workflows/ci.yml docs-lint job (ubuntu, macOS, Windows): the static guard and both test files",
+    ".github/workflows/ci.yml build-flags job (ubuntu, macOS): the dynamic check for the no_std, std and full feature sets in the release profile",
+    "tests/float_environment.rs round_to_nearest_even and subnormals_are_not_flushed (byte-identical to ALICE-DB's; ci.yml test job on the four OS, debug and release, through scripts/run_tests.sh)",
+]
+mutant = "measured 2026-10-16, each reverted: `RUSTFLAGS: \"-C target-cpu=native\"` added to ci.yml's env makes scripts/build_config_guard.py exit 1 with `.github/workflows/ci.yml:25: target-cpu-native: target-cpu=native`; RUSTFLAGS=$'-C target-cpu=nat\\x69ve' makes scripts/build_flags_check.py exit 1 with `alice_edge: target-cpu-native: target-cpu=native`; setting FPCR.RMode to round-toward-plus-infinity fails round_to_nearest_even and setting FPCR.FZ (flush-to-zero) fails subnormals_are_not_flushed (aarch64, macOS)"
 since = ""
-note = "unverified: no flag is known; every place a flag can come from was read at this commit: Cargo.toml [profile.release] and [profile.bench] set opt-level, lto and codegen-units (and strip for release) only, there is no .cargo/config* and no build.rs, and no RUSTFLAGS with fast-math or target-cpu=native in .github/workflows or scripts. Missing: a CI scan step over those places, and tests that assert round-to-nearest-even and that subnormals are not flushed to zero (tests/ has no such assertion)."
-reference_repo = "ALICE-LOL"
+note = "the static scan covers the files of this repository and the dynamic check covers the builds CI runs on ubuntu and macOS; a flag passed by a build outside this repository (a consumer's own RUSTFLAGS) is outside both. YAML is not parsed by the static guard (the actionlint job parses the workflows). The pyo3 and sensors-hw feature sets are built in their own jobs and are not in the dynamic check's three sets. A Rust target-feature that only adds or removes instructions other than sse / sse2 is allowed: Rust does not contract a * b + c into an fma, and mul_add is correctly rounded either way"
+reference_repo = "ALICE-DB"
+

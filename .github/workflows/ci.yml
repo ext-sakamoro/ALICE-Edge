@@ -107,6 +107,14 @@ jobs:
       - name: Test — panic contract (std, release)
         run: cargo test --release --test panic_contract --features "std"
 
+      # G14: round-to-nearest-even and no flush-to-zero, asserted at run time in
+      # both profiles (scripts/run_tests.sh fails when the binary ran no test)
+      - name: Test — float environment (debug and release)
+        shell: bash
+        run: |
+          scripts/run_tests.sh float_environment -- cargo test --test float_environment --no-default-features
+          scripts/run_tests.sh float_environment -- cargo test --release --test float_environment --no-default-features
+
       # alice_zip::law without std: lib + doc tests, the closed-form oracles
       # in tests/edge_law.rs, and the example run end to end
       - name: Test — law (lib)
@@ -395,6 +403,39 @@ jobs:
         run: python scripts/test_no_direct_rkyv.py
       - name: No direct rkyv (manifests and Rust sources)
         run: python scripts/no_direct_rkyv.py
+      # G14, static half: no fast-math-style flag, target-cpu=native or flag value
+      # the guard cannot resolve in any file a flag can come from (deliberate
+      # occurrences in scripts/build_config_allowlist.toml); nothing read fails
+      - name: Build configuration guard (test, then check)
+        run: |
+          python scripts/test_build_config_guard.py
+          python scripts/build_config_guard.py
+      # the dynamic half's parser on each OS (the check itself is the build-flags job)
+      - name: Effective rustc flags check (tests)
+        run: python scripts/test_build_flags_check.py
+
+  build-flags:
+    # G14, dynamic half: the flags cargo really passes to rustc, read from `-v` in a
+    # fresh target directory (a reused one prints Fresh without the command line),
+    # for the no_std, std and full feature sets in the release profile; fails on a
+    # native / fast-math / x87 flag, and when no command line for this crate was seen
+    name: Effective rustc flags (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Effective rustc flags (no_std, std, full feature set)
+        shell: bash
+        run: |
+          python3 scripts/build_flags_check.py -- cargo check --release --lib --no-default-features
+          python3 scripts/build_flags_check.py -- cargo check --release --lib --features std
+          python3 scripts/build_flags_check.py -- cargo check --release --lib --features "$FULL_FEATURES"
 
   python:
     # the `pyo3` feature (Python bindings) is built only here: maturin builds the

@@ -84,6 +84,9 @@ python3 scripts/libm_dependency_guard.py
 step "ci.yml / docs-lint: no direct rkyv (manifests and Rust sources)"
 python3 scripts/test_no_direct_rkyv.py
 python3 scripts/no_direct_rkyv.py
+python3 scripts/test_build_config_guard.py
+python3 scripts/build_config_guard.py
+python3 scripts/test_build_flags_check.py
 
 step "ci.yml / docs-lint: run_tests.sh (zero-test guard) tests"
 python3 scripts/test_run_tests.py
@@ -168,6 +171,15 @@ fi
 
 step "ci.yml / clippy: clippy canary (every planted banned call is flagged)"
 python3 scripts/clippy_canary.py
+
+step "ci.yml / test: float environment (debug and release)"
+scripts/run_tests.sh float_environment -- cargo test --test float_environment --no-default-features
+scripts/run_tests.sh float_environment -- cargo test --release --test float_environment --no-default-features
+
+step "ci.yml / build-flags: effective rustc flags (fresh target directory)"
+python3 scripts/build_flags_check.py -- cargo check --release --lib --no-default-features
+python3 scripts/build_flags_check.py -- cargo check --release --lib --features std
+python3 scripts/build_flags_check.py -- cargo check --release --lib --features "$FULL"
 
 step "ci.yml / test: no_std core, std, doc tests"
 cargo check --lib --no-default-features

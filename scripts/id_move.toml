@@ -1,0 +1,16 @@
+# scripts/id_move_check.py (ALICE-Law G9): the identifiers whose value may move only with a
+# breaking version, the previous-identifier list that must keep the released value, and the
+# release tags the base is read from (its values come from the published crate)
+package = "alice-edge"
+manifest = "Cargo.toml"
+tags = ["v{version}"]
+# every feature but sensors-hw (Linux GPIO / libudev, not built on the other runners; it adds no
+# [u8; 32] item: clippy's std + sensors-hw step builds it on Linux)
+doc-features = ["std", "pyo3", "zip", "law", "codec", "db", "ml", "sdf", "depth-camera", "asp", "edge-pipeline", "sensors", "mqtt", "dashboard", "ffi", "serde-raw"]
+
+[exempt]
+SEMANTICS_ID = "alice-det-math's identifier, re-exported for reference: it is folded into EDGE_SEMANTICS_ID (src/semantics.rs), the identifier the weights and payloads carry, so a move of it moves EDGE_SEMANTICS_ID and is checked there"
+
+[[id]]
+path = "alice_edge::semantics::EDGE_SEMANTICS_ID"
+previous = "alice_edge::semantics::PREVIOUS_EDGE_SEMANTICS_IDS"

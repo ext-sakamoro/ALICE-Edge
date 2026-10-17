@@ -77,6 +77,10 @@ step "ci.yml / docs-lint: entropy guard (no OS entropy / wall clock in productio
 python3 scripts/test_entropy_guard.py
 python3 scripts/entropy_guard.py
 
+step "ci.yml / clippy: Identifier moves (tests, then against the published release)"
+python3 scripts/test_id_move_check.py
+python3 scripts/id_move_check.py
+
 step "ci.yml / clippy: API boundary and boundary guard (G7 / G8)"
 python3 scripts/test_api_boundary.py
 python3 scripts/api_boundary.py

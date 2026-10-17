@@ -112,6 +112,10 @@ python3 scripts/gen_clippy_canary_calls.py --check
 step "ci.yml / clippy: clippy canary tests (parsers, accounting, one end-to-end run)"
 python3 scripts/test_clippy_canary.py
 
+step "law-readme-block.yml: README ALICE-Law block (tests, then the check the job runs, at the block's ALICE-Law pin)"
+python3 scripts/test_law_readme_block_check.py
+python3 scripts/law_readme_block_check.py
+
 step "security-audit.yml / stub-guard"
 scripts/stub_guard.sh
 

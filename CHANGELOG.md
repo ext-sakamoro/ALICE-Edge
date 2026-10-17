@@ -6,6 +6,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ### Added
 
+- CI: README の ALICE-Law 節の検査 (law-readme-block.yml) を preflight でも同じに走らせる `scripts/law_readme_block_check.py` と試験 `scripts/test_law_readme_block_check.py` を足した (ALICE-DB と同じ中身の共有 file、workflow の check の引数と節の pin の生成器を使い、比較 0 件・件数の行なし・pin が無い・fetch の失敗は失敗、未 commit の入力は検査していないと表示) 試験は CI と preflight で走る
 - CI (ALICE-Law G9): `scripts/id_move_check.py` (ALICE の識別子を持つ crate で共有、ALICE-Zip と同じ file) を追加 最新の release tag の公開版と作業 tree で `EDGE_SEMANTICS_ID` の値を読み、動いたのに破壊的な版になっていない / 公開版の値が `PREVIOUS_EDGE_SEMANTICS_IDS` に無い / CHANGELOG が両方の値を書いていない時に fail する (ci.yml の clippy job と preflight)
 - CI (ALICE-Law G13): `scripts/order_guard.py` は許した行を本文の SHA-256 で固定する (`scripts/order_allowlist.toml` の `lines`) 件数が同じでも行を書き換えると一覧を直すまで fail する rayon の並列 method は `par_` で始まるもの全部と rayon の trait 名を、dot 付きでも trait 経由 (UFCS) でも拾う (ALICE-Zip と同じ file)
 - CI (ALICE-Law G13): `std::thread::spawn` / `scope` / `Builder::spawn` / `spawn_scoped` を `clippy.toml` の disallowed-methods に追加 (共有の canary の生成器が turbofish で植えられるようになったため) module の別名・再 export・glob import でも path で解決される `std::thread::Scope` の型の禁止は外した (唯一の入口の scope 関数を禁止したため) `alice-law-conformance.toml` の G13 を pass にした

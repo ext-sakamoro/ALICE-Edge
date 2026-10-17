@@ -285,6 +285,9 @@ jobs:
         run: python3 scripts/gen_clippy_canary_calls.py --check
       - name: Clippy canary (tests)
         run: python3 scripts/test_clippy_canary.py
+      # the preflight mirror of law-readme-block.yml (the check itself runs there, here its tests)
+      - name: README ALICE-Law block preflight check (tests)
+        run: python3 scripts/test_law_readme_block_check.py
       - name: Clippy canary (every planted banned call is flagged)
         run: python3 scripts/clippy_canary.py
       # G7 / G8: the boundary of the public API, enumerated from rustdoc JSON

@@ -72,7 +72,11 @@ class OrderGuardTest(unittest.TestCase):
     def test_every_rayon_parallel_method_is_found(self):
         for call in ("v.par_windows(2).map(|w| w[0] * w[1]).sum::<f64>()", "v.par_chunks_exact(4).count()",
                      "v.par_sort_unstable()", "v.par_drain(..).count()", "v.par_split(|x| *x == 0.0).count()",
-                     "s.into_par_iter().count()", "it.par_bridge().count()"):
+                     "s.into_par_iter().count()", "it.par_bridge().count()",
+                     # through the trait, no dot and no rayon token
+                     "ParallelIterator::sum::<f64>(ParallelSlice::par_windows(v, 2).map(|w| w[0] * w[1]))",
+                     "ParallelIterator::sum::<f64>(IntoParallelRefIterator::par_iter(v).copied())",
+                     "IndexedParallelIterator::len(&it)", "<Vec<f64> as FromParallelIterator<f64>>::from_par_iter(it)"):
             problems = order_guard.check(self.tree({"src/lib.rs": f"pub fn f() {{ let _ = {call}; }}\n"}))[0]
             self.assertTrue(any("src/lib.rs::parallel" in p for p in problems), (call, problems))
 

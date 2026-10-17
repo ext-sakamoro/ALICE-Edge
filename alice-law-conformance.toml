@@ -29,7 +29,7 @@ note = "every banned method of the G1 list is in clippy.toml, every feature is l
 reference_repo = "ALICE-SDF"
 
 [G2]
-status = "pass"
+status = "fail-known"
 evidence = [
     "every f32 max / min in library code calls alice_det_math::max / min, which define the sign of an equal pair of zeros (+0 from max, -0 from min) and return the other operand for a NaN (maximumNumber / minimumNumber): src/object_classifier.rs (SdfFeatures::from_* bounding box, aspect, density and elongation features, the two ReLU layers and the softmax max logit), src/ml_bridge.rs (ReLU), src/sdf_compress.rs and src/edge_pipeline.rs (point cloud bounds); 37 sites measured with the four methods banned and every feature but sensors-hw (which has no max / min) before the change",
     "clippy.toml disallowed-methods f32::max, f32::min, f64::max, f64::min on every target, enforced by the ci.yml clippy steps (no_std, no_std + law, std, FULL_FEATURES, FULL_FEATURES + edge-pipeline, pyo3, sensors-hw) with -D warnings; tests/analytic_oracle.rs uses alice_det_math::max64 for its two tolerances",
@@ -43,7 +43,7 @@ tie_tests = [
     "bounding box features (SdfFeatures::from_primitive / from_svo_stats): tests/minmax_ties.rs::bounding_box_features_of_ties",
 ]
 since = ""
-note = "the replacement moved no golden: tests/determinism_golden.rs (object_features, the ml and law scenarios included) passes unchanged in debug and release with every feature but sensors-hw and pyo3, so EDGE_SEMANTICS_ID is unchanged; std and the helper differ only on an equal pair of zeros of different sign (a ReLU of -0.0 now gives +0.0 on every target) and a NaN pair's payload. The ReLU layers (max(v, 0.0)) and the edge pipeline extent floor (max(extent, 0.001)) have a positive constant second operand, where `if v > c { v } else { c }` equals maximumNumber for every v (an equivalent mutant); the edge pipeline coordinate fold feeds only that floored extent and the softmax max logit feeds exp(v - max), which is NaN for a NaN logit either way, so no public output distinguishes a comparison at those sites and they have no tie test. The ban covers every target, so no raw_* site exists and no exception manifest is needed. SIMD widths: src/simd_fit.rs SSE2 / NEON kernels are integer (Q16.16), no float lane max / min, so the per-width (+0, -0) clause has no float width here; the scalar helper's (+0, -0) tests live in alice-det-math."
+note = "unmet (located 2026-10-18): src/edge_pipeline.rs:450-455 (compute_bounds_size, the per-axis min / max fold whose size feeds SdfFeatures in EdgePipeline::process_frame) is not reached by any tie test: rewriting the alice_det_math::min at :450 as a comparison (`if a < b { a } else { b }`) passes clippy and tests/minmax_ties.rs, while the same rewrite at src/sdf_compress.rs:287 fails 2 tests; and tests/minmax_ties.rs is not run by ci.yml (it runs only inside the packaged-crate `--tests` step of security-audit.yml, which fires on src/** changes), so the tie tests that exist do not gate a change."
 reference_repo = "ALICE-Physics"
 
 [G3]

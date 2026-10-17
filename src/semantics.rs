@@ -181,3 +181,71 @@ pub const EDGE_SEMANTICS_ID: [u8; 32] =
 /// Earlier values of [`EDGE_SEMANTICS_ID`] whose pinned bits this release
 /// still reproduces (none yet: this is the first identifier).
 pub const PREVIOUS_EDGE_SEMANTICS_IDS: &[[u8; 32]] = &[];
+
+/// How a stored or received identifier relates to this build's
+/// [`EDGE_SEMANTICS_ID`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdStatus {
+    /// The identifier is this build's [`EDGE_SEMANTICS_ID`].
+    Current,
+    /// The identifier is listed in [`PREVIOUS_EDGE_SEMANTICS_IDS`]: an earlier
+    /// identifier whose pinned bits this build still reproduces.
+    VerifiedPrevious([u8; 32]),
+}
+
+/// A stored or received identifier that is neither [`EDGE_SEMANTICS_ID`] nor
+/// listed in [`PREVIOUS_EDGE_SEMANTICS_IDS`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SemanticsMismatch {
+    /// The identifier the bytes or the peer carried.
+    pub stored: [u8; 32],
+    /// This build's [`EDGE_SEMANTICS_ID`].
+    pub expected: [u8; 32],
+}
+
+impl core::fmt::Display for SemanticsMismatch {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "semantics identifier mismatch: stored ")?;
+        for b in self.stored {
+            write!(f, "{b:02x}")?;
+        }
+        write!(f, ", expected ")?;
+        for b in self.expected {
+            write!(f, "{b:02x}")?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for SemanticsMismatch {}
+
+/// Compares an identifier carried by stored bytes or a peer with this build's.
+///
+/// # Errors
+///
+/// [`SemanticsMismatch`] naming both identifiers when `stored` is neither
+/// [`EDGE_SEMANTICS_ID`] nor in [`PREVIOUS_EDGE_SEMANTICS_IDS`].
+pub fn check_semantics(stored: &[u8; 32]) -> Result<IdStatus, SemanticsMismatch> {
+    check_semantics_against(stored, &EDGE_SEMANTICS_ID, PREVIOUS_EDGE_SEMANTICS_IDS)
+}
+
+/// [`check_semantics`] against an explicit current identifier and list of
+/// earlier ones (the list is empty in this release, so the previous-identifier
+/// path is tested through this function).
+pub(crate) fn check_semantics_against(
+    stored: &[u8; 32],
+    current: &[u8; 32],
+    previous: &[[u8; 32]],
+) -> Result<IdStatus, SemanticsMismatch> {
+    if stored == current {
+        Ok(IdStatus::Current)
+    } else if previous.contains(stored) {
+        Ok(IdStatus::VerifiedPrevious(*stored))
+    } else {
+        Err(SemanticsMismatch {
+            stored: *stored,
+            expected: *current,
+        })
+    }
+}

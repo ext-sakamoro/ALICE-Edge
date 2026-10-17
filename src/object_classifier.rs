@@ -8,7 +8,70 @@
 //!
 //! Author: Moroya Sakamoto
 
+pub use crate::semantics::IdStatus;
+#[cfg(feature = "std")]
+use crate::semantics::SemanticsMismatch;
 use alice_ml::{ternary_matvec_kernel, TernaryWeightKernel};
+
+/// The first four bytes of a weights file in the stamped format.
+pub const WEIGHTS_MAGIC: [u8; 4] = *b"AEOW";
+
+/// The weights format version this release writes and reads.
+pub const WEIGHTS_FORMAT_VERSION: u16 = 1;
+
+/// Why a weights file could not be loaded or saved.
+#[cfg(feature = "std")]
+#[derive(Debug)]
+pub enum WeightsError {
+    /// The file could not be read or written.
+    Io(std::io::Error),
+    /// The file is in the earlier format without a header, so it carries no
+    /// identifier; see [`TernaryClassifier::load_weights_unverified_legacy`].
+    LegacyNoId,
+    /// [`TernaryClassifier::load_weights_unverified_legacy`] was given a file
+    /// in the stamped format.
+    HasHeader,
+    /// A format version this release does not read.
+    UnsupportedVersion(u16),
+    /// The stored identifier is neither this build's nor a verified earlier one.
+    Semantics(SemanticsMismatch),
+    /// The file ends inside the named part, or the class count is out of range.
+    Invalid(&'static str),
+}
+
+#[cfg(feature = "std")]
+impl core::fmt::Display for WeightsError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Io(e) => write!(f, "weights file: {e}"),
+            Self::LegacyNoId => write!(f, "weights file has no header and no semantics identifier"),
+            Self::HasHeader => write!(f, "weights file has a header; load it with load_weights"),
+            Self::UnsupportedVersion(v) => write!(f, "unsupported weights format version {v}"),
+            Self::Semantics(m) => write!(f, "weights file: {m}"),
+            Self::Invalid(part) => write!(f, "weights file truncated or invalid: {part}"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for WeightsError {}
+
+/// A value loaded from bytes that carry no semantics identifier.
+///
+/// Nothing ties it to the arithmetic it was produced under; take it out with
+/// [`Unverified::into_unverified`] only after checking its provenance.
+#[must_use = "an unverified value has to be taken out explicitly"]
+#[derive(Debug)]
+pub struct Unverified<T> {
+    value: T,
+}
+
+impl<T> Unverified<T> {
+    /// The value, accepted without an identifier check.
+    pub fn into_unverified(self) -> T {
+        self.value
+    }
+}
 
 /// Default number of classification categories
 pub const DEFAULT_NUM_CLASSES: usize = 8;
@@ -288,49 +351,111 @@ impl TernaryClassifier {
         }
     }
 
-    /// 重みをファイルに保存
+    /// Saves the weights in the stamped format (ALICE-Law G8).
     ///
-    /// Format: `[num_classes:u32][w1_len:u32][w1:bytes][w2_len:u32][w2:bytes][w3_len:u32][w3:bytes]`
+    /// Format version 1, integers little-endian: magic `AEOW`, `u16` version,
+    /// this build's 32-byte [`EDGE_SEMANTICS_ID`](crate::EDGE_SEMANTICS_ID),
+    /// then the body `[num_classes:u32][w1_len:u32][w1][w2_len:u32][w2][w3_len:u32][w3]`
+    /// (each weight one `i8` byte).
     ///
     /// # Errors
     ///
-    /// Returns `Err(String)` if the file cannot be created or any weight data cannot be written.
+    /// [`WeightsError::Io`] if the file cannot be created or written.
     #[cfg(feature = "std")]
-    pub fn save_weights(&self, path: &str) -> Result<(), String> {
-        use std::io::Write;
-        let mut f = std::fs::File::create(path).map_err(|e| format!("create: {e}"))?;
-        f.write_all(&(self.num_classes as u32).to_le_bytes())
-            .map_err(|e| format!("write: {e}"))?;
-        for w in [&self.raw_w1, &self.raw_w2, &self.raw_w3] {
-            f.write_all(&(w.len() as u32).to_le_bytes())
-                .map_err(|e| format!("write: {e}"))?;
-            // SAFETY: i8 と u8 は同サイズ・同アライメント。Vec<i8> のポインタと長さは有効。
-            let bytes: &[u8] =
-                unsafe { core::slice::from_raw_parts(w.as_ptr().cast::<u8>(), w.len()) };
-            f.write_all(bytes).map_err(|e| format!("write: {e}"))?;
-        }
-        Ok(())
+    pub fn save_weights(&self, path: &str) -> Result<(), WeightsError> {
+        std::fs::write(path, self.weights_bytes_with_id(&crate::EDGE_SEMANTICS_ID))
+            .map_err(WeightsError::Io)
     }
 
-    /// ファイルから重みを読み込んで分類器を構築
+    #[cfg(feature = "std")]
+    fn weights_bytes_with_id(&self, id: &[u8; 32]) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&WEIGHTS_MAGIC);
+        out.extend_from_slice(&WEIGHTS_FORMAT_VERSION.to_le_bytes());
+        out.extend_from_slice(id);
+        out.extend_from_slice(&(self.num_classes as u32).to_le_bytes());
+        for w in [&self.raw_w1, &self.raw_w2, &self.raw_w3] {
+            out.extend_from_slice(&(w.len() as u32).to_le_bytes());
+            out.extend(w.iter().map(|&x| x as u8));
+        }
+        out
+    }
+
+    /// Loads weights written by [`TernaryClassifier::save_weights`], checking the
+    /// stored identifier: this build's gives [`IdStatus::Current`], one in
+    /// [`PREVIOUS_EDGE_SEMANTICS_IDS`](crate::PREVIOUS_EDGE_SEMANTICS_IDS) gives
+    /// [`IdStatus::VerifiedPrevious`].
     ///
     /// # Errors
     ///
-    /// Returns `Err(String)` if the file cannot be read, is too short, or contains truncated weight data.
+    /// [`WeightsError::Semantics`] (both identifiers) for any other identifier,
+    /// [`WeightsError::LegacyNoId`] for a file in the earlier format without a
+    /// header, and the I/O, version and truncation errors.
     #[cfg(feature = "std")]
-    pub fn load_weights(path: &str) -> Result<Self, String> {
-        let data = std::fs::read(path).map_err(|e| format!("read: {e}"))?;
+    pub fn load_weights(path: &str) -> Result<(Self, IdStatus), WeightsError> {
+        let data = std::fs::read(path).map_err(WeightsError::Io)?;
+        Self::from_weights_bytes(&data, crate::semantics::check_semantics)
+    }
+
+    #[cfg(feature = "std")]
+    fn from_weights_bytes(
+        data: &[u8],
+        check: impl FnOnce(&[u8; 32]) -> Result<IdStatus, SemanticsMismatch>,
+    ) -> Result<(Self, IdStatus), WeightsError> {
+        if data.len() < 4 || data[..4] != WEIGHTS_MAGIC {
+            return Err(WeightsError::LegacyNoId);
+        }
+        if data.len() < 6 + 32 {
+            return Err(WeightsError::Invalid("header"));
+        }
+        let version = u16::from_le_bytes([data[4], data[5]]);
+        if version != WEIGHTS_FORMAT_VERSION {
+            return Err(WeightsError::UnsupportedVersion(version));
+        }
+        let mut id = [0u8; 32];
+        id.copy_from_slice(&data[6..38]);
+        let status = check(&id).map_err(WeightsError::Semantics)?;
+        Ok((Self::parse_body(&data[38..])?, status))
+    }
+
+    /// Loads a weights file in the earlier, headerless format (no identifier).
+    ///
+    /// The file says nothing about the arithmetic its weights were trained and
+    /// stored under, so the result is wrapped in [`Unverified`]: the caller has
+    /// to take the value out explicitly, having checked its provenance some
+    /// other way, and should re-save it with [`TernaryClassifier::save_weights`].
+    ///
+    /// # Errors
+    ///
+    /// [`WeightsError::HasHeader`] for a file in the stamped format (use
+    /// [`TernaryClassifier::load_weights`]), and the I/O and truncation errors.
+    #[cfg(feature = "std")]
+    pub fn load_weights_unverified_legacy(path: &str) -> Result<Unverified<Self>, WeightsError> {
+        let data = std::fs::read(path).map_err(WeightsError::Io)?;
+        if data.len() >= 4 && data[..4] == WEIGHTS_MAGIC {
+            return Err(WeightsError::HasHeader);
+        }
+        Ok(Unverified {
+            value: Self::parse_body(&data)?,
+        })
+    }
+
+    #[cfg(feature = "std")]
+    fn parse_body(data: &[u8]) -> Result<Self, WeightsError> {
         if data.len() < 4 {
-            return Err("file too short".into());
+            return Err(WeightsError::Invalid("class count"));
         }
         let mut offset = 0;
         let num_classes = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
         offset += 4;
+        if num_classes == 0 || num_classes > Self::MAX_CLASSES {
+            return Err(WeightsError::Invalid("class count out of range"));
+        }
 
         let mut weights = Vec::new();
         for _ in 0..3 {
             if offset + 4 > data.len() {
-                return Err("truncated weight header".into());
+                return Err(WeightsError::Invalid("weight header"));
             }
             let len = u32::from_le_bytes([
                 data[offset],
@@ -340,7 +465,7 @@ impl TernaryClassifier {
             ]) as usize;
             offset += 4;
             if offset + len > data.len() {
-                return Err("truncated weight data".into());
+                return Err(WeightsError::Invalid("weight data"));
             }
             let w: Vec<i8> = data[offset..offset + len]
                 .iter()
@@ -498,6 +623,93 @@ mod tests {
         let _ = TernaryClassifier::new(17);
     }
 
+    /// Weights stamped with another identifier are refused naming both; an
+    /// identifier in the previous list is accepted with that status (ALICE-Law G8).
+    #[cfg(feature = "std")]
+    #[test]
+    fn weights_with_another_identifier_are_refused_naming_both() {
+        let c = TernaryClassifier::new(DEFAULT_NUM_CLASSES);
+        let mut foreign = crate::EDGE_SEMANTICS_ID;
+        foreign[3] ^= 0x40;
+        let bytes = c.weights_bytes_with_id(&foreign);
+        match TernaryClassifier::from_weights_bytes(&bytes, crate::semantics::check_semantics) {
+            Err(WeightsError::Semantics(m)) => {
+                assert_eq!(m.stored, foreign);
+                assert_eq!(m.expected, crate::EDGE_SEMANTICS_ID);
+                let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+                let text = WeightsError::Semantics(m).to_string();
+                assert!(
+                    text.contains(&hex(&foreign)) && text.contains(&hex(&crate::EDGE_SEMANTICS_ID))
+                );
+            }
+            Err(other) => panic!("expected a semantics mismatch, got {other:?}"),
+            Ok(_) => panic!("a foreign identifier was accepted"),
+        }
+        let (_, status) = TernaryClassifier::from_weights_bytes(&bytes, |id| {
+            crate::semantics::check_semantics_against(id, &crate::EDGE_SEMANTICS_ID, &[foreign])
+        })
+        .unwrap();
+        assert_eq!(status, IdStatus::VerifiedPrevious(foreign));
+    }
+
+    /// A headerless file (the earlier format) is refused by `load_weights` and
+    /// read only through the explicitly unverified loader, which in turn refuses
+    /// a stamped file.
+    #[cfg(feature = "std")]
+    #[test]
+    fn legacy_weights_need_the_unverified_loader() {
+        let c = TernaryClassifier::new(DEFAULT_NUM_CLASSES);
+        let dir = tempfile::tempdir().unwrap();
+        let legacy = dir.path().join("legacy.bin");
+        let stamped = dir.path().join("stamped.bin");
+        std::fs::write(
+            &legacy,
+            &c.weights_bytes_with_id(&crate::EDGE_SEMANTICS_ID)[38..],
+        )
+        .unwrap();
+        c.save_weights(stamped.to_str().unwrap()).unwrap();
+        assert!(matches!(
+            TernaryClassifier::load_weights(legacy.to_str().unwrap()),
+            Err(WeightsError::LegacyNoId)
+        ));
+        let old = TernaryClassifier::load_weights_unverified_legacy(legacy.to_str().unwrap())
+            .unwrap()
+            .into_unverified();
+        assert_eq!(old.num_classes, DEFAULT_NUM_CLASSES);
+        assert!(matches!(
+            TernaryClassifier::load_weights_unverified_legacy(stamped.to_str().unwrap()),
+            Err(WeightsError::HasHeader)
+        ));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn weights_header_and_body_errors() {
+        let c = TernaryClassifier::new(DEFAULT_NUM_CLASSES);
+        let bytes = c.weights_bytes_with_id(&crate::EDGE_SEMANTICS_ID);
+        let check = crate::semantics::check_semantics;
+        let mut v2 = bytes.clone();
+        v2[4] = 2;
+        assert!(matches!(
+            TernaryClassifier::from_weights_bytes(&v2, check),
+            Err(WeightsError::UnsupportedVersion(2))
+        ));
+        assert!(matches!(
+            TernaryClassifier::from_weights_bytes(&bytes[..20], check),
+            Err(WeightsError::Invalid("header"))
+        ));
+        assert!(matches!(
+            TernaryClassifier::from_weights_bytes(&bytes[..bytes.len() - 1], check),
+            Err(WeightsError::Invalid("weight data"))
+        ));
+        let mut zero = bytes.clone();
+        zero[38..42].copy_from_slice(&0u32.to_le_bytes());
+        assert!(matches!(
+            TernaryClassifier::from_weights_bytes(&zero, check),
+            Err(WeightsError::Invalid("class count out of range"))
+        ));
+    }
+
     #[test]
     fn test_save_load_weights_roundtrip() {
         let classifier = TernaryClassifier::new(DEFAULT_NUM_CLASSES);
@@ -506,7 +718,8 @@ mod tests {
         let path_str = path.to_str().unwrap();
 
         classifier.save_weights(path_str).expect("save failed");
-        let loaded = TernaryClassifier::load_weights(path_str).expect("load failed");
+        let (loaded, status) = TernaryClassifier::load_weights(path_str).expect("load failed");
+        assert_eq!(status, IdStatus::Current);
 
         assert_eq!(loaded.num_classes, DEFAULT_NUM_CLASSES);
         assert_eq!(loaded.memory_bytes(), classifier.memory_bytes());

@@ -118,10 +118,111 @@ class SiblingsCheck(unittest.TestCase):
         (self.root.parent / "ALICE-Zip" / "a.txt").write_text("dirty\n")
         self.assertProblem("uncommitted")
 
+    def workspace(self, members: str, exclude: str = "") -> None:
+        """the root becomes a virtual workspace; ALICE-Zip is named by crates/a, ALICE-DB by tools/deep/b"""
+        ex = f"exclude = [{exclude}]\n" if exclude else ""
+        (self.root / "Cargo.toml").write_text(f"[workspace]\nmembers = [{members}]\n{ex}")
+        for rel, dep in (("crates/a", 'alice-zip = { path = "../../../ALICE-Zip" }'),
+                         ("tools/deep/b", 'alice-db = { path = "../../../../ALICE-DB" }'),
+                         ("crates/skip", 'alice-zip = { path = "../ALICE-Zip" }')):
+            d = self.root / rel
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "Cargo.toml").write_text(f'[package]\nname = "x"\n\n[dependencies]\n{dep}\n')
+
+    def test_workspace_members_glob_nested_and_exclude(self) -> None:
+        self.workspace('"crates/*", "tools/deep/b"', '"crates/skip"')
+        self.assertEqual(self.problems(), [])
+        # without the exclude, the excluded member's wrong path is read and fails
+        self.workspace('"crates/*", "tools/deep/b"')
+        self.assertProblem("crates/skip/Cargo.toml names")
+
+    def test_workspace_member_not_read_leaves_a_listed_repo_unnamed(self) -> None:
+        self.workspace('"crates/a"')
+        self.assertProblem("lists ALICE-DB, which no manifest names")
+
+    def test_workspace_member_fuzz_manifest_is_read(self) -> None:
+        self.workspace('"crates/*", "tools/deep/b"', '"crates/skip"')
+        (self.root / "crates" / "a" / "fuzz").mkdir()
+        (self.root / "crates" / "a" / "fuzz" / "Cargo.toml").write_text('[dependencies]\nalice-zip = { path = "../ALICE-Zip" }\n')
+        self.assertProblem("crates/a/fuzz/Cargo.toml names")
+
+    def test_workspace_member_matching_nothing_fails(self) -> None:
+        self.workspace('"crates/*", "tools/deep/b", "nowhere/*"', '"crates/skip"')
+        self.assertProblem("workspace member 'nowhere/*' matches no package")
+
+    def test_workspace_member_matching_only_dirs_without_a_manifest_fails(self) -> None:
+        # the pattern matches an existing directory (docs, or a member whose Cargo.toml was
+        # removed) but no package: that is not a member that was read
+        self.workspace('"crates/*", "tools/deep/b", "docs/*"', '"crates/skip"')
+        (self.root / "docs" / "guide").mkdir(parents=True)
+        (self.root / "docs" / "guide" / "README.md").write_text("no manifest here\n")
+        self.assertProblem("workspace member 'docs/*' matches no package")
+
+    def test_no_manifest_read_fails(self) -> None:
+        (self.root / "Cargo.toml").unlink()
+        self.assertProblem("no Cargo.toml was read")
+
     def test_missing_list_fails(self) -> None:
         (self.root / ".github" / "alice-siblings").unlink()
         self.assertEqual(self.problems(), [".github/alice-siblings is missing"])
 
+
+
+ACTION = Path(__file__).resolve().parent.parent / ".github" / "actions" / "alice-siblings" / "action.yml"
+
+
+def action_script() -> str:
+    """the bash of .github/actions/alice-siblings/action.yml (the `run: |` block)"""
+    lines = ACTION.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, l in enumerate(lines) if l.strip() == "run: |") + 1
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    body = []
+    for l in lines[start:]:
+        if l.strip() and len(l) - len(l.lstrip()) < indent:
+            break
+        body.append(l[indent:])
+    return "\n".join(body) + "\n"
+
+
+@unittest.skipIf(os.name == "nt" or not shutil.which("bash"), "bash with POSIX paths (the Windows CI jobs run the action itself)")
+class SiblingsAction(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        self.remotes = base / "remotes"
+        self.remotes.mkdir()
+        self.first, self.second = repo_with_two_commits(self.remotes / "ALICE-Zip")
+        self.work = base / "work"
+        self.ws = self.work / "ws"
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def run_action(self, repo_dir: str, listing: str) -> subprocess.CompletedProcess:
+        list_dir = (self.ws / repo_dir) / ".github"
+        list_dir.mkdir(parents=True, exist_ok=True)
+        (list_dir / "alice-siblings").write_text(listing)
+        env = {**ENV, "GITHUB_WORKSPACE": str(self.ws), "REPO_DIR": repo_dir,
+               "ALICE_SIBLINGS_GIT_BASE": str(self.remotes)}
+        return subprocess.run(["bash", "-c", action_script()], env=env, capture_output=True, text=True)
+
+    def test_default_repo_dir_clones_next_to_the_workspace(self) -> None:
+        r = self.run_action(".", f"ALICE-Zip {self.first}\n")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        dest = self.work / "ALICE-Zip"
+        self.assertEqual(run(dest, "git", "rev-parse", "HEAD"), self.first)
+        self.assertIn(f"ALICE-Zip sibling at {self.first}", r.stdout)
+
+    def test_repo_dir_clones_next_to_that_directory(self) -> None:
+        r = self.run_action("ALICE-LOL", f"ALICE-Zip {self.second}\n")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(run(self.ws / "ALICE-Zip", "git", "rev-parse", "HEAD"), self.second)
+        self.assertFalse((self.work / "ALICE-Zip").exists())
+
+    def test_empty_list_fails(self) -> None:
+        r = self.run_action(".", "# nothing\n")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("lists no repository", r.stdout + r.stderr)
 
 if __name__ == "__main__":
     unittest.main()

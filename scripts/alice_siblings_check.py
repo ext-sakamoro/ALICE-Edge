@@ -18,10 +18,13 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 # a POSIX string, not a Path: it appears in messages that must read the same on every OS
 LIST_FILE = ".github/alice-siblings"
+# read in the repository root and in every [workspace] member (members may be globs,
+# [workspace].exclude removes matches): the package manifest and its fuzz manifest
 MANIFESTS = ("Cargo.toml", "fuzz/Cargo.toml")
 LINE_RE = re.compile(r"(ALICE-[A-Za-z0-9-]+) ([0-9a-f]{40})")
 PATH_RE = re.compile(r'path\s*=\s*"((?:\.\./)+)(ALICE-[A-Za-z0-9-]+)"')
@@ -55,16 +58,45 @@ def read_list(root: Path) -> tuple[dict[str, str], list[str]]:
     return listed, problems
 
 
+def manifests(root: Path) -> tuple[list[tuple[str, Path]], list[str]]:
+    """([(POSIX path relative to root, file)], problems): MANIFESTS in the root and in each
+    [workspace] member; a member pattern matching no package and reading no manifest fail"""
+    problems: list[str] = []
+    dirs = [root]
+    top = root / "Cargo.toml"
+    if top.is_file():
+        workspace = tomllib.loads(top.read_text(encoding="utf-8")).get("workspace", {})
+        excluded: set[Path] = set()
+        for pattern in workspace.get("exclude", []):
+            excluded |= {d.resolve() for d in root.glob(pattern)}
+        for pattern in workspace.get("members", []):
+            matched = sorted(d for d in root.glob(pattern) if (d / "Cargo.toml").is_file())
+            matched = [d for d in matched if d.resolve() not in excluded]
+            if not matched and not any(d.resolve() in excluded for d in root.glob(pattern)):
+                problems.append(f"Cargo.toml: workspace member {pattern!r} matches no package")
+            dirs += [d for d in matched if d.resolve() != root.resolve() and d not in dirs]
+    found: list[tuple[str, Path]] = []
+    for d in dirs:
+        for rel in MANIFESTS:
+            f = d / rel
+            if f.is_file():
+                found.append((f.relative_to(root).as_posix(), f))
+    if not found and not problems:
+        problems.append("no Cargo.toml was read (compared nothing)")
+    return found, problems
+
+
 def check(root: Path) -> list[str]:
     listed, problems = read_list(root)
     if problems:
         return problems
 
+    found, problems = manifests(root)
+    if problems:
+        return problems
+
     named: set[str] = set()
-    for rel in MANIFESTS:
-        manifest = root / rel
-        if not manifest.is_file():
-            continue
+    for rel, manifest in found:
         for m in PATH_RE.finditer(manifest.read_text(encoding="utf-8")):
             repo = m.group(2)
             named.add(repo)

@@ -270,7 +270,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 | gate | 状態 | 注記 |
 |---|---|---|
 | G1 no-libm-direct | 適合 | every banned method of the G1 list is in clippy.toml, every feature is linted with -D warnings (edge-pipeline and pyo3 included), and the canary plants every … |
-| G2 ieee-max-min | 未達 | unmet: no ban on f32::max / f32::min / f64::max / f64::min in clippy.toml, no Law helper and no default-deny manifest of raw_* sites. Library sites, measured … |
+| G2 ieee-max-min | 適合 | the replacement moved no golden: tests/determinism_golden.rs (object_features, the ml and law scenarios included) passes unchanged in debug and release with … |
 | G3 no-outer-fneg-of-fma | 未確認 | unverified: no violation is known; the only mul_add sites are src/sensors.rs:865 (lat_deg.mul_add(-100.0, lat_raw)) and src/sensors.rs:874 … |
 | G4 debug-release-arch-goldens | 未達 | unmet: (1) no signed-zero or exact-cancellation case is checked against fixed bit patterns (tests/ has no -0.0 literal and no cancellation case; … |
 | G5 release-profile-test-leg | 未達 | unmet: the release profile runs only tests/panic_contract.rs (.github/workflows/ci.yml:108 std and :167 full feature set, on the four-OS matrix including the … |

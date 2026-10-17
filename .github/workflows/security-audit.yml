@@ -47,7 +47,7 @@ env:
   CARGO_HTTP_MULTIPLEXING: "false"
   # docs.rs feature set (Cargo.toml [package.metadata.docs.rs]); pyo3 needs a
   # Python runtime and sensors-hw needs Linux GPIO crates, both excluded.
-  FULL_FEATURES: "std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi"
+  FULL_FEATURES: "std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi,serde-raw"
 
 jobs:
   audit:

@@ -65,12 +65,6 @@ pub struct PipelineStats {
     pub total_bytes_sent: u64,
 }
 
-/// Callback for transmitting encoded packets
-pub trait PacketSink: Send {
-    fn send_keyframe(&mut self, scene_data: &[u8], frame_id: u64);
-    fn send_delta(&mut self, delta_data: &[u8], frame_id: u64);
-}
-
 /// Edge processing pipeline
 ///
 /// Orchestrates: capture → downsample → compress → classify → encode

@@ -17,6 +17,8 @@ namespace AliceEdge
     {
         public int slope;
         public int intercept;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
+        public byte[] semantics_id;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -25,6 +27,8 @@ namespace AliceEdge
         public int a;
         public int b;
         public int c;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
+        public byte[] semantics_id;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -34,6 +38,8 @@ namespace AliceEdge
         public int b;
         public int c;
         public int d;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
+        public byte[] semantics_id;
     }
 
     /// Status codes returned by the robust / filter functions
@@ -68,7 +74,7 @@ namespace AliceEdge
         public static extern AliceLinearResult alice_fit_linear(int[] data, UIntPtr len);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int alice_evaluate_linear(int slope, int intercept, int x);
+        public static extern int alice_evaluate_linear(int slope, int intercept, int x, byte[] semantics_id, out int value);
 
         // ── Quadratic fitting ───────────────────────────────────────────
 
@@ -76,7 +82,7 @@ namespace AliceEdge
         public static extern AliceQuadraticResult alice_fit_quadratic(int[] data, UIntPtr len);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int alice_evaluate_quadratic(int a, int b, int c, int x);
+        public static extern int alice_evaluate_quadratic(int a, int b, int c, int x, byte[] semantics_id, out int value);
 
         // ── Cubic fitting ───────────────────────────────────────────────
 
@@ -84,7 +90,7 @@ namespace AliceEdge
         public static extern AliceCubicResult alice_fit_cubic(int[] data, UIntPtr len);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int alice_evaluate_cubic(int a, int b, int c, int d, int x);
+        public static extern int alice_evaluate_cubic(int a, int b, int c, int d, int x, byte[] semantics_id, out int value);
 
         // ── Constant fitting ────────────────────────────────────────────
 
@@ -107,11 +113,15 @@ namespace AliceEdge
         public static extern bool alice_should_use_linear(int[] data, UIntPtr len);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern long alice_residual_error(int[] data, UIntPtr len,
-                                                       int slope, int intercept);
+        public static extern int alice_residual_error(int[] data, UIntPtr len,
+                                                      int slope, int intercept,
+                                                      byte[] semantics_id, out long value);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr alice_edge_version();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int alice_edge_semantics_id(byte[] output, UIntPtr len);
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr alice_edge_last_error();
@@ -155,16 +165,23 @@ namespace AliceEdge
     public static class AliceModel
     {
         /// Fit a linear model to sensor data, returning (slope, intercept) in Q16.16
-        public static (int slope, int intercept) FitLinear(int[] data)
+        /// and the 32-byte EDGE_SEMANTICS_ID they were computed under
+        public static (int slope, int intercept, byte[] semanticsId) FitLinear(int[] data)
         {
             var result = Native.alice_fit_linear(data, (UIntPtr)data.Length);
-            return (result.slope, result.intercept);
+            return (result.slope, result.intercept, result.semantics_id);
         }
 
-        /// Evaluate linear model at index x
-        public static int EvaluateLinear(int slope, int intercept, int x)
+        /// Evaluate linear model at index x; throws when semanticsId is not an
+        /// identifier this build accepts (the message names both)
+        public static int EvaluateLinear(int slope, int intercept, int x, byte[] semanticsId)
         {
-            return Native.alice_evaluate_linear(slope, intercept, x);
+            int status = Native.alice_evaluate_linear(slope, intercept, x, semanticsId, out int value);
+            if (status < 0)
+            {
+                throw new InvalidOperationException("alice_evaluate_linear refused the coefficients (status " + status + ")");
+            }
+            return value;
         }
 
         /// Convert Q16.16 to float

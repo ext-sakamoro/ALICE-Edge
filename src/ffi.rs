@@ -27,6 +27,10 @@ use core::ptr;
 pub struct AliceLinearResult {
     pub slope: i32,
     pub intercept: i32,
+    /// The producer's `EDGE_SEMANTICS_ID`: pass it back to the
+    /// `alice_evaluate_*` / `alice_residual_error` functions with the
+    /// coefficients (ALICE-Law G7)
+    pub semantics_id: [u8; 32],
 }
 
 /// Result of quadratic fitting: a, b, c in Q16.16
@@ -35,6 +39,10 @@ pub struct AliceQuadraticResult {
     pub a: i32,
     pub b: i32,
     pub c: i32,
+    /// The producer's `EDGE_SEMANTICS_ID`: pass it back to the
+    /// `alice_evaluate_*` / `alice_residual_error` functions with the
+    /// coefficients (ALICE-Law G7)
+    pub semantics_id: [u8; 32],
 }
 
 /// Result of cubic fitting: a, b, c, d in Q16.16
@@ -44,6 +52,10 @@ pub struct AliceCubicResult {
     pub b: i32,
     pub c: i32,
     pub d: i32,
+    /// The producer's `EDGE_SEMANTICS_ID`: pass it back to the
+    /// `alice_evaluate_*` / `alice_residual_error` functions with the
+    /// coefficients (ALICE-Law G7)
+    pub semantics_id: [u8; 32],
 }
 
 // ── Linear fitting ──────────────────────────────────────────────────────
@@ -59,26 +71,58 @@ pub unsafe extern "C" fn alice_fit_linear(data: *const i32, len: usize) -> Alice
         AliceLinearResult {
             slope: 0,
             intercept: 0,
+            semantics_id: crate::EDGE_SEMANTICS_ID,
         },
         || {
             if data.is_null() || len == 0 {
                 return AliceLinearResult {
                     slope: 0,
                     intercept: 0,
+                    semantics_id: crate::EDGE_SEMANTICS_ID,
                 };
             }
             // SAFETY: Caller guarantees data points to len contiguous i32 values.
             let slice = core::slice::from_raw_parts(data, len);
             let (slope, intercept) = fit_linear_fixed(slice);
-            AliceLinearResult { slope, intercept }
+            AliceLinearResult {
+                slope,
+                intercept,
+                semantics_id: crate::EDGE_SEMANTICS_ID,
+            }
         },
     )
 }
 
 /// Evaluate a linear model at point x.
+///
+/// `semantics_id` points to the 32-byte `EDGE_SEMANTICS_ID` the coefficients
+/// came with (`Alice*Result::semantics_id`); the value is written to `out`.
+/// Returns 0 (this build's identifier) or 1 (a verified earlier one), -1 for
+/// a null pointer and -2 for any other identifier, which also records both
+/// identifiers for `alice_edge_last_error` (ALICE-Law G7).
+///
+/// # Safety
+/// `semantics_id` points to 32 readable bytes and `out` to a writable `i32`.
 #[no_mangle]
-pub const extern "C" fn alice_evaluate_linear(slope: i32, intercept: i32, x: i32) -> i32 {
-    evaluate_linear_fixed(slope, intercept, x)
+pub unsafe extern "C" fn alice_evaluate_linear(
+    slope: i32,
+    intercept: i32,
+    x: i32,
+    semantics_id: *const u8,
+    out: *mut i32,
+) -> i32 {
+    ffi_guard(-1, || {
+        if out.is_null() {
+            return -1;
+        }
+        match handshake(semantics_id) {
+            Ok(status) => {
+                out.write(evaluate_linear_fixed(slope, intercept, x));
+                status
+            }
+            Err(code) => code,
+        }
+    })
 }
 
 // ── Quadratic fitting ───────────────────────────────────────────────────
@@ -90,21 +134,66 @@ pub const extern "C" fn alice_evaluate_linear(slope: i32, intercept: i32, x: i32
 /// `data` must be non-null, pointing to at least `len` contiguous `i32` values.
 #[no_mangle]
 pub unsafe extern "C" fn alice_fit_quadratic(data: *const i32, len: usize) -> AliceQuadraticResult {
-    ffi_guard(AliceQuadraticResult { a: 0, b: 0, c: 0 }, || {
-        if data.is_null() || len == 0 {
-            return AliceQuadraticResult { a: 0, b: 0, c: 0 };
-        }
-        // SAFETY: Caller guarantees data points to len contiguous i32 values.
-        let slice = core::slice::from_raw_parts(data, len);
-        let (a, b, c) = fit_quadratic_fixed(slice);
-        AliceQuadraticResult { a, b, c }
-    })
+    ffi_guard(
+        AliceQuadraticResult {
+            a: 0,
+            b: 0,
+            c: 0,
+            semantics_id: crate::EDGE_SEMANTICS_ID,
+        },
+        || {
+            if data.is_null() || len == 0 {
+                return AliceQuadraticResult {
+                    a: 0,
+                    b: 0,
+                    c: 0,
+                    semantics_id: crate::EDGE_SEMANTICS_ID,
+                };
+            }
+            // SAFETY: Caller guarantees data points to len contiguous i32 values.
+            let slice = core::slice::from_raw_parts(data, len);
+            let (a, b, c) = fit_quadratic_fixed(slice);
+            AliceQuadraticResult {
+                a,
+                b,
+                c,
+                semantics_id: crate::EDGE_SEMANTICS_ID,
+            }
+        },
+    )
 }
 
 /// Evaluate a quadratic model at point x.
+///
+/// `semantics_id` points to the 32-byte `EDGE_SEMANTICS_ID` the coefficients
+/// came with (`Alice*Result::semantics_id`); the value is written to `out`.
+/// Returns 0 (this build's identifier) or 1 (a verified earlier one), -1 for
+/// a null pointer and -2 for any other identifier, which also records both
+/// identifiers for `alice_edge_last_error` (ALICE-Law G7).
+///
+/// # Safety
+/// `semantics_id` points to 32 readable bytes and `out` to a writable `i32`.
 #[no_mangle]
-pub const extern "C" fn alice_evaluate_quadratic(a: i32, b: i32, c: i32, x: i32) -> i32 {
-    evaluate_quadratic_fixed(a, b, c, x)
+pub unsafe extern "C" fn alice_evaluate_quadratic(
+    a: i32,
+    b: i32,
+    c: i32,
+    x: i32,
+    semantics_id: *const u8,
+    out: *mut i32,
+) -> i32 {
+    ffi_guard(-1, || {
+        if out.is_null() {
+            return -1;
+        }
+        match handshake(semantics_id) {
+            Ok(status) => {
+                out.write(evaluate_quadratic_fixed(a, b, c, x));
+                status
+            }
+            Err(code) => code,
+        }
+    })
 }
 
 // ── Cubic fitting ───────────────────────────────────────────────────────
@@ -122,6 +211,7 @@ pub unsafe extern "C" fn alice_fit_cubic(data: *const i32, len: usize) -> AliceC
             b: 0,
             c: 0,
             d: 0,
+            semantics_id: crate::EDGE_SEMANTICS_ID,
         },
         || {
             if data.is_null() || len == 0 {
@@ -130,20 +220,55 @@ pub unsafe extern "C" fn alice_fit_cubic(data: *const i32, len: usize) -> AliceC
                     b: 0,
                     c: 0,
                     d: 0,
+                    semantics_id: crate::EDGE_SEMANTICS_ID,
                 };
             }
             // SAFETY: Caller guarantees data points to len contiguous i32 values.
             let slice = core::slice::from_raw_parts(data, len);
             let (a, b, c, d) = fit_cubic_fixed(slice);
-            AliceCubicResult { a, b, c, d }
+            AliceCubicResult {
+                a,
+                b,
+                c,
+                d,
+                semantics_id: crate::EDGE_SEMANTICS_ID,
+            }
         },
     )
 }
 
 /// Evaluate a cubic model at point x.
+///
+/// `semantics_id` points to the 32-byte `EDGE_SEMANTICS_ID` the coefficients
+/// came with (`Alice*Result::semantics_id`); the value is written to `out`.
+/// Returns 0 (this build's identifier) or 1 (a verified earlier one), -1 for
+/// a null pointer and -2 for any other identifier, which also records both
+/// identifiers for `alice_edge_last_error` (ALICE-Law G7).
+///
+/// # Safety
+/// `semantics_id` points to 32 readable bytes and `out` to a writable `i32`.
 #[no_mangle]
-pub const extern "C" fn alice_evaluate_cubic(a: i32, b: i32, c: i32, d: i32, x: i32) -> i32 {
-    evaluate_cubic_fixed(a, b, c, d, x)
+pub unsafe extern "C" fn alice_evaluate_cubic(
+    a: i32,
+    b: i32,
+    c: i32,
+    d: i32,
+    x: i32,
+    semantics_id: *const u8,
+    out: *mut i32,
+) -> i32 {
+    ffi_guard(-1, || {
+        if out.is_null() {
+            return -1;
+        }
+        match handshake(semantics_id) {
+            Ok(status) => {
+                out.write(evaluate_cubic_fixed(a, b, c, d, x));
+                status
+            }
+            Err(code) => code,
+        }
+    })
 }
 
 // ── Constant fitting ────────────────────────────────────────────────────
@@ -206,18 +331,32 @@ pub unsafe extern "C" fn alice_should_use_linear(data: *const i32, len: usize) -
 ///
 /// `data` must be non-null, pointing to at least `len` contiguous `i32` values.
 #[no_mangle]
-pub const unsafe extern "C" fn alice_residual_error(
+pub unsafe extern "C" fn alice_residual_error(
     data: *const i32,
     len: usize,
     slope: i32,
     intercept: i32,
-) -> i64 {
-    if data.is_null() || len == 0 {
-        return 0;
-    }
-    // SAFETY: Caller guarantees data points to len contiguous i32 values.
-    let slice = core::slice::from_raw_parts(data, len);
-    compute_residual_error(slice, slope, intercept)
+    semantics_id: *const u8,
+    out: *mut i64,
+) -> i32 {
+    ffi_guard(-1, || {
+        if out.is_null() {
+            return -1;
+        }
+        match handshake(semantics_id) {
+            Ok(status) => {
+                let error = if data.is_null() || len == 0 {
+                    0
+                } else {
+                    // SAFETY: Caller guarantees data points to len contiguous i32 values.
+                    compute_residual_error(core::slice::from_raw_parts(data, len), slope, intercept)
+                };
+                out.write(error);
+                status
+            }
+            Err(code) => code,
+        }
+    })
 }
 
 // ── Status codes ────────────────────────────────────────────────────────
@@ -300,6 +439,7 @@ pub unsafe extern "C" fn alice_fit_linear_robust(
     out.write(AliceLinearResult {
         slope: 0,
         intercept: 0,
+        semantics_id: crate::EDGE_SEMANTICS_ID,
     });
     ffi_guard(ALICE_EDGE_ERR_PANIC, || {
         // SAFETY: forwarded caller guarantee on `data` / `len`.
@@ -312,7 +452,11 @@ pub unsafe extern "C" fn alice_fit_linear_robust(
         match crate::fit_linear_robust(slice, k) {
             Ok((slope, intercept)) => {
                 // SAFETY: `out` is non-null and caller-owned.
-                out.write(AliceLinearResult { slope, intercept });
+                out.write(AliceLinearResult {
+                    slope,
+                    intercept,
+                    semantics_id: crate::EDGE_SEMANTICS_ID,
+                });
                 ALICE_EDGE_OK
             }
             Err(e) => robust_status(e),
@@ -331,18 +475,24 @@ pub unsafe extern "C" fn alice_fit_linear_simd(data: *const i32, len: usize) -> 
         AliceLinearResult {
             slope: 0,
             intercept: 0,
+            semantics_id: crate::EDGE_SEMANTICS_ID,
         },
         || {
             if data.is_null() || len == 0 {
                 return AliceLinearResult {
                     slope: 0,
                     intercept: 0,
+                    semantics_id: crate::EDGE_SEMANTICS_ID,
                 };
             }
             // SAFETY: Caller guarantees data points to len contiguous i32 values.
             let slice = core::slice::from_raw_parts(data, len);
             let (slope, intercept) = crate::fit_linear_simd(slice);
-            AliceLinearResult { slope, intercept }
+            AliceLinearResult {
+                slope,
+                intercept,
+                semantics_id: crate::EDGE_SEMANTICS_ID,
+            }
         },
     )
 }
@@ -496,6 +646,47 @@ pub unsafe extern "C" fn alice_zeroize(buf: *mut i32, len: usize) {
 ///
 /// The returned pointer is valid for the lifetime of the process (static).
 /// The string is the crate version from `Cargo.toml`.
+/// Writes this build's 32-byte `EDGE_SEMANTICS_ID` to `out` (ALICE-Law G7).
+/// Returns 0, or -1 when `out` is null or `len` is below 32.
+///
+/// # Safety
+/// `out` points to `len` writable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn alice_edge_semantics_id(out: *mut u8, len: usize) -> i32 {
+    ffi_guard(-1, || {
+        if out.is_null() || len < 32 {
+            return -1;
+        }
+        ptr::copy_nonoverlapping(crate::EDGE_SEMANTICS_ID.as_ptr(), out, 32);
+        0
+    })
+}
+
+/// Reads the 32-byte identifier that came with Law-bearing values and checks
+/// it: `Ok(0)` this build's, `Ok(1)` a verified earlier one; `Err(-1)` null,
+/// `Err(-2)` any other (recording both identifiers for `alice_edge_last_error`
+/// with `std`).
+unsafe fn handshake(semantics_id: *const u8) -> Result<i32, i32> {
+    if semantics_id.is_null() {
+        #[cfg(feature = "std")]
+        guard::set_last_error("alice_edge: semantics identifier is null");
+        return Err(-1);
+    }
+    let mut id = [0u8; 32];
+    ptr::copy_nonoverlapping(semantics_id, id.as_mut_ptr(), 32);
+    match crate::semantics::check_semantics(&id) {
+        Ok(crate::semantics::IdStatus::Current) => Ok(0),
+        Ok(crate::semantics::IdStatus::VerifiedPrevious(_)) => Ok(1),
+        Err(m) => {
+            #[cfg(feature = "std")]
+            guard::set_last_error(format!("alice_edge: {m}"));
+            #[cfg(not(feature = "std"))]
+            let _ = m;
+            Err(-2)
+        }
+    }
+}
+
 #[no_mangle]
 pub const extern "C" fn alice_edge_version() -> *const u8 {
     concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr()
@@ -523,7 +714,19 @@ mod tests {
     #[test]
     fn test_ffi_evaluate_linear() {
         // x is raw integer index (not Q16.16)
-        let val = alice_evaluate_linear(int_to_q16(10), int_to_q16(5), 3);
+        let mut val = 0;
+        assert_eq!(
+            unsafe {
+                alice_evaluate_linear(
+                    int_to_q16(10),
+                    int_to_q16(5),
+                    3,
+                    crate::EDGE_SEMANTICS_ID.as_ptr(),
+                    &mut val,
+                )
+            },
+            0
+        );
         // slope(10)*3 + intercept(5) = 35 in Q16.16
         let result = q16_to_int(val);
         assert_eq!(result, 35);
@@ -576,9 +779,20 @@ mod tests {
     fn test_ffi_residual_error() {
         let data = [100, 200, 300, 400, 500];
         let result = unsafe { alice_fit_linear(data.as_ptr(), data.len()) };
-        let err = unsafe {
-            alice_residual_error(data.as_ptr(), data.len(), result.slope, result.intercept)
-        };
+        let mut err = 0;
+        assert_eq!(
+            unsafe {
+                alice_residual_error(
+                    data.as_ptr(),
+                    data.len(),
+                    result.slope,
+                    result.intercept,
+                    result.semantics_id.as_ptr(),
+                    &mut err,
+                )
+            },
+            0
+        );
         // Perfect linear data should have near-zero residual
         assert!(err < 100);
     }
@@ -595,7 +809,20 @@ mod tests {
     #[test]
     fn test_ffi_evaluate_quadratic() {
         // x is raw integer index (not Q16.16)
-        let val = alice_evaluate_quadratic(int_to_q16(1), int_to_q16(2), int_to_q16(3), 2);
+        let mut val = 0;
+        assert_eq!(
+            unsafe {
+                alice_evaluate_quadratic(
+                    int_to_q16(1),
+                    int_to_q16(2),
+                    int_to_q16(3),
+                    2,
+                    crate::EDGE_SEMANTICS_ID.as_ptr(),
+                    &mut val,
+                )
+            },
+            0
+        );
         // a*4 + b*2 + c = 1*4 + 2*2 + 3 = 11 in Q16.16
         let result = q16_to_int(val);
         assert_eq!(result, 11);
@@ -604,13 +831,19 @@ mod tests {
     #[test]
     fn test_ffi_evaluate_cubic() {
         // evaluate_cubic_fixed expects x as raw integer index, not Q16.16
-        let val = alice_evaluate_cubic(
-            int_to_q16(1),
-            int_to_q16(0),
-            int_to_q16(0),
-            int_to_q16(0),
-            2,
-        );
+        let mut val = 0;
+        let status = unsafe {
+            alice_evaluate_cubic(
+                int_to_q16(1),
+                int_to_q16(0),
+                int_to_q16(0),
+                int_to_q16(0),
+                2,
+                crate::EDGE_SEMANTICS_ID.as_ptr(),
+                &mut val,
+            )
+        };
+        assert_eq!(status, 0);
         // a*x^3 = 1*8 = 8 in Q16.16
         let result = q16_to_int(val);
         assert_eq!(result, 8);
@@ -631,6 +864,7 @@ mod tests {
         let mut out = AliceLinearResult {
             slope: 1,
             intercept: 1,
+            semantics_id: crate::EDGE_SEMANTICS_ID,
         };
         // SAFETY: data is a valid local slice, out a valid local struct.
         let status = unsafe { alice_fit_linear_robust(data.as_ptr(), data.len(), k, &mut out) };
@@ -701,6 +935,7 @@ mod tests {
         let mut out = AliceLinearResult {
             slope: 1,
             intercept: 1,
+            semantics_id: crate::EDGE_SEMANTICS_ID,
         };
         // SAFETY: as above.
         let status = unsafe { alice_fit_linear_robust(ptr::null(), 4, 3, &mut out) };
@@ -793,6 +1028,96 @@ mod tests {
         // デコードで元に戻る
         unsafe { alice_delta_decode(pairs.as_mut_ptr(), 3) };
         assert_eq!(pairs, original);
+    }
+
+    fn foreign_id() -> [u8; 32] {
+        let mut id = crate::EDGE_SEMANTICS_ID;
+        id[7] ^= 0x02;
+        id
+    }
+
+    #[cfg(feature = "std")]
+    fn assert_last_error_names_both() {
+        let s = alice_edge_last_error();
+        assert!(!s.is_null(), "a mismatch records both identifiers");
+        let msg = unsafe { std::ffi::CStr::from_ptr(s) }
+            .to_string_lossy()
+            .into_owned();
+        unsafe { alice_edge_free_error_string(s) };
+        let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+        assert!(msg.contains(&hex(&foreign_id())), "{msg}");
+        assert!(msg.contains(&hex(&crate::EDGE_SEMANTICS_ID)), "{msg}");
+    }
+
+    /// Every fit result carries this build's identifier, and every function
+    /// that takes coefficients back refuses another identifier (ALICE-Law G7).
+    #[test]
+    fn coefficients_with_another_identifier_are_refused() {
+        let data = [100i32, 110, 120, 130];
+        let r = unsafe { alice_fit_linear(data.as_ptr(), data.len()) };
+        assert_eq!(r.semantics_id, crate::EDGE_SEMANTICS_ID);
+        let q = unsafe { alice_fit_quadratic(data.as_ptr(), data.len()) };
+        assert_eq!(q.semantics_id, crate::EDGE_SEMANTICS_ID);
+        let c = unsafe { alice_fit_cubic(data.as_ptr(), data.len()) };
+        assert_eq!(c.semantics_id, crate::EDGE_SEMANTICS_ID);
+        let bad = foreign_id();
+        let (mut v, mut e) = (7i32, 7i64);
+        unsafe {
+            assert_eq!(
+                alice_evaluate_linear(r.slope, r.intercept, 1, bad.as_ptr(), &mut v),
+                -2
+            );
+            #[cfg(feature = "std")]
+            assert_last_error_names_both();
+            assert_eq!(
+                alice_evaluate_quadratic(q.a, q.b, q.c, 1, bad.as_ptr(), &mut v),
+                -2
+            );
+            #[cfg(feature = "std")]
+            assert_last_error_names_both();
+            assert_eq!(
+                alice_evaluate_cubic(c.a, c.b, c.c, c.d, 1, bad.as_ptr(), &mut v),
+                -2
+            );
+            #[cfg(feature = "std")]
+            assert_last_error_names_both();
+            assert_eq!(
+                alice_residual_error(
+                    data.as_ptr(),
+                    data.len(),
+                    r.slope,
+                    r.intercept,
+                    bad.as_ptr(),
+                    &mut e
+                ),
+                -2
+            );
+            #[cfg(feature = "std")]
+            assert_last_error_names_both();
+            assert_eq!((v, e), (7, 7), "a refused call writes nothing");
+            assert_eq!(
+                alice_evaluate_linear(r.slope, r.intercept, 1, ptr::null(), &mut v),
+                -1
+            );
+            assert_eq!(
+                alice_evaluate_linear(
+                    r.slope,
+                    r.intercept,
+                    1,
+                    r.semantics_id.as_ptr(),
+                    ptr::null_mut()
+                ),
+                -1
+            );
+        }
+    }
+
+    #[test]
+    fn semantics_id_is_written_and_short_buffers_are_refused() {
+        let mut out = [0u8; 32];
+        assert_eq!(unsafe { alice_edge_semantics_id(out.as_mut_ptr(), 32) }, 0);
+        assert_eq!(out, crate::EDGE_SEMANTICS_ID);
+        assert_eq!(unsafe { alice_edge_semantics_id(out.as_mut_ptr(), 31) }, -1);
     }
 
     #[test]
@@ -1041,6 +1366,7 @@ mod guard_ffi_tests {
         let mut out = AliceLinearResult {
             slope: 1,
             intercept: 1,
+            semantics_id: crate::EDGE_SEMANTICS_ID,
         };
         // SAFETY: data is a valid local slice, out a valid local struct.
         let status = unsafe { alice_fit_linear_robust(data.as_ptr(), data.len(), 3, &mut out) };

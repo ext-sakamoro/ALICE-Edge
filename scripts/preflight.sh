@@ -32,7 +32,7 @@ case "${1:-}" in
   *) echo "usage: scripts/preflight.sh [--quick]" >&2; exit 2 ;;
 esac
 # docs.rs feature set (Cargo.toml [package.metadata.docs.rs]) = ci.yml FULL_FEATURES
-FULL='std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi'
+FULL='std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi,serde-raw'
 MSRV='1.87'
 
 step() { printf '\n\033[1;34m== %s\033[0m\n' "$*"; }
@@ -76,6 +76,12 @@ python3 scripts/package_contents_check.py
 step "ci.yml / docs-lint: entropy guard (no OS entropy / wall clock in production code)"
 python3 scripts/test_entropy_guard.py
 python3 scripts/entropy_guard.py
+
+step "ci.yml / clippy: API boundary and boundary guard (G7 / G8)"
+python3 scripts/test_api_boundary.py
+python3 scripts/api_boundary.py
+python3 scripts/test_boundary_guard.py
+python3 scripts/boundary_guard.py
 
 step "ci.yml / docs-lint: libm dependency guard (test, then check)"
 python3 scripts/test_libm_dependency_guard.py

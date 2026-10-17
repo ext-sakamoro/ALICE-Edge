@@ -11,6 +11,7 @@ import pytest
 import alice_edge
 
 Q = 1 << 16
+ID = alice_edge.semantics_id()
 
 
 def ramp(slope, intercept, n):
@@ -35,13 +36,13 @@ def test_fit_constant_is_the_mean():
 
 def test_evaluate_linear():
     # slope and intercept in Q16.16, x a plain integer
-    assert alice_edge.evaluate_linear(100 * Q, 100 * Q, 4) == 500 * Q
+    assert alice_edge.evaluate_linear(100 * Q, 100 * Q, 4, ID) == 500 * Q
 
 
 def test_compute_error_of_an_exact_fit_is_zero():
     data = ramp(3, -40, 8)
     slope, intercept = alice_edge.fit_linear(data)
-    assert alice_edge.compute_error(data, slope, intercept) == 0
+    assert alice_edge.compute_error(data, slope, intercept, ID) == 0
 
 
 def test_should_use_linear():
@@ -74,10 +75,10 @@ def test_fit_linear_batch_matches_the_scalar_fit():
 def test_evaluate_linear_batch_matches_the_scalar_evaluation():
     coeffs = np.array([[100 * Q, 100 * Q], [-7 * Q, 250 * Q]], dtype=np.int32)
     xs = np.array([0, 1, 4, 10], dtype=np.int32)
-    out = alice_edge.evaluate_linear_batch(coeffs, xs)
+    out = alice_edge.evaluate_linear_batch(coeffs, xs, ID)
     assert out.shape == (2, 4)
     for i, (slope, intercept) in enumerate(coeffs.tolist()):
-        assert out[i].tolist() == [alice_edge.evaluate_linear(slope, intercept, int(x)) for x in xs]
+        assert out[i].tolist() == [alice_edge.evaluate_linear(slope, intercept, int(x), ID) for x in xs]
 
 
 @pytest.mark.parametrize("width", [1, 3])
@@ -87,4 +88,15 @@ def test_evaluate_linear_batch_refuses_a_coefficient_row_that_is_not_two_wide(wi
     # columns used to be read misaligned without an error
     coeffs = np.ones((2, width), dtype=np.int32)
     with pytest.raises(ValueError, match="shape"):
-        alice_edge.evaluate_linear_batch(coeffs, np.array([1, 2], dtype=np.int32))
+        alice_edge.evaluate_linear_batch(coeffs, np.array([1, 2], dtype=np.int32), ID)
+
+
+def test_coefficients_with_another_identifier_are_refused_naming_both():
+    foreign = bytes([ID[0] ^ 1]) + bytes(ID[1:])
+    with pytest.raises(ValueError) as e:
+        alice_edge.evaluate_linear(Q, Q, 1, foreign)
+    assert bytes(foreign).hex() in str(e.value) and bytes(ID).hex() in str(e.value)
+    with pytest.raises(ValueError):
+        alice_edge.compute_error(np.array([1, 2, 3], dtype=np.int32), Q, 0, foreign)
+    with pytest.raises(ValueError):
+        alice_edge.evaluate_linear_batch(np.array([[Q, 0]], dtype=np.int32), np.array([1], dtype=np.int32), foreign)

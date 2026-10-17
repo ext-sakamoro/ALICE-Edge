@@ -27,7 +27,7 @@ env:
   # docs.rs feature set (Cargo.toml [package.metadata.docs.rs]). pyo3 needs a
   # Python runtime and sensors-hw needs Linux GPIO / libudev, both handled in
   # dedicated steps below.
-  FULL_FEATURES: "std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi"
+  FULL_FEATURES: "std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi,serde-raw"
 
 jobs:
   test:
@@ -268,6 +268,18 @@ jobs:
         run: python3 scripts/test_clippy_canary.py
       - name: Clippy canary (every planted banned call is flagged)
         run: python3 scripts/clippy_canary.py
+      # G7 / G8: the boundary of the public API, enumerated from rustdoc JSON
+      # (pinned toolchain, RUSTC_BOOTSTRAP=1, pyo3 included: python is set up
+      # above), against scripts/api_boundary.toml; the C ABI and Python entry
+      # points by text against scripts/boundaries.toml
+      - name: API boundary (tests)
+        run: python3 scripts/test_api_boundary.py
+      - name: API boundary (rustdoc JSON, every item decided)
+        run: python3 scripts/api_boundary.py
+      - name: Boundary guard (tests)
+        run: python3 scripts/test_boundary_guard.py
+      - name: Boundary guard (C ABI and Python entry points decided)
+        run: python3 scripts/boundary_guard.py
 
   msrv:
     name: MSRV (rust-version = 1.87)

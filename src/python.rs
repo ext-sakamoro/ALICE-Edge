@@ -36,10 +36,34 @@ fn fit_constant<'py>(py: Python<'py>, data: PyReadonlyArray1<'py, i32>) -> PyRes
     Ok(py.detach(|| crate::fit_constant_fixed(slice)))
 }
 
-/// Evaluate y = slope * x + intercept in Q16.16.
+/// Checks the identifier that came with coefficients (ALICE-Law G7): `Err`
+/// naming both identifiers when it is not 32 bytes or is neither this build's
+/// `EDGE_SEMANTICS_ID` nor a verified earlier one.
+fn id_check(semantics_id: &[u8]) -> Result<(), String> {
+    let id: [u8; 32] = semantics_id
+        .try_into()
+        .map_err(|_| format!("semantics_id must be 32 bytes, got {}", semantics_id.len()))?;
+    crate::semantics::check_semantics(&id)
+        .map(|_| ())
+        .map_err(|m| m.to_string())
+}
+
+/// This build's 32-byte EDGE_SEMANTICS_ID: the identifier the fit functions'
+/// coefficients carry, to pass back to the evaluate / error functions.
 #[pyfunction]
-fn evaluate_linear(slope: i32, intercept: i32, x: i32) -> i32 {
-    crate::evaluate_linear_fixed(slope, intercept, x)
+fn semantics_id() -> Vec<u8> {
+    crate::EDGE_SEMANTICS_ID.to_vec()
+}
+
+/// Evaluate y = slope * x + intercept in Q16.16.
+///
+/// `semantics_id` is the 32-byte `semantics_id()` of the build that fitted the
+/// coefficients; ValueError naming both identifiers when this build does not
+/// accept it (ALICE-Law G7).
+#[pyfunction]
+fn evaluate_linear(slope: i32, intercept: i32, x: i32, semantics_id: &[u8]) -> PyResult<i32> {
+    id_check(semantics_id).map_err(PyValueError::new_err)?;
+    Ok(crate::evaluate_linear_fixed(slope, intercept, x))
 }
 
 /// Compute residual error (sum of squared differences).
@@ -50,7 +74,9 @@ fn compute_error<'py>(
     data: PyReadonlyArray1<'py, i32>,
     slope: i32,
     intercept: i32,
+    semantics_id: &[u8],
 ) -> PyResult<i64> {
+    id_check(semantics_id).map_err(PyValueError::new_err)?;
     let slice = data
         .as_slice()
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -115,7 +141,9 @@ fn evaluate_linear_batch<'py>(
     py: Python<'py>,
     coeffs: PyReadonlyArray2<'py, i32>,
     x_values: PyReadonlyArray1<'py, i32>,
+    semantics_id: &[u8],
 ) -> PyResult<Bound<'py, PyArray2<i32>>> {
+    id_check(semantics_id).map_err(PyValueError::new_err)?;
     let c_shape = coeffs.as_array();
     let num_streams = c_shape.shape()[0];
     // the rows are read as [slope, intercept]: any other width would index past the
@@ -203,6 +231,7 @@ fn q16_to_f32_batch<'py>(
 /// Returns `PyResult::Err` if any function or constant fails to register with the Python module.
 #[pymodule]
 pub fn alice_edge(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(semantics_id, m)?)?;
     // Core
     m.add_function(wrap_pyfunction!(fit_linear, m)?)?;
     m.add_function(wrap_pyfunction!(fit_constant, m)?)?;
@@ -231,6 +260,21 @@ pub fn alice_edge(m: &Bound<'_, PyModule>) -> PyResult<()> {
 // 直接テストする。PyO3関数は薄いラッパーなので、コア関数の正確性を確認。
 #[cfg(test)]
 mod tests {
+    /// The evaluate / error functions' check refuses another identifier naming
+    /// both, and a wrong length; this build's identifier passes.
+    #[test]
+    fn id_check_refuses_another_identifier() {
+        assert_eq!(super::id_check(&crate::EDGE_SEMANTICS_ID), Ok(()));
+        let mut foreign = crate::EDGE_SEMANTICS_ID;
+        foreign[0] ^= 1;
+        let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+        let msg = super::id_check(&foreign).unwrap_err();
+        assert!(msg.contains(&hex(&foreign)) && msg.contains(&hex(&crate::EDGE_SEMANTICS_ID)));
+        assert!(super::id_check(&[0u8; 31])
+            .unwrap_err()
+            .contains("32 bytes"));
+    }
+
     #[test]
     fn test_fit_linear_core() {
         let data = [100, 200, 300, 400, 500];

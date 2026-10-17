@@ -18,12 +18,14 @@ extern "C" {
 typedef struct {
     int32_t slope;
     int32_t intercept;
+    uint8_t semantics_id[32]; /* producer's EDGE_SEMANTICS_ID: pass back with the coefficients */
 } AliceLinearResult;
 
 typedef struct {
     int32_t a;
     int32_t b;
     int32_t c;
+    uint8_t semantics_id[32];
 } AliceQuadraticResult;
 
 typedef struct {
@@ -31,6 +33,7 @@ typedef struct {
     int32_t b;
     int32_t c;
     int32_t d;
+    uint8_t semantics_id[32];
 } AliceCubicResult;
 
 // ── Status codes ────────────────────────────────────────────────────────
@@ -51,7 +54,10 @@ typedef struct {
 AliceLinearResult alice_fit_linear(const int32_t* data, size_t len);
 
 // Evaluate y = slope * x + intercept (all Q16.16, x is raw integer index).
-int32_t alice_evaluate_linear(int32_t slope, int32_t intercept, int32_t x);
+// semantics_id: the 32 bytes the coefficients came with. Returns 0 / 1 accepted
+// (value in *out), -1 null pointer, -2 another identifier (see alice_edge_last_error).
+int32_t alice_evaluate_linear(int32_t slope, int32_t intercept, int32_t x,
+                              const uint8_t* semantics_id, int32_t* out);
 
 // ── Quadratic fitting ───────────────────────────────────────────────────
 
@@ -59,7 +65,10 @@ int32_t alice_evaluate_linear(int32_t slope, int32_t intercept, int32_t x);
 AliceQuadraticResult alice_fit_quadratic(const int32_t* data, size_t len);
 
 // Evaluate y = ax^2 + bx + c (Q16.16, x is raw integer index).
-int32_t alice_evaluate_quadratic(int32_t a, int32_t b, int32_t c, int32_t x);
+// semantics_id: the 32 bytes the coefficients came with. Returns 0 / 1 accepted
+// (value in *out), -1 null pointer, -2 another identifier (see alice_edge_last_error).
+int32_t alice_evaluate_quadratic(int32_t a, int32_t b, int32_t c, int32_t x,
+                                 const uint8_t* semantics_id, int32_t* out);
 
 // ── Cubic fitting ───────────────────────────────────────────────────────
 
@@ -67,7 +76,10 @@ int32_t alice_evaluate_quadratic(int32_t a, int32_t b, int32_t c, int32_t x);
 AliceCubicResult alice_fit_cubic(const int32_t* data, size_t len);
 
 // Evaluate y = ax^3 + bx^2 + cx + d (Q16.16, x is raw integer index).
-int32_t alice_evaluate_cubic(int32_t a, int32_t b, int32_t c, int32_t d, int32_t x);
+// semantics_id: the 32 bytes the coefficients came with. Returns 0 / 1 accepted
+// (value in *out), -1 null pointer, -2 another identifier (see alice_edge_last_error).
+int32_t alice_evaluate_cubic(int32_t a, int32_t b, int32_t c, int32_t d, int32_t x,
+                             const uint8_t* semantics_id, int32_t* out);
 
 // ── Constant fitting ────────────────────────────────────────────────────
 
@@ -88,9 +100,12 @@ float alice_q16_to_f32(int32_t q);
 // Check if data benefits from linear model vs constant.
 bool alice_should_use_linear(const int32_t* data, size_t len);
 
-// Compute residual error of a linear fit (returns Q32.32).
-int64_t alice_residual_error(const int32_t* data, size_t len,
-                             int32_t slope, int32_t intercept);
+// Compute residual error of a linear fit (Q32.32 in *out).
+// semantics_id: the 32 bytes the coefficients came with. Returns 0 / 1 accepted
+// (value in *out), -1 null pointer, -2 another identifier (see alice_edge_last_error).
+int32_t alice_residual_error(const int32_t* data, size_t len,
+                             int32_t slope, int32_t intercept,
+                             const uint8_t* semantics_id, int64_t* out);
 
 // ── Robust / SIMD fitting ───────────────────────────────────────────────
 
@@ -138,6 +153,9 @@ void alice_zeroize(int32_t* buf, size_t len);
 
 // Return library version as null-terminated C string.
 const char* alice_edge_version(void);
+
+// Write this build's 32-byte EDGE_SEMANTICS_ID; 0, or -1 when out is null or len < 32.
+int32_t alice_edge_semantics_id(uint8_t* out, size_t len);
 
 // ── Errors ──────────────────────────────────────────────────────────────
 

@@ -1,0 +1,137 @@
+name: G3 IR
+
+# ALICE-Law G3, IR half: no negation of a whole fused multiply-add result in the optimised
+# LLVM IR of alice-edge (scripts/fneg_fma_ir_check.py, byte-identical to ALICE-LOL's). The
+# syntax-tree pre-check (tools/no-outer-fneg-of-fma) runs in ci.yml's test job on every
+# push; this workflow builds the release IR, so it runs when a path that can change the IR
+# changed, and weekly (a dependency inlined into the crate can change it too)
+
+on:
+  push:
+    # no paths here: a branch created at a SHA another ref already has gets an empty
+    # diff from GitHub's filter and the run is skipped; the changes job below compares
+    # with merge-base(origin/main) instead (patterns: .github/paths/g3-ir.txt)
+    branches: [main, 'ci/**']
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'tools/no-outer-fneg-of-fma/**'
+      - 'tools/fneg-fma-ir-probes/**'
+      - 'scripts/fneg_fma_ir_check.py'
+      - 'scripts/test_fneg_fma_ir_check.py'
+      - 'scripts/no-outer-fneg-of-fma-allowlist.toml'
+      - 'scripts/changed_paths.py'
+      - '.github/workflows/g3-ir.yml'
+      - '.github/paths/g3-ir.txt'
+      - '.github/alice-siblings'
+      - '.github/actions/alice-siblings/**'
+  schedule:
+    - cron: '17 7 * * 1'
+  workflow_dispatch:
+
+# a superseded run on a branch is cancelled; on main each commit has a group of its own
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # which files changed: a new or force-pushed branch is compared with merge-base(origin/main),
+  # another push with before..after, a pull request with base...head; schedule and manual
+  # runs always run; any error runs (fail-closed) — scripts/changed_paths.py
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after || github.sha }}
+          CREATED: ${{ github.event.created }}
+          FORCED: ${{ github.event.forced }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          python3 scripts/changed_paths.py decide --event "$EVENT"
+          --before "$BEFORE" --after "$AFTER" --created "$CREATED" --forced "$FORCED"
+          --base "$PR_BASE" --head "$PR_HEAD"
+          --patterns-file .github/paths/g3-ir.txt
+
+  ir:
+    name: fneg of fma in the release IR (${{ matrix.target }})
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # each target on a runner native to it, the host class the [[ir]] floors are recorded for
+        # (mqtt pulls aws-lc-sys, which compiles C, so a cross build needs a cross C toolchain)
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/alice-siblings
+      # the toolchain is rust-toolchain.toml's (the IR text depends on the LLVM version);
+      # both targets are installed for the probe tests, which build for each architecture
+      - name: Targets for the pinned toolchain
+        run: |
+          rustc -vV
+          rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: . -> target/g3-ir
+          key: g3-ir-${{ matrix.target }}
+      - name: Probe tests (each probe compiled for both architectures, expected verdicts)
+        run: python3 scripts/test_fneg_fma_ir_check.py
+      # runs even when the probe tests failed, so both results are reported
+      - name: No negated fma result in alice-edge's release IR
+        if: ${{ !cancelled() }}
+        env:
+          CARGO_TARGET_DIR: target/g3-ir
+          # every feature with library code but pyo3 (the Python bindings, a Python runtime) and
+          # sensors-hw (Linux GPIO / libudev): neither adds an fma call (both mul_add calls are in
+          # src/sensors.rs under `sensors`, which is in the set)
+          IR_FEATURES: std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi,serde-raw,edge-pipeline
+        run: python3 scripts/fneg_fma_ir_check.py --package alice-edge --features "$IR_FEATURES" --target ${{ matrix.target }}
+
+  # red when the changes job said run and a heavy job was skipped, cancelled or failed
+  gate:
+    name: Gate
+    if: always()
+    needs: [changes, ir]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: gate
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/changed_paths.py gate --needs-json "$NEEDS"

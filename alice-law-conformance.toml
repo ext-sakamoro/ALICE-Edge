@@ -47,9 +47,15 @@ note = "the replacement moved no golden: tests/determinism_golden.rs (object_fea
 reference_repo = "ALICE-Physics"
 
 [G3]
-status = "unverified"
+status = "pass"
+evidence = [
+    "tools/no-outer-fneg-of-fma (syntax-tree pre-check, byte-identical to ALICE-LOL main, built with --locked; ci.yml test job on the four-OS matrix and preflight): src/ tests/ examples/ benches/ with the exact counts of scripts/no-outer-fneg-of-fma-allowlist.toml (2 fma calls, both library code: src/sensors.rs GpsNmea::parse_gga, the NMEA degree / minute split of latitude and longitude), no [[allow]] entry",
+    "scripts/fneg_fma_ir_check.py + scripts/test_fneg_fma_ir_check.py (byte-identical to ALICE-LOL main; the 47 shared probes in tools/fneg-fma-ir-probes, each compiled for x86_64 and aarch64 with its expected verdict): .github/workflows/g3-ir.yml builds alice-edge's optimised IR with every feature that has library code but pyo3 and sensors-hw (neither adds an fma call) on a runner native to each target (x86_64-unknown-linux-gnu on ubuntu-latest, aarch64-unknown-linux-gnu on ubuntu-24.04-arm) and fails on any negated fma result, on fewer fma calls than the [[ir]] floor (2, the crate's own calls) or on 0; the changes job (scripts/changed_paths.py, shared with ALICE-DB) decides from .github/paths/g3-ir.txt, weekly schedule",
+    "measured on aarch64-apple-darwin (preflight, findings-only): 2839 functions, 2 fma calls, 0 negated",
+]
+mutant = "measured 2026-10-18, reverted: src/sensors.rs:865 written `-(lat_deg.mul_add(100.0, -lat_raw))` fails the syntax tool (1 violation). The IR check does not see this one: the only use of the value is `lat_min * INV_60`, and LLVM folds the negation into that multiply (-(f) * c becomes f * -c, the same bits as the negated form), so no fneg of the fma result is left in the IR (aarch64-apple-darwin: 2 fma calls, 0 negated) although the forbidden zero sign is still computed: a known blind spot of the IR half, reported to the kit's owner. The IR check's own teeth are the 47 shared probes (scripts/test_fneg_fma_ir_check.py) and, in ALICE-Analytics, a negated fma result that survives to the IR (2 findings)"
 since = ""
-note = "unverified: no violation is known; the only mul_add sites are src/sensors.rs:865 (lat_deg.mul_add(-100.0, lat_raw)) and src/sensors.rs:874 (lon_deg.mul_add(-100.0, lon_raw)), and neither negates the result. Missing: a syntax-tree checker for an outer negation of a fused multiply-add and a CI step running it, so nothing keeps this true."
+note = "the two fma calls split an NMEA ddmm.mmmm field into degrees and minutes; neither result is negated. The syntax tool is the gate on the source form; the IR gate catches a negation that survives optimisation; a negation LLVM folds into a following multiply by a constant is not seen there, so the syntax tool carries this site."
 reference_repo = "ALICE-LOL"
 
 [G4]

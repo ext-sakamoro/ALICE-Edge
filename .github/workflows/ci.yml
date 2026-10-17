@@ -191,6 +191,17 @@ jobs:
         if: runner.os != 'Windows'
         run: cargo test --release --test panic_contract --features "$FULL_FEATURES"
 
+      # ALICE-Law G3, syntax-tree pre-check (tools/no-outer-fneg-of-fma, byte-identical to
+      # ALICE-LOL's, built with --locked): its own tests, then the check over src/ tests/
+      # examples/ benches/ with the exact fma-call counts of
+      # scripts/no-outer-fneg-of-fma-allowlist.toml (2, both library code in src/sensors.rs);
+      # the IR half is g3-ir.yml
+      - name: No negated fma result (syntax tree, tests then check)
+        shell: bash
+        run: |
+          cargo test --quiet --locked --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml
+          cargo run --quiet --locked --release --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml -- --root .
+
       - name: Build examples (sensors + dashboard + mqtt)
         if: runner.os != 'Windows'
         run: cargo build --examples --features "std,sensors,dashboard,mqtt"
@@ -451,6 +462,9 @@ jobs:
       # OS's own bash
       - name: run_tests.sh (tests)
         run: python scripts/test_run_tests.py
+      # the path decision, gate and trigger lint of g3-ir.yml's changes job (shared with ALICE-DB)
+      - name: changed_paths oracle (path filter decision, gate and trigger lint)
+        run: python scripts/test_changed_paths.py
       - name: Entropy guard (tests)
         run: python scripts/test_entropy_guard.py
       - name: Entropy guard (no OS entropy / wall clock in production code)

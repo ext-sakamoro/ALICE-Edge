@@ -256,16 +256,16 @@ scripts/preflight.sh --quick    # static checks, clippy, builds, docs, cargo tes
 - [ALICE-Analytics](https://github.com/ext-sakamoro/ALICE-Analytics) — ダッシュボード用 sketch
 - [ALICE-Streaming-Protocol](https://github.com/ext-sakamoro/ALICE-Streaming-Protocol) — ストリーミングブリッジ
 
-<!-- law-integration:begin law=41db3adbbe1e04ab4a27e3ce1951bfd75389b817 -->
+<!-- law-integration:begin law=bd45312102fca0ccf37a9cbcd8c32a193eef513b -->
 ## ALICE-Law との統合
 
-ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
+ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `bd45312102fc` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
 
 | | |
 |---|---|
-| release train | alice-edge 0.2.1 (published)、Law への依存: あり |
-| 算術 | train の alice-det-math 0.5.0、算術の識別子 `135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000` この crate の要求は `alice-det-math = "0.5.1"` |
-| end to end 検査 | 対象 (`alice-edge = "0.2"`)、digest `966a78784bb4e3341ac6627d519db896f398176b71c2402b188294db6c8e3728`、aarch64 と x86_64 で同じ |
+| release train | alice-edge 0.4.0 (planned)、Law への依存: あり |
+| 算術 | train の alice-det-math 0.5.1、算術の識別子 `85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315` この crate の要求は `alice-det-math = "0.5.1"` |
+| end to end 検査 | 対象 (`alice-edge = ">=0.2, <0.4"`)、digest `9f7cf676708a272e3817ebbf0727c610f391e1547747af4307ee44d5523267c2`、aarch64 と x86_64 で同じ |
 
 ### 適合 (G1-G14)
 
@@ -273,7 +273,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 |---|---|---|
 | G1 no-libm-direct | 適合 | every banned method of the G1 list is in clippy.toml, every feature is linted with -D warnings (edge-pipeline and pyo3 included), and the canary plants every … |
 | G2 ieee-max-min | 適合 | the replacement moved no golden: tests/determinism_golden.rs (object_features, the ml and law scenarios included) passes unchanged in debug and release with … |
-| G3 no-outer-fneg-of-fma | 未確認 | unverified: no violation is known; the only mul_add sites are src/sensors.rs:865 (lat_deg.mul_add(-100.0, lat_raw)) and src/sensors.rs:874 … |
+| G3 no-outer-fneg-of-fma | 適合 | the two fma calls split an NMEA ddmm.mmmm field into degrees and minutes; neither result is negated. The syntax tool is the gate on the source form; the IR … |
 | G4 debug-release-arch-goldens | 適合 | Edge's arithmetic is Q16.16 integer for the fits; its float entry points are the Q16 conversion, the Kalman / fusion filters and the classifier features, which … |
 | G5 release-profile-test-leg | 適合 | the release steps sit in the same required test job as the debug ones, on all four legs. |
 | G6 semantics-id | 適合 | the identifier is a constant of this crate version: a dependency bump or a toolchain change that moved any pinned bits fails a golden, and re-recording a … |

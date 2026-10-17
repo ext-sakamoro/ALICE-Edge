@@ -109,6 +109,16 @@ python3 scripts/test_build_config_guard.py
 python3 scripts/build_config_guard.py
 python3 scripts/test_build_flags_check.py
 
+step "ci.yml / test + g3-ir.yml: no negated fma result (G3, syntax tree, then the IR findings on this host)"
+cargo test --quiet --locked --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml
+cargo run --quiet --locked --release --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml -- --root .
+# the floors are for the CI runners' targets (g3-ir.yml); here only the findings on this host
+python3 scripts/test_fneg_fma_ir_check.py
+python3 scripts/fneg_fma_ir_check.py --package alice-edge --features "std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi,serde-raw,edge-pipeline" --findings-only
+
+step "ci.yml / docs-lint: changed_paths tests (g3-ir.yml's changes job)"
+python3 scripts/test_changed_paths.py
+
 step "ci.yml / docs-lint: run_tests.sh (zero-test guard) tests"
 python3 scripts/test_run_tests.py
 

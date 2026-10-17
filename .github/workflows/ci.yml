@@ -47,6 +47,7 @@ jobs:
         os: [macos-latest, ubuntu-24.04-arm, ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
 
       # rust-toolchain.toml pins the exact version; the action installs it.
       - name: Install Rust toolchain
@@ -210,6 +211,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
 
       - name: Install Rust toolchain + target
         uses: dtolnay/rust-toolchain@stable
@@ -241,6 +243,7 @@ jobs:
         with:
           # the release tags: scripts/id_move_check.py compares with the newest one
           fetch-depth: 0
+      - uses: ./.github/actions/alice-siblings
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -325,6 +328,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
 
       # Must match `rust-version` in Cargo.toml; bump both in the same commit.
       - name: Install MSRV toolchain
@@ -347,6 +351,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -368,6 +373,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -383,6 +389,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -408,6 +415,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
@@ -415,6 +423,13 @@ jobs:
         run: python scripts/test_docs_lint.py
       - name: Docs lint (public documents, CHANGELOG structure)
         run: python scripts/docs_lint.py --check
+      # the ../ALICE-* path dependencies (until alice-zip 0.11, alice-db 0.6 and alice-sdf 7 are
+      # on crates.io): the clones are the commits in .github/alice-siblings (the action above),
+      # and preflight runs the same check locally
+      - name: ALICE sibling check (tests)
+        run: python scripts/test_alice_siblings_check.py
+      - name: ALICE sibling check (the clones are .github/alice-siblings)
+        run: python scripts/alice_siblings_check.py
       # the status codes of the C ABI are defined in src/ffi.rs,
       # bindings/alice_edge.h and bindings/AliceEdge.cs; the three must agree
       # (exactly 4 codes per file, 0 compared is red)
@@ -483,6 +498,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Effective rustc flags (no_std, std, full feature set)
@@ -502,6 +518,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -559,6 +576,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
       - name: Run actionlint
         uses: reviewdog/action-actionlint@v1
         with:

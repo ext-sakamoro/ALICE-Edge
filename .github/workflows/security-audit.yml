@@ -22,6 +22,11 @@ on:
       - 'deny.toml'
       - '.github/workflows/security-audit.yml'
       - 'scripts/stub_guard.sh'
+      - '.github/alice-siblings'
+      - '.github/actions/alice-siblings/**'
+      - 'scripts/alice_siblings_check.py'
+      - 'scripts/test_package_integrity.py'
+      - 'scripts/package_integrity.py'
   pull_request:
     branches: [main]
     paths:
@@ -30,6 +35,11 @@ on:
       - 'deny.toml'
       - '.github/workflows/security-audit.yml'
       - 'scripts/stub_guard.sh'
+      - '.github/alice-siblings'
+      - '.github/actions/alice-siblings/**'
+      - 'scripts/alice_siblings_check.py'
+      - 'scripts/test_package_integrity.py'
+      - 'scripts/package_integrity.py'
   schedule:
     # Monday 09:00 UTC = 18:00 JST; catches advisories published between commits
     - cron: '0 9 * * 1'
@@ -56,6 +66,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -99,6 +110,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -114,6 +126,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
 
       # Static Cargo.toml analysis; false positives go into
@@ -126,53 +139,31 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
       # the lock-free check below builds the pyo3 bindings, which need a Python
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
-      # publish される .crate に必要な file が全部入っているかを見る
-      #
-      # include_str! / include_bytes! が package 境界を越える、exclude を効かせ過ぎる、
-      # 必要 file が漏れる — これらは repo / workspace に file がある限り
-      # cargo build も cargo test も clippy も preflight も全部通り、
-      # crates.io から取得した利用者だけが compile 不能になる
-      #
-      # semver-checks は baseline を build するので結果的に検出するが、
-      # (a) 壊れた版を publish した後にしか分からない
-      # (b) 未 publish crate は baseline が無く発火しない ので予防にならない
-      - name: cargo package (.crate を作る)
-        # --no-verify: 未 publish の sibling に path dep がある repo では verify step が
-        #   registry 解決で落ちる 展開後の隔離 build が本体なので verify は不要
-        run: cargo package --no-verify --allow-dirty
-
-      - name: 展開して隔離 build
-        run: |
-          set -euo pipefail
-          crate=$(find target/package -maxdepth 1 -name '*.crate' | head -1)
-          [ -n "$crate" ] || { echo "::error::.crate が生成されていない"; exit 1; }
-          echo "packaged: $(basename "$crate") ($(du -h "$crate" | cut -f1))"
-          tmp=$(mktemp -d)
-          tar xzf "$crate" -C "$tmp"
-          cd "$tmp"/*/
-          # 親 workspace を継承すると member 扱いになり、境界を越えた file が
-          # 再び見えてしまう (検査の意味が消える) ので単独 package として build
-          printf '\n[workspace]\n' >> Cargo.toml
-          # sensors-hw が libudev-sys を引き、runner に system library libudev が無いと
-          # build script が panic する packaging 検査としては default features で成立する
-          cargo check --locked
-          # cargo package の verify も上の check も test target を build しない
-          # tests/ が include! する file や実行時に開く fixture が欠けると、
-          # 展開した crate の test だけが壊れるので、展開先で test を実行する
-          # (docs.rs の feature 集合、sensors-hw は上と同じ理由で外す)
-          cargo test --locked --tests --features "$FULL_FEATURES"
-          # a consumer resolves dependencies afresh, not from this repository's lock:
-          # drop the shipped lock and check that the newest compatible versions still
-          # build, every feature except sensors-hw (libudev, as above)
-          rm -f Cargo.lock
-          cargo check --lib --features "$FULL_FEATURES,edge-pipeline,pyo3"
-          grep -q '^name = "alice-det-math"$' Cargo.lock || { echo "::error::lock 無しの check で alice-det-math が解決されていない"; exit 1; }
+      # the published .crate builds on its own (scripts/package_integrity.py, shared with the
+      # other ALICE crates): packaged, unpacked and built as a standalone package; a path
+      # dependency whose required version only an unpublished sibling in .github/alice-siblings
+      # satisfies (checked against the crates.io index) is patched in and reported as
+      # `blocked`, every other packaging or build error fails
+      # - shipped-lock check with the default features (sensors-hw pulls libudev-sys, which the
+      #   runner lacks); the unpacked crate's tests with the docs.rs feature set (a missing
+      #   include! file or fixture breaks only the published crate's tests); a fresh resolution
+      #   of every feature except sensors-hw, which must resolve alice-det-math
+      - name: Package integrity (tests)
+        run: python3 scripts/test_package_integrity.py
+      - name: Package integrity (package, unpack, build on its own)
+        run: >-
+          python3 scripts/package_integrity.py
+          --locked-check-args=
+          "--test-in-package=--tests --features $FULL_FEATURES"
+          "--check-args=--lib --features $FULL_FEATURES,edge-pipeline,pyo3"
+          --expect-in-lock alice-det-math
 
   coverage:
     name: Coverage (cargo-llvm-cov, informational)
@@ -180,6 +171,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
@@ -209,6 +201,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
+      - uses: ./.github/actions/alice-siblings
 
       # Production path (src/) must not carry todo! / unimplemented! /
       # panic!("...STUB...") placeholders or dbg!; 0 files compared is red.

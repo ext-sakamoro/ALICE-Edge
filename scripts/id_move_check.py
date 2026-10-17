@@ -21,7 +21,13 @@ For each identifier that exists at the base and has another value now:
   as it is (it must pass, one test run) and with the old value taken out of the previous list's
   definition (located by its rustdoc span; the value written as `hex32("…")` / a hex string, as
   32 byte literals, or as `[0xNN; 32]`) (it must fail). A test that passes without the old value
-  does not depend on it, and naming none fails, so the list cannot be filled to dodge a bump;
+  does not depend on it, and naming none fails, so the list cannot be filled to dodge a bump.
+  A previous list this crate re-exports from another crate (`pub use upstream::PREVIOUS_…`) is
+  followed to its definition when that crate is a sibling repository pinned in
+  .github/alice-siblings (`<Repo> <40-hex SHA>`): the sibling must be at the pinned commit and
+  clean, the list is located by the sibling's rustdoc span, and the value is taken out of a
+  copy of the sibling laid out next to a copy of this crate (the real sibling is never
+  changed). A re-export that does not resolve that way fails, with the reason;
 - otherwise (not in the list, or no list) the move is a change of meaning and the version must
   be a breaking step from the base's (a major for 1.x and later, a minor or a major for 0.x);
 - in both cases CHANGELOG.md must name both values (their first 8 hex digits).
@@ -84,7 +90,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 CONFIG = "scripts/id_move.toml"
@@ -515,9 +521,77 @@ def run_named_test(crate_dir: Path, ref: str, target_dir: Path, features: tuple[
     return r.returncode == 0, ran, (r.stdout + r.stderr).strip()[-400:]
 
 
+# a POSIX string, not a Path: it appears in messages that must read the same on every OS
+SIBLINGS_FILE = ".github/alice-siblings"
+SIBLING_LINE = re.compile(r"(ALICE-[A-Za-z0-9-]+) ([0-9a-f]{40})")
+SIBLING_PATH = re.compile(r'path\s*=\s*"\.\./(ALICE-[A-Za-z0-9-]+)"')
+
+
+def listed_siblings(root: Path) -> tuple[dict[str, str], list[str]]:
+    """the repositories in .github/alice-siblings ("<Repo> <40-hex SHA>" per line) as {repo: sha}"""
+    path = root / SIBLINGS_FILE
+    if not path.is_file():
+        return {}, [f"{SIBLINGS_FILE} is missing"]
+    listed, problems = {}, []
+    for no, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = " ".join(raw.split("#", 1)[0].split())
+        if not line:
+            continue
+        m = SIBLING_LINE.fullmatch(line)
+        if not m or m.group(1) in listed:
+            problems.append(f"{SIBLINGS_FILE}:{no}: not one '<ALICE-Repo> <40-hex SHA>' line: {raw!r}")
+        else:
+            listed[m.group(1)] = m.group(2)
+    return listed, problems
+
+
+def reexport_target(doc: dict, list_name: str) -> tuple[str, list[str]] | None:
+    """(defining crate, item path) of a `pub use other::LIST` re-export named `list_name`"""
+    for item in doc.get("index", {}).values():
+        use = item.get("inner", {}).get("use")
+        if not use or use.get("is_glob") or use.get("name") != list_name or use.get("id") is None:
+            continue
+        target = doc.get("paths", {}).get(str(use["id"]))
+        if not target:
+            continue
+        crate = doc.get("external_crates", {}).get(str(target.get("crate_id")), {}).get("name")
+        if crate and target.get("crate_id") != 0:
+            return crate, list(target.get("path", []))
+    return None
+
+
+def constant_span(doc: dict, item_path: list[str]) -> tuple[str, int, int] | None:
+    """source span of the constant whose rustdoc path is `item_path` (the defining crate's doc)"""
+    for iid, item in doc.get("index", {}).items():
+        if item.get("name") != item_path[-1] or "constant" not in item.get("inner", {}) or not item.get("span"):
+            continue
+        known = doc.get("paths", {}).get(str(iid), {}).get("path")
+        if known is not None and known != item_path:
+            continue
+        sp = item["span"]
+        return sp["filename"], sp["begin"][0], sp["end"][0]
+    return None
+
+
+def copy_tracked(src: Path, dst: Path) -> None:
+    """the tracked and untracked-but-not-ignored files of the repository at `src`, with new mtimes
+    (a build left in the shared target dir from an earlier, changed copy must not look newer)"""
+    files = subprocess.run(["git", "-C", str(src), "ls-files", "-co", "--exclude-standard"],
+                           capture_output=True, text=True, check=True).stdout.split("\n")
+    for f in files:
+        if not f or f.startswith("target/"):
+            continue
+        s = src / f
+        if s.is_file():
+            d = dst / f
+            d.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(s, d)
+
+
 class PreviousVerifier:
     """runs each [[id]]'s previous-tests against a copy of the working tree with the old value
-    taken out of the previous list"""
+    taken out of the previous list; a list this crate re-exports from a sibling repository listed
+    in .github/alice-siblings is taken out of a copy of that sibling laid out next to the copy"""
 
     def __init__(self, root: Path, cfg: Config, doc: dict | None, target_dir: Path):
         self.root, self.cfg, self.doc, self.target = root, cfg, doc, target_dir
@@ -529,6 +603,41 @@ class PreviousVerifier:
                 sp = item["span"]
                 return sp["filename"], sp["begin"][0], sp["end"][0]
         return None
+
+    def _sibling_span(self, spec: IdSpec) -> tuple[str, tuple[str, int, int]] | str:
+        """(sibling repository, span in it) of a re-exported previous list, or why it cannot be read"""
+        list_name = spec.previous.rsplit("::", 1)[-1]
+        target = reexport_target(self.doc or {}, list_name)
+        if target is None:
+            return (f"{spec.previous} has no source span in the rustdoc JSON and is not a re-export of another "
+                    f"crate's constant, so the old value cannot be taken out of it")
+        crate, item_path = target
+        listed, problems = listed_siblings(self.root)
+        if problems:
+            return f"{spec.previous} re-exports {'::'.join(item_path)}: " + "; ".join(problems)
+        top = self.root.resolve()
+        for repo, sha in listed.items():
+            manifest = top.parent / repo / "Cargo.toml"
+            if not manifest.is_file():
+                continue
+            pkg = tomllib.loads(manifest.read_text(encoding="utf-8")).get("package", {})
+            if str(pkg.get("name", "")).replace("-", "_") != crate:
+                continue
+            sib = top.parent / repo
+            head = git(sib, "rev-parse", "HEAD").strip()
+            if head != sha:
+                return (f"{spec.previous} re-exports {'::'.join(item_path)} from ../{repo}, which is at {head[:12]} "
+                        f"but {SIBLINGS_FILE} pins {sha[:12]}")
+            if git(sib, "status", "--porcelain", "--untracked-files=no").strip():
+                return f"{spec.previous} re-exports {'::'.join(item_path)} from ../{repo}, which has uncommitted changes"
+            sib_doc = rustdoc_json(sib, replace(self.cfg, package=str(pkg["name"]), doc_features=None))
+            span = constant_span(sib_doc, item_path)
+            if span is None:
+                return (f"{spec.previous} re-exports {'::'.join(item_path)} from ../{repo}, but its rustdoc JSON has "
+                        f"no constant there with a source span")
+            return repo, span
+        return (f"{spec.previous} re-exports {'::'.join(item_path)} from {crate}, which is not a sibling repository "
+                f"listed in {SIBLINGS_FILE} (checked out next to this one)")
 
     def __call__(self, spec: IdSpec, old: str) -> tuple[list[str], list[str]]:
         problems, passed_refs = [], []
@@ -544,26 +653,42 @@ class PreviousVerifier:
                 problems.append(f"{spec.path}: previous-tests {ref}: {why}")
         if problems:
             return [], problems
-        span = self._list_span(spec)
-        if span is None:
-            return [], [f"{spec.path}: {spec.previous} has no source span in the rustdoc JSON, so the old value cannot be taken out of it"]
-        rel, begin, end = span
-        # the copy sits next to the repository root so sibling path dependencies resolve
         top = self.root.resolve()
-        copy = top.parent / f".{top.name}.id-move-previous-{os.getpid()}"
+        own = self._list_span(spec)
+        if own is not None:
+            edit_repo, (rel, begin, end) = None, own
+        else:
+            found = self._sibling_span(spec)
+            if isinstance(found, str):
+                return [], [f"{spec.path}: {found}"]
+            edit_repo, (rel, begin, end) = found
+        if edit_repo is None:
+            # the copy sits next to the repository root so sibling path dependencies resolve
+            base = top.parent
+            copy = base / f".{top.name}.id-move-previous-{os.getpid()}"
+            cleanup = copy
+        else:
+            # a fresh parent holds the copy, the copy of the sibling to change, and links to the
+            # other siblings the manifests name, so `../<Repo>` resolves inside it
+            cleanup = top.parent / f".id-move-previous-{os.getpid()}"
+            base = cleanup
+            copy = base / top.name
         try:
-            files = subprocess.run(["git", "-C", str(top), "ls-files", "-co", "--exclude-standard"],
-                                   capture_output=True, text=True, check=True).stdout.split("\n")
-            for f in files:
-                if not f or f.startswith("target/"):
-                    continue
-                src = top / f
-                if src.is_file():
-                    dst = copy / f
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    # new mtimes: a build left in the target dir from an earlier (changed) copy
-                    # must not look newer than these sources
-                    shutil.copy(src, dst)
+            copy_tracked(top, copy)
+            if edit_repo is not None:
+                named = set(listed_siblings(top)[0])
+                for m in (top / "Cargo.toml", top / "fuzz" / "Cargo.toml"):
+                    if m.is_file():
+                        named |= set(SIBLING_PATH.findall(m.read_text(encoding="utf-8")))
+                for repo in sorted(named - {edit_repo}):
+                    if (top.parent / repo).exists():
+                        (base / repo).symlink_to(top.parent / repo, target_is_directory=True)
+                copy_tracked(top.parent / edit_repo, base / edit_repo)
+                where = f"../{edit_repo}/{Path(rel).as_posix()}"
+                path = base / edit_repo / rel
+            else:
+                where = rel
+                path = copy / crate_dir.relative_to(top) / rel
             copy_crate = copy / crate_dir.relative_to(top)
             for ref in spec.previous_tests:
                 ok, ran, out = run_named_test(copy_crate, ref, self.target, self.cfg.doc_features)
@@ -571,12 +696,11 @@ class PreviousVerifier:
                     problems.append(f"{spec.path}: previous-tests {ref} does not pass as it is ({ran} run): {out}")
             if problems:
                 return [], problems
-            path = copy_crate / rel
             lines = path.read_text(encoding="utf-8").split("\n")
             block = "\n".join(lines[begin - 1:end])
             changed = remove_value(block, old)
             if changed is None:
-                return [], [f"{spec.path}: {old[:8]} is not written in {rel}:{begin}-{end} ({list_name}) as a hex string, "
+                return [], [f"{spec.path}: {old[:8]} is not written in {where}:{begin}-{end} ({list_name}) as a hex string, "
                             f"32 byte literals or [0xNN; 32], so the tool cannot take it out to test the claim"]
             lines[begin - 1:end] = changed.split("\n")
             path.write_text("\n".join(lines), encoding="utf-8")
@@ -584,7 +708,7 @@ class PreviousVerifier:
                 ok, ran, out = run_named_test(copy_crate, ref, self.target, self.cfg.doc_features)
                 if ok:
                     problems.append(f"{spec.path}: previous-tests {ref} still passes with {old[:8]} taken out of "
-                                    f"{list_name}: it does not depend on the old value")
+                                    f"{list_name} ({where}): it does not depend on the old value")
                 elif ran < 1:
                     # a build that breaks is not a test that tells the old value apart
                     problems.append(f"{spec.path}: previous-tests {ref} did not run with {old[:8]} taken out of "
@@ -592,7 +716,7 @@ class PreviousVerifier:
                 else:
                     passed_refs.append(ref)
         finally:
-            shutil.rmtree(copy, ignore_errors=True)
+            shutil.rmtree(cleanup, ignore_errors=True)
         return passed_refs, problems
 
 

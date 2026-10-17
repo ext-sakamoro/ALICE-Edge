@@ -5,6 +5,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- CI: 隣の checkout から取る依存 (`.github/alice-siblings` に並べた ALICE-Zip / ALICE-DB / ALICE-Analytics / ALICE-SDF を各 40 桁の commit に固定) を build する全 job が `.github/actions/alice-siblings` で clone し、`scripts/alice_siblings_check.py` と試験が手元の checkout が同じ commit かを確かめる (docs-lint の 3 OS と preflight) package integrity は `scripts/package_integrity.py` と試験にした crates.io に要求を満たす公開版が無く隣の checkout だけが満たす依存は `blocked` と件数で報告し、それ以外の package / build の失敗は落とす (同梱の lock の check、展開した crate の試験、新しい解決の check は従来どおり) `scripts/id_move_check.py` と試験は再 export した以前の識別子の一覧を隣の repo の定義まで辿る版にした ALICE-Analytics / ALICE-DB と同じ中身の file
 
 - CI: README の ALICE-Law 節の検査 (law-readme-block.yml) を preflight でも同じに走らせる `scripts/law_readme_block_check.py` と試験 `scripts/test_law_readme_block_check.py` を足した (ALICE-DB と同じ中身の共有 file、workflow の check の引数と節の pin の生成器を使い、比較 0 件・件数の行なし・pin が無い・fetch の失敗は失敗、未 commit の入力は検査していないと表示) 試験は CI と preflight で走る
 - CI (ALICE-Law G9): `scripts/id_move_check.py` (ALICE の識別子を持つ crate で共有、ALICE-Zip と同じ file) を追加 最新の release tag の公開版と作業 tree で `EDGE_SEMANTICS_ID` の値を読み、動いたのに破壊的な版になっていない / 公開版の値が `PREVIOUS_EDGE_SEMANTICS_IDS` に無い / CHANGELOG が両方の値を書いていない時に fail する (ci.yml の clippy job と preflight)

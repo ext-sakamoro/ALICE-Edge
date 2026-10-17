@@ -61,6 +61,13 @@ step "ci.yml / docs-lint: tests + public documents / CHANGELOG structure"
 python3 scripts/test_docs_lint.py
 python3 scripts/docs_lint.py --check
 
+step "ci.yml / docs-lint: ALICE siblings (each ../ALICE-* is the commit in .github/alice-siblings)"
+python3 scripts/test_alice_siblings_check.py
+python3 scripts/alice_siblings_check.py
+
+step "security-audit.yml / package-integrity: tests (the packaging run itself is CI only)"
+python3 scripts/test_package_integrity.py
+
 step "ci.yml / python: pyproject license equals the crate license"
 python3 scripts/test_check_py_license.py
 python3 scripts/check_py_license.py

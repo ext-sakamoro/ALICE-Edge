@@ -1,0 +1,42 @@
+name: ALICE sibling checkouts
+description: >-
+  Clones each repository listed in .github/alice-siblings ("<Repo> <40-hex commit SHA>" per
+  line, "#" comments) next to this one ("$GITHUB_WORKSPACE/../<Repo>", the path the manifests
+  name) and checks out that commit. Fails when a line is malformed, nothing is listed, or a
+  checkout ends at another commit.
+runs:
+  using: composite
+  steps:
+    - name: ALICE siblings at .github/alice-siblings
+      shell: bash
+      run: |
+        set -euo pipefail
+        list="$GITHUB_WORKSPACE/.github/alice-siblings"
+        n=0
+        while IFS= read -r line || [ -n "$line" ]; do
+          line="${line%%#*}"
+          line="$(printf '%s' "$line" | tr -d '\r' | xargs)"
+          [ -z "$line" ] && continue
+          read -r repo ref extra <<< "$line"
+          if ! [[ "$repo" =~ ^ALICE-[A-Za-z0-9-]+$ && "$ref" =~ ^[0-9a-f]{40}$ && -z "${extra:-}" ]]; then
+            echo "::error::.github/alice-siblings: not '<ALICE-Repo> <40-hex SHA>': '$line'"
+            exit 1
+          fi
+          dest="$GITHUB_WORKSPACE/../$repo"
+          if [ ! -d "$dest/.git" ]; then
+            git clone -q --filter=blob:none "https://github.com/ext-sakamoro/$repo" "$dest"
+          fi
+          git -C "$dest" cat-file -e "$ref^{commit}" 2>/dev/null || git -C "$dest" fetch -q origin "$ref"
+          git -C "$dest" checkout -q --detach "$ref"
+          got=$(git -C "$dest" rev-parse HEAD)
+          if [ "$got" != "$ref" ]; then
+            echo "::error::$repo sibling is at $got, .github/alice-siblings says $ref"
+            exit 1
+          fi
+          echo "$repo sibling at $got"
+          n=$((n + 1))
+        done < "$list"
+        if [ "$n" -eq 0 ]; then
+          echo "::error::.github/alice-siblings lists no repository (cloned nothing)"
+          exit 1
+        fi

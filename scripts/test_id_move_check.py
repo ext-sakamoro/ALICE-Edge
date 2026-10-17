@@ -398,5 +398,129 @@ class EndToEnd(unittest.TestCase):
             imc.check(d, None, "tag")
 
 
+
+@unittest.skipUnless(shutil.which("cargo") and shutil.which("git"), "needs cargo and git")
+class ReExportedPreviousList(unittest.TestCase):
+    """The crate stamps an upstream identifier and re-exports the upstream previous list; the
+    upstream is a sibling repository pinned in .github/alice-siblings"""
+
+    ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
+               GIT_COMMITTER_EMAIL="t@t")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.target = Path(tempfile.mkdtemp(prefix="id-move-reexport-target-"))
+        os.environ["ID_MOVE_TARGET_DIR"] = str(cls.target)
+
+    @classmethod
+    def tearDownClass(cls):
+        os.environ.pop("ID_MOVE_TARGET_DIR", None)
+        shutil.rmtree(cls.target, ignore_errors=True)
+
+    def git(self, d: Path, *args: str) -> str:
+        return subprocess.run(["git", "-C", str(d), *args], check=True, env=self.ENV,
+                              capture_output=True, text=True).stdout.strip()
+
+    def setUp(self):
+        self.parent = Path(tempfile.mkdtemp(prefix="id-move-reexport-"))
+        self.up = self.parent / "ALICE-Upstream"
+        (self.up / "src").mkdir(parents=True)
+        (self.up / "Cargo.toml").write_text('[package]\nname = "alice-upstream"\nversion = "0.11.0"\nedition = "2021"\n\n[workspace]\n')
+        self.upstream_list("[0x11; 32]")
+        self.git(self.up, "init", "-q")
+        self.git(self.up, "config", "maintenance.auto", "false")
+        self.git(self.up, "add", "-A")
+        self.git(self.up, "commit", "-qm", "one")
+        self.first = self.git(self.up, "rev-parse", "HEAD")
+        (self.up / "README").write_text("two\n")
+        self.git(self.up, "add", "-A")
+        self.git(self.up, "commit", "-qm", "two")
+        self.d = self.parent / "ALICE-Probe"
+        (self.d / "src").mkdir(parents=True)
+        (self.d / "tests").mkdir()
+        (self.d / ".github").mkdir()
+        (self.d / "Cargo.toml").write_text(
+            '[package]\nname = "probe-crate"\nversion = "0.6.0"\nedition = "2021"\n\n[dependencies]\n'
+            'alice-upstream = { path = "../ALICE-Upstream", version = ">=0.11, <0.12" }\n\n[workspace]\n')
+        (self.d / "src" / "lib.rs").write_text("pub use alice_upstream::{PREVIOUS_SEMANTICS_IDS, SEMANTICS_ID};\n")
+        self.previous_test("[0x11; 32]")
+        self.pin(self.git(self.up, "rev-parse", "HEAD"))
+        self.git(self.d, "init", "-q")
+        self.git(self.d, "add", "-A")
+        self.git(self.d, "commit", "-qm", "probe")
+        self.cfg = imc.Config("probe-crate", "Cargo.toml", (), True, ("v{version}",),
+                              (imc.IdSpec("probe_crate::SEMANTICS_ID", "probe_crate::PREVIOUS_SEMANTICS_IDS",
+                                          ("tests/previous.rs::old",)),))
+
+    def tearDown(self):
+        shutil.rmtree(self.parent, ignore_errors=True)
+
+    def upstream_list(self, prev: str):
+        (self.up / "src" / "lib.rs").write_text(
+            "pub const SEMANTICS_ID: [u8; 32] = [0x22; 32];\n"
+            f"pub const PREVIOUS_SEMANTICS_IDS: &[[u8; 32]] = &[{prev}];\n")
+
+    def previous_test(self, value: str):
+        (self.d / "tests" / "previous.rs").write_text(
+            f"#[test]\nfn old() {{ assert!(probe_crate::PREVIOUS_SEMANTICS_IDS.contains(&{value})); }}\n")
+
+    def pin(self, sha: str):
+        (self.d / ".github" / "alice-siblings").write_text(f"ALICE-Upstream {sha}\n")
+
+    def verify(self):
+        doc = imc.rustdoc_json(self.d, self.cfg)
+        return imc.PreviousVerifier(self.d, self.cfg, doc, self.target)(self.cfg.ids[0], "11" * 32)
+
+    def test_the_old_value_is_taken_out_of_the_pinned_sibling(self):
+        before = (self.up / "src" / "lib.rs").read_text()
+        passed, problems = self.verify()
+        self.assertEqual(problems, [])
+        self.assertEqual(passed, ["tests/previous.rs::old"])
+        self.assertEqual((self.up / "src" / "lib.rs").read_text(), before)
+        self.assertFalse(any(p.name.startswith(".id-move-previous-") for p in self.parent.iterdir()))
+
+    def test_a_sibling_without_the_old_value_fails(self):
+        self.upstream_list("[0x33; 32]")
+        self.git(self.up, "commit", "-qam", "other value")
+        self.pin(self.git(self.up, "rev-parse", "HEAD"))
+        self.previous_test("[0x33; 32]")
+        passed, problems = self.verify()
+        self.assertEqual(passed, [])
+        self.assertTrue(any("11111111 is not written in ../ALICE-Upstream/src/lib.rs" in p for p in problems), problems)
+
+    def test_a_test_that_does_not_depend_on_the_sibling_value_fails(self):
+        (self.d / "tests" / "previous.rs").write_text("#[test]\nfn old() { let _ = probe_crate::PREVIOUS_SEMANTICS_IDS; }\n")
+        passed, problems = self.verify()
+        self.assertEqual(passed, [])
+        self.assertTrue(any("still passes" in p or "names no" in p or "does not" in p for p in problems), problems)
+
+    def test_a_sibling_at_another_commit_than_the_pin_fails(self):
+        self.pin(self.first)
+        passed, problems = self.verify()
+        self.assertEqual(passed, [])
+        self.assertTrue(any("but .github/alice-siblings pins" in p for p in problems), problems)
+
+    def test_a_dirty_sibling_fails(self):
+        (self.up / "README").write_text("dirty\n")
+        passed, problems = self.verify()
+        self.assertTrue(any("uncommitted changes" in p for p in problems), problems)
+
+    def test_a_re_export_from_an_unlisted_crate_fails(self):
+        # the listed sibling is a real checkout of another crate: only the name match tells them apart
+        other = self.parent / "ALICE-Other"
+        (other / "src").mkdir(parents=True)
+        (other / "Cargo.toml").write_text('[package]\nname = "alice-other"\nversion = "0.1.0"\nedition = "2021"\n\n[workspace]\n')
+        (other / "src" / "lib.rs").write_text("pub const PREVIOUS_SEMANTICS_IDS: &[[u8; 32]] = &[[0x11; 32]];\n")
+        self.git(other, "init", "-q")
+        self.git(other, "add", "-A")
+        self.git(other, "commit", "-qm", "other")
+        (self.d / ".github" / "alice-siblings").write_text(f"ALICE-Other {self.git(other, 'rev-parse', 'HEAD')}\n")
+        passed, problems = self.verify()
+        self.assertEqual(passed, [])
+        self.assertTrue(any("not a sibling repository listed" in p for p in problems), problems)
+        (self.d / ".github" / "alice-siblings").unlink()
+        passed, problems = self.verify()
+        self.assertTrue(any(".github/alice-siblings is missing" in p for p in problems), problems)
+
 if __name__ == "__main__":
     unittest.main()

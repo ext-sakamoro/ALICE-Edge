@@ -14,17 +14,23 @@ their iterators, std::thread::Builder / JoinHandle / Scope; disallowed-methods
 available_parallelism), which aliases and glob imports cannot evade.
 
 Each hit must be listed in scripts/order_allowlist.toml as
-`"<file>::<pattern>" = { count = N, reason = "..." }`: the exact number of
-lines with that pattern in that file and why the order cannot reach an output
-(membership or keyed lookup only, a sorted copy before output, ...). An
-unlisted hit, a count that differs, a stale entry, a reason shorter than
-MIN_REASON, or reading no file fails.
+`"<file>::<pattern>" = { count = N, lines = ["<sha256>", ...], reason = "..." }`:
+the exact number of lines with that pattern in that file, the SHA-256 of each
+of those lines (the source line with surrounding whitespace removed, in file
+order) and why the order cannot reach an output (membership or keyed lookup
+only, a sorted copy before output, ...). The hashes pin what was reviewed:
+rewriting an allowed line (an ordered collect turned into appends in
+completion order on the same line) changes its hash and fails until the list
+is updated next to the reason. An unlisted hit, a count that differs, a line
+whose hash differs, a stale entry, a reason shorter than MIN_REASON, or
+reading no file fails. A Cargo.toml dependency entry has no lines.
 
 usage: scripts/order_guard.py [--root DIR]
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 import tomllib
@@ -37,7 +43,9 @@ MIN_REASON = 12
 PATTERNS = {
     "HashMap": r"\b(?:HashMap|FxHashMap|AHashMap|IndexMap|DashMap)\b|\bhash_map\s*::",
     "HashSet": r"\b(?:HashSet|FxHashSet|AHashSet|IndexSet|DashSet)\b|\bhash_set\s*::",
-    "parallel": r"\brayon\b|\.par_(?:iter|iter_mut|chunks|chunks_mut|bridge|extend)\b|\binto_par_iter\b|\bcrossbeam\b",
+    # every rayon parallel method (par_iter, par_windows, par_chunks_exact, par_sort_*,
+    # par_drain, par_split, ...): a method an allowed `use rayon::prelude::*` brings in
+    "parallel": r"\brayon\b|\.par_\w+|\binto_par_\w+|\bpar_bridge\b|\bcrossbeam\b",
     # any path through std::thread, a braced or glob import of it, or a glob of std
     # (sleep / yield_now / current / park only wait or name the calling thread)
     "threads": r"\bthread\s*::\s*(?!(?:sleep|yield_now|current|park|park_timeout)\b)[\w{*]"
@@ -48,17 +56,27 @@ PATTERNS = {
 }
 
 
-def scan(root: Path) -> tuple[dict[str, int], int]:
+def line_hash(line: str) -> str:
+    return hashlib.sha256(line.strip().encode("utf-8")).hexdigest()
+
+
+def scan(root: Path) -> tuple[dict[str, int], int, dict[str, list[str]]]:
+    """Hit counts per `<file>::<pattern>`, files read, and the hit source lines (stripped)."""
     counts: dict[str, int] = {}
+    texts: dict[str, list[str]] = {}
     files = sorted((root / "src").rglob("*.rs")) if (root / "src").exists() else []
     rxs = {name: re.compile(rx) for name, rx in PATTERNS.items()}
     for path in files:
         rel = path.relative_to(root).as_posix()
-        for _, code in production_lines(path.read_text(encoding="utf-8")):
+        text = path.read_text(encoding="utf-8")
+        raw = text.splitlines()
+        for n, code in production_lines(text):
             for name, rx in rxs.items():
                 if rx.search(code):
-                    counts[f"{rel}::{name}"] = counts.get(f"{rel}::{name}", 0) + 1
-    return counts, len(files)
+                    key = f"{rel}::{name}"
+                    counts[key] = counts.get(key, 0) + 1
+                    texts.setdefault(key, []).append(raw[n - 1].strip())
+    return counts, len(files), texts
 
 
 # dependencies whose presence means a parallel combination or an unspecified
@@ -88,7 +106,7 @@ def order_deps(root: Path) -> list[str]:
 def check(root: Path) -> tuple[list[str], int, int]:
     allow_path = root / "scripts" / "order_allowlist.toml"
     allowed = tomllib.loads(allow_path.read_text(encoding="utf-8")).get("allow", {}) if allow_path.exists() else {}
-    counts, files = scan(root)
+    counts, files, texts = scan(root)
     problems = []
     if files == 0:
         return ["no src file read (compared nothing)"], 0, 0
@@ -98,6 +116,13 @@ def check(root: Path) -> tuple[list[str], int, int]:
             problems.append(f"{key}: {n} line(s) in production code, not in scripts/order_allowlist.toml")
         elif entry.get("count") != n:
             problems.append(f"{key}: {n} line(s), scripts/order_allowlist.toml says {entry.get('count')}")
+        else:
+            got = [line_hash(t) for t in texts[key]]
+            want = entry.get("lines")
+            if not isinstance(want, list) or want != got:
+                shown = "; ".join(f"{h} {t}" for h, t in zip(got, texts[key]))
+                problems.append(f"{key}: the allowed lines are not the reviewed ones "
+                                f"(lines in scripts/order_allowlist.toml differ; now: {shown})")
     for dep in order_deps(root):
         key = f"Cargo.toml::{dep}"
         counts[key] = 1

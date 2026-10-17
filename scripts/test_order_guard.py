@@ -41,7 +41,10 @@ class OrderGuardTest(unittest.TestCase):
 
     def test_listed_site_passes_and_drift_fails(self):
         src = {"src/store.rs": "use std::collections::HashMap;\npub struct S { m: HashMap<u32, u32> }\n"}
-        ok = '[allow]\n"src/store.rs::HashMap" = { count = 2, reason = "keyed lookup only, never iterated" }\n'
+        h1 = order_guard.line_hash("use std::collections::HashMap;")
+        h2 = order_guard.line_hash("pub struct S { m: HashMap<u32, u32> }")
+        ok = ('[allow]\n"src/store.rs::HashMap" = { count = 2, '
+              f'lines = ["{h1}", "{h2}"], reason = "keyed lookup only, never iterated" }}\n')
         self.assertEqual(order_guard.check(self.tree(dict(src, **{"scripts/order_allowlist.toml": ok})))[0], [])
         wrong = ok.replace("count = 2", "count = 1")
         problems = order_guard.check(self.tree(dict(src, **{"scripts/order_allowlist.toml": wrong})))[0]
@@ -49,6 +52,29 @@ class OrderGuardTest(unittest.TestCase):
         stale = ok + '"src/gone.rs::HashSet" = { count = 1, reason = "removed some time ago" }\n'
         problems = order_guard.check(self.tree(dict(src, **{"scripts/order_allowlist.toml": stale})))[0]
         self.assertTrue(any("stale" in p for p in problems), problems)
+
+    def test_a_rewritten_allowed_line_fails_until_its_hash_is_listed(self):
+        # the count stays the same, the content does not: an ordered collect turned into
+        # appends in completion order on the one allowed line
+        before = "pub fn f(v: &[u32]) -> Vec<u32> { v.par_iter().map(|x| x + 1).collect() }\n"
+        after = ("pub fn f(v: &[u32]) -> Vec<u32> { let m = std::sync::Mutex::new(Vec::new()); "
+                 "v.par_iter().for_each(|x| m.lock().unwrap().push(x + 1)); m.into_inner().unwrap() }\n")
+        allow = ('[allow]\n"src/lib.rs::parallel" = { count = 1, '
+                 f'lines = ["{order_guard.line_hash(before)}"], reason = "indexed collect keeps the order" }}\n')
+        self.assertEqual(order_guard.check(self.tree({"src/lib.rs": before, "scripts/order_allowlist.toml": allow}))[0], [])
+        problems = order_guard.check(self.tree({"src/lib.rs": after, "scripts/order_allowlist.toml": allow}))[0]
+        self.assertTrue(any("not the reviewed ones" in p for p in problems), problems)
+        # an entry without lines fails as well
+        bare = allow.replace(f'lines = ["{order_guard.line_hash(before)}"], ', "")
+        problems = order_guard.check(self.tree({"src/lib.rs": before, "scripts/order_allowlist.toml": bare}))[0]
+        self.assertTrue(any("not the reviewed ones" in p for p in problems), problems)
+
+    def test_every_rayon_parallel_method_is_found(self):
+        for call in ("v.par_windows(2).map(|w| w[0] * w[1]).sum::<f64>()", "v.par_chunks_exact(4).count()",
+                     "v.par_sort_unstable()", "v.par_drain(..).count()", "v.par_split(|x| *x == 0.0).count()",
+                     "s.into_par_iter().count()", "it.par_bridge().count()"):
+            problems = order_guard.check(self.tree({"src/lib.rs": f"pub fn f() {{ let _ = {call}; }}\n"}))[0]
+            self.assertTrue(any("src/lib.rs::parallel" in p for p in problems), (call, problems))
 
     def test_import_forms_of_threads_and_hash_modules_are_found(self):
         for line in ("use std::thread::{self as t};", "use std::thread::{spawn};", "use std::thread::*;",

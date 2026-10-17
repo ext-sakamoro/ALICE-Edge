@@ -40,21 +40,22 @@ fn svo_bounds(points: &[[f32; 3]]) -> ([f32; 3], [f32; 3]) {
     }
 }
 
-/// A +0 / -0 coordinate pair gives min -0 and max +0 in both orders.
+/// A +0 / -0 coordinate pair on every axis gives min -0 and max +0 on every
+/// axis, in both orders of the pair (two points: three or more fit a plane
+/// and take the primitive path instead of the SVO bounds).
 #[cfg(feature = "sdf")]
 #[test]
 fn point_cloud_bounds_of_a_signed_zero_pair() {
-    for points in [
-        [[0.0, -0.0, 1.0], [-0.0, 0.0, 2.0]],
-        [[-0.0, 0.0, 1.0], [0.0, -0.0, 2.0]],
-    ] {
+    let pairs = [
+        [[0.0, 0.0, 0.0], [-0.0, -0.0, -0.0]],
+        [[-0.0, -0.0, -0.0], [0.0, 0.0, 0.0]],
+        [[0.0, -0.0, 0.0], [-0.0, 0.0, -0.0]],
+        [[-0.0, 0.0, -0.0], [0.0, -0.0, 0.0]],
+    ];
+    for points in pairs {
         let (min, max) = svo_bounds(&points);
-        assert_eq!(
-            bits(min),
-            bits([-0.0, -0.0, 1.0]),
-            "{points:?}: min {min:?}"
-        );
-        assert_eq!(bits(max), bits([0.0, 0.0, 2.0]), "{points:?}: max {max:?}");
+        assert_eq!(bits(min), bits([-0.0; 3]), "{points:?}: min {min:?}");
+        assert_eq!(bits(max), bits([0.0; 3]), "{points:?}: max {max:?}");
     }
 }
 

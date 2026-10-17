@@ -172,6 +172,14 @@ jobs:
         if: runner.os != 'Windows'
         run: cargo test --lib --features "edge-pipeline"
 
+      # ALICE-Law G2: the bit-level max / min tie tests through the public API
+      # and the reachability pin of the edge pipeline bounds fold (5 tests;
+      # scripts/run_tests.sh fails when the binary ran a different count)
+      - name: Test — max / min ties (G2)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: scripts/run_tests.sh minmax_ties=5 -- cargo test --test minmax_ties --features "std,law,ml,sdf,edge-pipeline"
+
       # law and ml add their own golden scenarios and panic cases
       - name: Test — determinism goldens (full feature set)
         if: runner.os != 'Windows'

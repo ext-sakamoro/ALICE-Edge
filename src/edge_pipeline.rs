@@ -773,6 +773,41 @@ mod tests {
         assert_eq!(bounds, [1.0, 1.0, 1.0]);
     }
 
+    /// ALICE-Law G2 tie test of the bounds fold (internal: no public output
+    /// reaches it with a tie, see the reachability pin in tests/minmax_ties.rs).
+    /// oracle: maximumNumber / minimumNumber skip a NaN operand, so a point
+    /// whose coordinates are all NaN, given last, leaves the extent of the
+    /// finite points (2 / 3 / 4 here); a comparison (`if a < b { a } else { b }`)
+    /// returns the NaN on that last step and the floor then gives 0.001. A ±0
+    /// pair gives an extent of +0 under either rule (max − min absorbs the sign)
+    /// and the floor gives 0.001: that case pins the floor, not the fold.
+    #[test]
+    fn compute_bounds_size_skips_a_nan_point_and_floors_a_signed_zero_extent() {
+        let finite = [[0.0_f32, 0.0, 0.0], [2.0, 3.0, 4.0]];
+        let mut with_nan = finite.to_vec();
+        with_nan.extend_from_slice(&[[f32::NAN; 3]]);
+        let got = compute_bounds_size(&with_nan);
+        assert_eq!(
+            got.map(f32::to_bits),
+            [2.0_f32, 3.0, 4.0].map(f32::to_bits),
+            "NaN last: {got:?}"
+        );
+        let got_first = compute_bounds_size(&[[f32::NAN; 3], finite[0], finite[1]]);
+        assert_eq!(
+            got_first.map(f32::to_bits),
+            [2.0_f32, 3.0, 4.0].map(f32::to_bits),
+            "NaN first: {got_first:?}"
+        );
+        for pair in [[[0.0_f32; 3], [-0.0; 3]], [[-0.0; 3], [0.0; 3]]] {
+            let got = compute_bounds_size(&pair);
+            assert_eq!(
+                got.map(f32::to_bits),
+                [0.001_f32; 3].map(f32::to_bits),
+                "{pair:?}: {got:?}"
+            );
+        }
+    }
+
     #[test]
     fn test_voxel_grid_negative_size() {
         let points = vec![[0.0, 0.0, 0.0]];

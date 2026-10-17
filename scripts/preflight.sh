@@ -243,6 +243,7 @@ step "ci.yml / test: full feature set, edge-pipeline"
 cargo build --lib --features "$FULL"
 cargo test --lib --features "$FULL"
 cargo test --lib --features "edge-pipeline"
+scripts/run_tests.sh minmax_ties=5 -- cargo test --test minmax_ties --features "std,law,ml,sdf,edge-pipeline"
 
 step "ci.yml / msrv: rust-version = $MSRV"
 if rustup toolchain list | grep -q "^$MSRV"; then

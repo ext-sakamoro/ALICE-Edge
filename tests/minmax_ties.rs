@@ -117,6 +117,54 @@ fn bounding_box_features_of_ties() {
     }
 }
 
+/// Reachability pin for the edge pipeline's bounds fold: `EdgePipeline` sizes
+/// the cloud with that fold only on the primitive path, and a cloud holding a
+/// NaN coordinate never takes it (the fit error is NaN, so `mse <= threshold`
+/// is false and the cloud goes to the SVO path, whose bounds are the ones the
+/// tests above pin). If a NaN cloud ever took the primitive path, this fails
+/// and the fold needs a tie test through the public API. Positive control: the
+/// same clouds without the NaN take the primitive path.
+#[cfg(feature = "sdf")]
+#[test]
+fn a_nan_coordinate_takes_the_svo_path_not_the_primitive_path() {
+    use alice_edge::sdf_compress::{compress_point_cloud, CompressConfig, CompressedSdf};
+    let plane: Vec<[f32; 3]> = (0..400)
+        .map(|k| [(k % 20) as f32 * 0.1, (k / 20) as f32 * 0.05, 0.0])
+        .collect();
+    let config = CompressConfig::default();
+    assert!(
+        matches!(
+            compress_point_cloud(&plane, &config).0,
+            CompressedSdf::Primitives { .. }
+        ),
+        "positive control: the finite plane must fit a primitive"
+    );
+    let mut compared = 0;
+    for nan in [
+        [f32::NAN, 0.5, 0.0],
+        [0.5, f32::NAN, 0.0],
+        [0.5, 0.5, f32::NAN],
+        [f32::NAN; 3],
+    ] {
+        for at in [0, plane.len() / 2, plane.len()] {
+            let mut cloud = plane.clone();
+            cloud.insert(at, nan);
+            let out = compress_point_cloud(&cloud, &config).0;
+            assert!(
+                matches!(out, CompressedSdf::SvoChunks { .. }),
+                "NaN {nan:?} at {at}: expected the SVO path, got {}",
+                match out {
+                    CompressedSdf::Primitives { .. } => "Primitives",
+                    CompressedSdf::Hybrid { .. } => "Hybrid",
+                    CompressedSdf::SvoChunks { .. } => "SvoChunks",
+                }
+            );
+            compared += 1;
+        }
+    }
+    assert_eq!(compared, 12, "compared nothing");
+}
+
 #[test]
 fn bits_helper_keeps_the_sign_of_zero() {
     assert_ne!(bits([0.0; 3]), bits([-0.0; 3]));

@@ -37,6 +37,11 @@ evidence = [
     "scripts/clippy_canary_calls.tsv (generated from clippy.toml, ci.yml --check step) plants the four max / min rows with every other entry, and scripts/clippy_canary.py fails unless each gets a disallowed_methods diagnostic: 62 planted, 0 skipped, measured 2026-10-17",
 ]
 mutant = "measured 2026-10-17, reverted: src/ml_bridge.rs ReLU back to (*h + b).max(0.0) fails `cargo clippy --lib --features ml -- -D warnings` with `use of a disallowed method f32::max`; removing one max / min entry from clippy.toml fails the canary data --check step; comparison rewrites, each reverted: sdf_compress `min[0] = if p[0] < min[0] { p[0] } else { min[0] }`, `min[2] = if p[2] <= min[2] { p[2] } else { min[2] }` and `max[2] = if p[2] >= max[2] { p[2] } else { max[2] }` each fail point_cloud_bounds_of_a_signed_zero_pair, `max[1] = if max[1] > p[1] { max[1] } else { p[1] }` fails both bounds tests, the from_primitive min dimension as nested `<` comparisons and its max dimension as nested `>` comparisons each fail bounding_box_features_of_ties"
+tie_tests = [
+    "point cloud bounds (the min / max folds of sdf_compress): tests/minmax_ties.rs::point_cloud_bounds_of_a_signed_zero_pair",
+    "point cloud bounds, NaN coordinate: tests/minmax_ties.rs::point_cloud_bounds_skip_a_nan_coordinate",
+    "bounding box features (SdfFeatures::from_primitive / from_svo_stats): tests/minmax_ties.rs::bounding_box_features_of_ties",
+]
 since = ""
 note = "the replacement moved no golden: tests/determinism_golden.rs (object_features, the ml and law scenarios included) passes unchanged in debug and release with every feature but sensors-hw and pyo3, so EDGE_SEMANTICS_ID is unchanged; std and the helper differ only on an equal pair of zeros of different sign (a ReLU of -0.0 now gives +0.0 on every target) and a NaN pair's payload. The ReLU layers (max(v, 0.0)) and the edge pipeline extent floor (max(extent, 0.001)) have a positive constant second operand, where `if v > c { v } else { c }` equals maximumNumber for every v (an equivalent mutant); the edge pipeline coordinate fold feeds only that floored extent and the softmax max logit feeds exp(v - max), which is NaN for a NaN logit either way, so no public output distinguishes a comparison at those sites and they have no tie test. The ban covers every target, so no raw_* site exists and no exception manifest is needed. SIMD widths: src/simd_fit.rs SSE2 / NEON kernels are integer (Q16.16), no float lane max / min, so the per-width (+0, -0) clause has no float width here; the scalar helper's (+0, -0) tests live in alice-det-math."
 reference_repo = "ALICE-Physics"
@@ -102,6 +107,17 @@ evidence = [
     "src/object_classifier.rs (tests): weights_with_another_identifier_are_refused_naming_both (with the previous-identifier path), legacy_weights_need_the_unverified_loader, weights_header_and_body_errors, test_save_load_weights_roundtrip (status Current)",
 ]
 mutant = "measured 2026-10-17, each reverted: save_weights stamping zeros fails test_save_load_weights_roundtrip; the weights reader skipping the identifier check fails weights_with_another_identifier_are_refused_naming_both; to_binary not writing the identifier fails a payload test"
+writers = [
+    "src/object_classifier.rs::save_weights",
+    "src/mqtt_bridge.rs::to_json",
+    "src/mqtt_bridge.rs::to_binary",
+    "src/mqtt_bridge.rs::to_binary_ext",
+    "src/db_bridge.rs::record",
+    "src/db_bridge.rs::record_q16",
+    "src/db_bridge.rs::record_batch",
+]
+legacy_status = "src/object_classifier.rs::Unverified"
+legacy_policy = "src/object_classifier.rs::LegacyNoId"
 since = ""
 note = "breaking (0.4.0): save_weights / load_weights return WeightsError instead of String and load_weights returns the IdStatus with the classifier. A weights file saved by 0.3 has no header: load it once with load_weights_unverified_legacy after checking where it came from, then save it again."
 reference_repo = "ALICE-Sync"

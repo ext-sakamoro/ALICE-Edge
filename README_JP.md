@@ -277,7 +277,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 | G6 semantics-id | 適合 | the identifier is a constant of this crate version: a dependency bump or a toolchain change that moved any pinned bits fails a golden, and re-recording a … |
 | G7 handshake-carries-id | 適合 | breaking (0.4.0): the fit result structs grow a semantics_id field and the evaluate / residual functions take it (C, C# and Python signatures), the MQTT binary … |
 | G8 persisted-semantics-id | 適合 | breaking (0.4.0): save_weights / load_weights return WeightsError instead of String and load_weights returns the IdStatus with the classifier. A weights file … |
-| G9 persisted-meaning-change-is-major | 未確認 | unverified: depends on G6 and G8; this crate defines no identifier of its own whose history could be audited (src/lib.rs:151 re-exports alice-det-math's, whose … |
+| G9 persisted-meaning-change-is-major | 未確認 | unverified: the identifier the weights and payloads carry is EDGE_SEMANTICS_ID (0.4.0, unreleased, so it has no published history yet); … |
 | G10 no-run-varying-artifacts | 適合 | the 23 production .elapsed() reads (a 24th grep hit, src/sensors.rs:1565, is a doc comment) sit under scoped clippy::disallowed_methods allows with a reason … |
 | G11 gate-self-tests | 未達 | unmet: clause (c). scripts/clippy_canary.py, scripts/test_clippy_canary.py, scripts/gen_clippy_canary_calls.py, scripts/test_gen_clippy_canary_calls.py, … |
 | G12 public-repo-text-rules | 適合 | the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (779fa443f95bc0caca5ca2d5bdb9156051fd6143) and refuses … |

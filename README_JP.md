@@ -272,8 +272,8 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 | G1 no-libm-direct | 適合 | every banned method of the G1 list is in clippy.toml, every feature is linted with -D warnings (edge-pipeline and pyo3 included), and the canary plants every … |
 | G2 ieee-max-min | 適合 | the replacement moved no golden: tests/determinism_golden.rs (object_features, the ml and law scenarios included) passes unchanged in debug and release with … |
 | G3 no-outer-fneg-of-fma | 未確認 | unverified: no violation is known; the only mul_add sites are src/sensors.rs:865 (lat_deg.mul_add(-100.0, lat_raw)) and src/sensors.rs:874 … |
-| G4 debug-release-arch-goldens | 未達 | unmet: (1) no signed-zero or exact-cancellation case is checked against fixed bit patterns (tests/ has no -0.0 literal and no cancellation case; … |
-| G5 release-profile-test-leg | 未達 | unmet: the release profile runs only tests/panic_contract.rs (.github/workflows/ci.yml:108 std and :167 full feature set, on the four-OS matrix including the … |
+| G4 debug-release-arch-goldens | 適合 | Edge's arithmetic is Q16.16 integer for the fits; its float entry points are the Q16 conversion, the Kalman / fusion filters and the classifier features, which … |
+| G5 release-profile-test-leg | 適合 | the release steps sit in the same required test job as the debug ones, on all four legs. |
 | G6 semantics-id | 適合 | the identifier is a constant of this crate version: a dependency bump or a toolchain change that moved any pinned bits fails a golden, and re-recording a … |
 | G7 handshake-carries-id | 適合 | breaking (0.4.0): the fit result structs grow a semantics_id field and the evaluate / residual functions take it (C, C# and Python signatures), the MQTT binary … |
 | G8 persisted-semantics-id | 適合 | breaking (0.4.0): save_weights / load_weights return WeightsError instead of String and load_weights returns the IdStatus with the classifier. A weights file … |
@@ -281,7 +281,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 | G10 no-run-varying-artifacts | 適合 | the 23 production .elapsed() reads (a 24th grep hit, src/sensors.rs:1565, is a doc comment) sit under scoped clippy::disallowed_methods allows with a reason … |
 | G11 gate-self-tests | 未達 | unmet: clause (c). scripts/clippy_canary.py, scripts/test_clippy_canary.py, scripts/gen_clippy_canary_calls.py, scripts/test_gen_clippy_canary_calls.py, … |
 | G12 public-repo-text-rules | 適合 | the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (779fa443f95bc0caca5ca2d5bdb9156051fd6143) and refuses … |
-| G13 no-unspecified-order | 未確認 | unverified: no violation is known since d06f4da: src/edge_pipeline.rs:418 (voxel_grid_downsample) and src/telemetry.rs:158 (TelemetryHub, read by … |
+| G13 no-unspecified-order | 未達 | located: std::thread::spawn / scope are not yet in clippy disallowed-methods because the shared clippy canary generator plants a bare path, which does not … |
 | G14 float-environment-invariants | 適合 | the static scan covers the files of this repository and the dynamic check covers the builds CI runs on ubuntu and macOS; a flag passed by a build outside this … |
 
 ### feature と保証の範囲

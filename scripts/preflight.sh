@@ -83,6 +83,10 @@ python3 scripts/api_boundary.py
 python3 scripts/test_boundary_guard.py
 python3 scripts/boundary_guard.py
 
+step "ci.yml / docs-lint: Order guard (G13, interim text layer, tests, then src/)"
+python3 scripts/test_order_guard.py
+python3 scripts/order_guard.py
+
 step "ci.yml / docs-lint: libm dependency guard (test, then check)"
 python3 scripts/test_libm_dependency_guard.py
 python3 scripts/libm_dependency_guard.py
@@ -171,6 +175,8 @@ if [[ $quick -eq 1 ]]; then
   scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --no-default-features
   scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "std"
   scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "law"
+  scripts/run_tests.sh determinism_golden,float_edge_golden -- cargo test --test determinism_golden --test float_edge_golden --features "std,law"
+  scripts/run_tests.sh determinism_golden,float_edge_golden -- cargo test --release --test determinism_golden --test float_edge_golden --features "std,law"
   cargo test --test panic_contract --features "std"
   echo; echo "preflight --quick OK (the other test suites, the release-profile panic contract, MSRV, powerset, fuzz build and security jobs are skipped)"; exit 0
 fi
@@ -215,6 +221,9 @@ scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden 
 scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "std"
 scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "law"
 scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "$FULL"
+scripts/run_tests.sh determinism_golden,float_edge_golden -- cargo test --test determinism_golden --test float_edge_golden --features "std,law"
+scripts/run_tests.sh determinism_golden,float_edge_golden -- cargo test --release --test determinism_golden --test float_edge_golden --features "std,law"
+scripts/run_tests.sh determinism_golden -- cargo test --release --test determinism_golden --features "$FULL"
 
 step "ci.yml / test: panic contract (std + full, debug and release)"
 cargo test --test panic_contract --features "std"

@@ -148,7 +148,7 @@ impl DolphinD5Driver {
         }
 
         let inv_voxel = 1.0 / voxel_size;
-        let mut seen = std::collections::HashMap::with_capacity(points.len() / 4);
+        let mut seen = std::collections::BTreeSet::new();
         let mut result = Vec::with_capacity(points.len() / 4);
 
         for p in points {
@@ -157,7 +157,7 @@ impl DolphinD5Driver {
             let vz = (p.z * inv_voxel).floor() as i32;
             let key = (vx as i64) | ((vy as i64) << 21) | ((vz as i64) << 42);
 
-            if seen.insert(key, ()).is_none() {
+            if seen.insert(key) {
                 result.push(*p);
             }
         }

@@ -1,0 +1,4 @@
+# scripts/order_guard.py (ALICE-Law G13): production sites whose order cannot
+# reach a Law-bearing output, with the exact line count and the reason
+[allow]
+"src/mqtt_bridge.rs::threads" = { count = 1, reason = "the MQTT client's event loop thread: it drives network I/O and sets a connected flag, no results are combined into a value" }

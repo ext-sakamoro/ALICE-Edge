@@ -48,20 +48,25 @@ note = "unverified: no violation is known; the only mul_add sites are src/sensor
 reference_repo = "ALICE-LOL"
 
 [G4]
-status = "fail-known"
+status = "pass"
 evidence = [
-    "tests/determinism_golden.rs (Q16 fits, det-math kernels, classifier, SEMANTICS_ID at line 888; the only float edge input is f32::MIN_POSITIVE at line 713)",
-    ".github/workflows/ci.yml test job (matrix line 47: macos-latest and ubuntu-24.04-arm aarch64, ubuntu-latest and windows-latest x86_64)",
+    "tests/float_edge_golden.rs (expected bits worked out by hand from IEEE 754 binary32, not from the implementation): q16_to_f32_exact_cases (+0, 2^-16, -1, -32768, the rounding of i32::MAX), kalman_update_of_negative_zero_gives_positive_zero ((-0) - (-0) = +0 and -0 + +0 = +0), kalman_update_cancels_a_large_offset_exactly ((1e7 + 2) - 1e7 = 2 exactly), fusion_of_opposite_values_cancels_to_positive_zero (1 * 5 + 1 * -5 = +0); tests/minmax_ties.rs pins signed zero through the bounding-box features and the point-cloud bounds; tests/determinism_golden.rs pins the scenario hashes",
+    ".github/workflows/ci.yml test job, matrix macos-latest (aarch64), ubuntu-24.04-arm (aarch64), ubuntu-latest (x86_64), windows-latest (x86_64): steps 'goldens and float edges (std, debug)' and '(std, release)' run determinism_golden and float_edge_golden through scripts/run_tests.sh (a named file that runs no test fails the step), no continue-on-error; the full feature set goldens run in debug and release on the three non-Windows legs; mirrored in scripts/preflight.sh",
 ]
+mutant = "measured 2026-10-17, reverted: the expected bits of kalman_update_cancels_a_large_offset_exactly changed (0x4b18_9682) fails float_edge_golden in debug and release; the expected value is a constant, so it fails on every leg"
 since = ""
-note = "unmet: (1) no signed-zero or exact-cancellation case is checked against fixed bit patterns (tests/ has no -0.0 literal and no cancellation case; tests/determinism_golden.rs:713 is the nearest float edge case); (2) the goldens run only in the debug profile: .github/workflows/ci.yml:88, :92, :98 and :159 run cargo test --test determinism_golden without --release, so the release half of {debug, release} x {x86_64, aarch64} is missing. The only release runs are tests/panic_contract.rs (ci.yml:108 std, :167 full feature set)."
-reference_repo = "ALICE-LOL"
+note = "Edge's arithmetic is Q16.16 integer for the fits; its float entry points are the Q16 conversion, the Kalman / fusion filters and the classifier features, which these cases and tests/minmax_ties.rs cover."
+reference_repo = "ALICE-Sync"
 
 [G5]
-status = "fail-known"
+status = "pass"
+evidence = [
+    ".github/workflows/ci.yml test job on macos-latest and ubuntu-24.04-arm (aarch64) and ubuntu-latest / windows-latest (x86_64): cargo test --release for tests/determinism_golden.rs and tests/float_edge_golden.rs (std + law) on every leg and tests/determinism_golden.rs with the full feature set on the non-Windows legs, through scripts/run_tests.sh; panic_contract and float_environment also run in release",
+]
+mutant = "measured 2026-10-17: the release steps are the only release runs of the goldens; removing them leaves the aarch64 legs without one, and the flipped expected bit of the G4 mutant fails the release step"
 since = ""
-note = "unmet: the release profile runs only tests/panic_contract.rs (.github/workflows/ci.yml:108 std and :167 full feature set, on the four-OS matrix including the aarch64 legs macos-latest and ubuntu-24.04-arm); the Law-bearing suite runs in debug only: tests/determinism_golden.rs (ci.yml:88, :92, :98, :159), tests/edge_law.rs (:119), tests/analytic_oracle.rs (:128), tests/robust_contract.rs (:133), tests/db_bridge_errors.rs (:138) and the lib tests (:61, :72, :113, :149, :153)."
-reference_repo = "ALICE-LOL"
+note = "the release steps sit in the same required test job as the debug ones, on all four legs."
+reference_repo = "ALICE-Sync"
 
 [G6]
 status = "pass"
@@ -143,10 +148,15 @@ note = "the workflow fetches ALICE-Law's scripts/public_text_check.py at the rev
 reference_repo = "ALICE-Law"
 
 [G13]
-status = "unverified"
+status = "fail-known"
+evidence = [
+    "src/depth_capture.rs voxel_downsample and src/mqtt_bridge.rs OtaModelStore now use BTreeSet / BTreeMap (behaviour unchanged: membership and keyed lookup), so src has no HashMap / HashSet",
+    "clippy.toml disallowed-types HashMap, HashSet and their iterators, std::thread::Builder / JoinHandle / ScopedJoinHandle / Scope, disallowed-methods available_parallelism (every target, -D warnings; canary 75 planted)",
+    "interim text layer: scripts/order_guard.py (the same file as ALICE-Analytics', tests scripts/test_order_guard.py; ci.yml docs-lint job and preflight) with scripts/order_allowlist.toml (one site: the MQTT client's event-loop thread, no results combined)",
+]
 since = ""
-note = "unverified: no violation is known since d06f4da: src/edge_pipeline.rs:418 (voxel_grid_downsample) and src/telemetry.rs:158 (TelemetryHub, read by timed_out_devices at line 284) use BTreeMap, pinned by src/edge_pipeline.rs:476 voxel_downsample_order_is_function_of_input_only and src/telemetry.rs:437 hub_timed_out_order_is_sorted_and_stable. The remaining HashMap uses are membership only, no output order: src/depth_capture.rs:151 (voxel_downsample keeps the first point per cell in input order) and src/mqtt_bridge.rs:500 (OtaModelStore get / insert / len). No parallel reduction (no rayon; src/mqtt_bridge.rs:273 spawns one thread for the network loop). Missing: a machine check (a lint or scan for HashMap / HashSet iteration feeding an output) that keeps a new site out; the two order tests cover only the two sites they name."
-reference_repo = "ALICE-LOL"
+note = "located: std::thread::spawn / scope are not yet in clippy disallowed-methods because the shared clippy canary generator plants a bare path, which does not compile for a generic function; until the generator update (a turbofish table for generic paths) lands in the enforced repos, a spawn reached through a re-export chain is caught only by the text layer, which is evadable, so the cell is not pass."
+reference_repo = "ALICE-Analytics"
 
 [G14]
 status = "pass"

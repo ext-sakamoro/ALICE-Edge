@@ -97,6 +97,17 @@ jobs:
         shell: bash
         run: scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "law"
 
+      # G4 / G5: the goldens and the signed-zero / cancellation cases in both
+      # profiles on every leg (x86_64 and aarch64), so a contraction or
+      # reassociation one target's optimiser makes is a changed bit
+      - name: Test — goldens and float edges (std, debug)
+        shell: bash
+        run: scripts/run_tests.sh determinism_golden,float_edge_golden -- cargo test --test determinism_golden --test float_edge_golden --features "std,law"
+
+      - name: Test — goldens and float edges (std, release)
+        shell: bash
+        run: scripts/run_tests.sh determinism_golden,float_edge_golden -- cargo test --release --test determinism_golden --test float_edge_golden --features "std,law"
+
       # Degenerate inputs: empty / length-one windows, the guarded divisions,
       # out-of-range and non-finite arguments, the Q16 wrap and the integer
       # overflow paths. The overflow cases branch on `debug_assertions`, so
@@ -165,6 +176,11 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "$FULL_FEATURES"
+
+      - name: Test — determinism goldens (full feature set, release)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: scripts/run_tests.sh determinism_golden -- cargo test --release --test determinism_golden --features "$FULL_FEATURES"
 
       - name: Test — panic contract (full feature set, debug)
         if: runner.os != 'Windows'
@@ -402,6 +418,11 @@ jobs:
         run: python scripts/test_entropy_guard.py
       - name: Entropy guard (no OS entropy / wall clock in production code)
         run: python scripts/entropy_guard.py
+      # G13: no unspecified-order collection, thread combination or address order in production code
+      - name: Order guard (tests)
+        run: python scripts/test_order_guard.py
+      - name: Order guard
+        run: python scripts/order_guard.py
       # G1, libm half: a direct libm dependency must come with the libm:: ban
       # in clippy.toml and scripts/libm_ban_check.py (0 manifests read fails)
       - name: libm dependency guard (test, then check)

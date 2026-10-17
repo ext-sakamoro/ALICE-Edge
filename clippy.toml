@@ -20,6 +20,7 @@
 # Pinned by tests/determinism_golden.rs (SHA-256 of bit patterns, run on the
 # four-OS CI matrix).
 disallowed-methods = [
+    { path = "std::thread::available_parallelism", reason = "the combination order of work on several threads depends on scheduling and thread count (ALICE-Law G13)" },
     { path = "f32::max", reason = "the sign of an equal pair of zeros is unspecified and differs between targets (G2); use alice_det_math::max / min / max64 / min64 (maximumNumber / minimumNumber)" },
     { path = "f32::min", reason = "the sign of an equal pair of zeros is unspecified and differs between targets (G2); use alice_det_math::max / min / max64 / min64 (maximumNumber / minimumNumber)" },
     { path = "f64::max", reason = "the sign of an equal pair of zeros is unspecified and differs between targets (G2); use alice_det_math::max / min / max64 / min64 (maximumNumber / minimumNumber)" },
@@ -93,6 +94,18 @@ disallowed-methods = [
     { path = "std::collections::hash_map::RandomState::new", reason = "seeds from OS randomness and would make HashMap iteration order non-deterministic" },
 ]
 disallowed-types = [
+    { path = "std::collections::HashMap", reason = "iteration order is unspecified and differs between runs (ALICE-Law G13); use BTreeMap / BTreeSet, or list a membership-only site in scripts/order_allowlist.toml with an allow and its reason" },
+    { path = "std::collections::HashSet", reason = "iteration order is unspecified and differs between runs (ALICE-Law G13); use BTreeMap / BTreeSet, or list a membership-only site in scripts/order_allowlist.toml with an allow and its reason" },
+    { path = "std::collections::hash_map::Iter", reason = "iteration order is unspecified and differs between runs (ALICE-Law G13); use BTreeMap / BTreeSet, or list a membership-only site in scripts/order_allowlist.toml with an allow and its reason" },
+    { path = "std::collections::hash_map::Keys", reason = "iteration order is unspecified and differs between runs (ALICE-Law G13); use BTreeMap / BTreeSet, or list a membership-only site in scripts/order_allowlist.toml with an allow and its reason" },
+    { path = "std::collections::hash_map::Values", reason = "iteration order is unspecified and differs between runs (ALICE-Law G13); use BTreeMap / BTreeSet, or list a membership-only site in scripts/order_allowlist.toml with an allow and its reason" },
+    { path = "std::collections::hash_map::IntoIter", reason = "iteration order is unspecified and differs between runs (ALICE-Law G13); use BTreeMap / BTreeSet, or list a membership-only site in scripts/order_allowlist.toml with an allow and its reason" },
+    { path = "std::collections::hash_set::Iter", reason = "iteration order is unspecified and differs between runs (ALICE-Law G13); use BTreeMap / BTreeSet, or list a membership-only site in scripts/order_allowlist.toml with an allow and its reason" },
+    { path = "std::collections::hash_set::IntoIter", reason = "iteration order is unspecified and differs between runs (ALICE-Law G13); use BTreeMap / BTreeSet, or list a membership-only site in scripts/order_allowlist.toml with an allow and its reason" },
+    { path = "std::thread::Builder", reason = "a thread whose results are combined makes the order depend on scheduling and thread count (ALICE-Law G13)" },
+    { path = "std::thread::JoinHandle", reason = "a thread whose results are combined makes the order depend on scheduling and thread count (ALICE-Law G13)" },
+    { path = "std::thread::ScopedJoinHandle", reason = "a thread whose results are combined makes the order depend on scheduling and thread count (ALICE-Law G13)" },
+    { path = "std::thread::Scope", reason = "a thread whose results are combined makes the order depend on scheduling and thread count (ALICE-Law G13)" },
     # disallowed-methods cannot name RandomState::default (a trait method,
     # not reachable via the implementing type's path alone); naming the type
     # itself here catches ::default() too, along with any other explicit

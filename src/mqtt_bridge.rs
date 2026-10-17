@@ -800,7 +800,7 @@ impl OtaModelUpdate {
 
 /// OTA モデルストア — デバイス上の最新モデル係数を管理
 pub struct OtaModelStore {
-    models: std::collections::HashMap<String, OtaModelUpdate>,
+    models: std::collections::BTreeMap<String, OtaModelUpdate>,
 }
 
 impl Default for OtaModelStore {
@@ -813,7 +813,7 @@ impl OtaModelStore {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            models: std::collections::HashMap::new(),
+            models: std::collections::BTreeMap::new(),
         }
     }
 

@@ -129,7 +129,10 @@ fn golden_pins_are_the_recorded_goldens() {
 
 #[test]
 fn det_math_pin_is_the_resolved_arithmetic_identifier() {
-    assert_eq!(hex(&pin("alice-det-math")), hex(&alice_edge::SEMANTICS_ID));
+    assert_eq!(
+        hex(&pin("alice-det-math")),
+        hex(&alice_det_math::SEMANTICS_ID)
+    );
 }
 
 #[cfg(feature = "law")]

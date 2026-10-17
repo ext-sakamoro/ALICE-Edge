@@ -9,7 +9,7 @@ tags = ["v{version}"]
 doc-features = ["std", "pyo3", "zip", "law", "codec", "db", "ml", "sdf", "depth-camera", "asp", "edge-pipeline", "sensors", "mqtt", "dashboard", "ffi", "serde-raw"]
 
 [exempt]
-SEMANTICS_ID = "alice-det-math's identifier, re-exported for reference: it is folded into EDGE_SEMANTICS_ID (src/semantics.rs), the identifier the weights and payloads carry, so a move of it moves EDGE_SEMANTICS_ID and is checked there"
+SEMANTICS_ID = "alice-zip's law::SEMANTICS_ID, re-exported for reference (the identifier the Law readers check): the crate folds alice-zip's identifier and alice-det-math's into EDGE_SEMANTICS_ID (src/semantics.rs, the \"alice-zip\" and \"alice-det-math\" pins), so a move of it moves that identifier and is checked there"
 
 [[id]]
 path = "alice_edge::semantics::EDGE_SEMANTICS_ID"

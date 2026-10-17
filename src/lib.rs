@@ -132,28 +132,23 @@ pub use crate::q16_linear::*;
 pub use crate::robust::*;
 pub use crate::simd_fit::*;
 
-/// Identifier of the numeric semantics this crate computes with
+/// Identifier to record next to stored or transmitted coefficients and to pass to
+/// `law::SignalLaw::law_id`: alice-zip's `law::SEMANTICS_ID`, re-exported
 ///
-/// This is the arithmetic identifier only: it names `alice-det-math`'s
-/// transcendental functions, not this crate's own rules. The identifier of
-/// this crate's semantics, which folds its scenario goldens with this value
-/// and the identifiers of its other Law-bearing dependencies, is
-/// [`EDGE_SEMANTICS_ID`].
+/// It is the identifier the Law readers check against: alice-zip's and alice-db's
+/// readers compare a stored identifier with this value (`Verified`), with alice-zip's
+/// `law::PREVIOUS_SEMANTICS_IDS` (`VerifiedPrevious`, among them alice-det-math's
+/// `85e08846…` and `135c407d…` that this crate exported before 0.4.0), or neither
+/// (`Mismatch`). alice-zip folds alice-det-math's arithmetic identifier into it, so
+/// it names the arithmetic too. Two results are comparable as numbers only if they
+/// were produced under the same identifier.
 ///
-/// Every float transcendental in this crate goes through [`alice_det_math`],
-/// and this is that crate's identifier of its own numeric behaviour,
-/// re-exported here.
+/// The identifier of this crate's own semantics, which folds its scenario goldens
+/// with the identifiers of its Law-bearing dependencies, is [`EDGE_SEMANTICS_ID`].
 ///
-/// Record it next to any coefficients that are stored or transmitted. Two
-/// results are comparable as numbers only if they were produced under the same
-/// identifier; when it differs, the two were computed by different arithmetic
-/// and agreement between them is not guaranteed at the bit level, however
-/// close the values look.
-///
-/// Pinned as hex by `tests/determinism_golden.rs`, so a change in the
-/// arithmetic cannot reach a release unnoticed. With the `law` feature, pass
-/// it to `law::SignalLaw::law_id` to get a single value that names both the
-/// law and the arithmetic it is evaluated with (not linked here: the module is
-/// behind that feature, so the link would not resolve in a build without it).
-pub use alice_det_math::SEMANTICS_ID;
+/// Pinned as hex by `tests/determinism_golden.rs`, so a change cannot reach a
+/// release unnoticed. With the `law` feature, pass it to `law::SignalLaw::law_id`
+/// to get a single value that names both the law and the semantics it is evaluated
+/// with (not linked here: the module is behind that feature).
+pub use alice_core::law::SEMANTICS_ID;
 pub use semantics::{EDGE_SEMANTICS_ID, EDGE_SEMANTICS_PINS, PREVIOUS_EDGE_SEMANTICS_IDS};

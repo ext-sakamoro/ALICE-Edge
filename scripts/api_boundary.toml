@@ -93,6 +93,6 @@ features = "std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,
 "reexport::alice_core::law::SignalLaw" = "local: alice-zip's SignalLaw types re-exported for the law module; values of these types are passed in memory as concrete types"
 "reexport::alice_core::law::SignalLawParts" = "local: alice-zip's SignalLaw types re-exported for the law module; values of these types are passed in memory as concrete types"
 "reexport::alice_core::law::ValidRange" = "local: alice-zip's SignalLaw types re-exported for the law module; values of these types are passed in memory as concrete types"
+"reexport::alice_core::law::SEMANTICS_ID" = "local: alice-zip's law::SEMANTICS_ID re-exported as the identifier to record next to stored coefficients and to pass to SignalLaw::law_id; a constant, not a reader (the readers that check it are alice-zip's and alice-db's)"
 "reexport::alice_core::law::Verdict" = "local: alice-zip's SignalLaw types re-exported for the law module; values of these types are passed in memory as concrete types"
 "reexport::alice_db::ResidualPolicy" = "local: alice-db's policy enum for residual checks, configuration and not a value reader"
-"reexport::alice_det_math::SEMANTICS_ID" = "local: the arithmetic identifier constant of alice-det-math"

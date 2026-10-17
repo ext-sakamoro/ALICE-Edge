@@ -191,10 +191,12 @@ fails instead of passing with the hash of an empty buffer.
 
 <!-- claim-test: golden_q16_linear, golden_adaptive_polyfit, golden_constant_fit, golden_simd_fit, golden_sensor_fusion, golden_ring_buffer, golden_det_math_kernels, golden_robust, golden_piecewise, golden_delta, golden_law, golden_object_features -->
 
-Results are recorded under a name for that arithmetic: `alice_edge::SEMANTICS_ID`
-(re-exported from `alice-det-math`). Store it next to coefficients that leave
-the device; two results compare as numbers only when they carry the same
-value. With the `law` feature, `SignalLaw::law_id(&alice_edge::SEMANTICS_ID)`
+Results are recorded under the identifier the Law readers check:
+`alice_edge::SEMANTICS_ID` (alice-zip's `law::SEMANTICS_ID`, re-exported; it folds
+`alice-det-math`'s arithmetic identifier). Store it next to coefficients that leave
+the device; two results compare as numbers only when they carry the same value, and
+alice-zip's / alice-db's readers accept the identifiers this crate exported before
+0.4.0 as earlier ones. With the `law` feature, `SignalLaw::law_id(&alice_edge::SEMANTICS_ID)`
 gives one identifier for the law and the arithmetic together. Both are pinned
 in `tests/determinism_golden.rs`, the law identifier against values computed
 outside this toolchain from the encoding alice-zip publishes.

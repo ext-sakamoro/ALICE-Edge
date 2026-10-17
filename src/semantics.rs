@@ -1,8 +1,8 @@
 //! Content hash of this crate's Law-bearing semantics: [`EDGE_SEMANTICS_ID`].
 //!
-//! [`crate::SEMANTICS_ID`] is the arithmetic identifier of `alice-det-math`,
-//! re-exported; it names the transcendental functions, not this crate's own
-//! rules (the Q16.16 normal equations, the MAD rejection constants, the
+//! [`crate::SEMANTICS_ID`] is alice-zip's `law::SEMANTICS_ID`, re-exported (the
+//! identifier the Law readers check); it names alice-zip's rules and the arithmetic,
+//! not this crate's own rules (the Q16.16 normal equations, the MAD rejection constants, the
 //! segment and delta encodings). This module folds the crate's own Law pins,
 //! the cross-platform goldens of `tests/determinism_golden.rs`, with the
 //! identifiers of the Law-bearing crates it depends on, into one 32-byte

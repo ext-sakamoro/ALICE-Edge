@@ -51,10 +51,10 @@ default = []
 # Enable std for testing on host
 std = ["alice-det-math/std"]
 pyo3 = ["dep:pyo3", "dep:numpy", "std"]  # Python bindings
-zip = ["dep:alice_core", "alice_core/std", "alice_core/lzma", "std"]  # Compress model coefficients with ALICE-Zip
+zip = ["alice_core/std", "alice_core/lzma", "std"]  # Compress model coefficients with ALICE-Zip
 # Edge fits as alice_zip::law::SignalLaw (evidence, measured residual, valid
 # range, provenance). no_std + alloc: alice-zip is used without its std feature
-law = ["dep:alice_core"]
+law = []
 codec = ["dep:alice-codec", "std"]  # Wavelet denoising for sensor data
 db = ["dep:alice-db", "std"]  # ALICE-DB persistence for model coefficients
 depth-camera = ["dep:rusb", "std"]  # Dolphin D5 Lite depth camera driver
@@ -84,7 +84,7 @@ alice-det-math = { version = "0.5.1", default-features = false }
 pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 numpy = { version = "0.29", optional = true }
 # `zip` turns on alice-zip's std + lzma, `law` uses it without them (no_std)
-alice_core = { package = "alice-zip", path = "../ALICE-Zip", version = ">=0.11, <0.12", optional = true, default-features = false }
+alice_core = { package = "alice-zip", path = "../ALICE-Zip", version = ">=0.11, <0.12", default-features = false }
 alice-codec = { version = "0.1", optional = true, default-features = false, features = ["std"] }
 # alice-db (from 0.4) keeps its file backend behind the default `fs` feature; this
 # crate opens on-disk stores, so `fs` is named explicitly

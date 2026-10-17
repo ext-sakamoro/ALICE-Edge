@@ -1,6 +1,6 @@
 [package]
 name = "alice-edge"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 # MSRV: `u64::is_multiple_of` (1.87) and the crates.io siblings alice-zip /
 # alice-codec / alice-db all declare 1.87. CI `msrv` job compiles on exactly
@@ -63,6 +63,10 @@ ml = ["dep:alice-ml", "std"]  # 1.58bit ternary object classification
 asp = ["dep:libasp", "std", "sdf", "ml"]  # ALICE Streaming Protocol bridge (libasp 1.0 on crates.io; asp_bridge uses sdf_compress + object_classifier::ObjectClass)
 edge-pipeline = ["depth-camera", "sdf", "ml", "asp"]  # Full edge pipeline
 sensors = ["dep:serde", "std"]  # Sensor drivers (simulated)
+# Serialize / Deserialize on mqtt_bridge::CoefficientPayload with no semantics
+# identifier in the bytes: not a durable or exchange format. Payloads carry the
+# identifier through CoefficientPayload::to_json / to_binary
+serde-raw = ["dep:serde"]
 sensors-hw = ["sensors", "dep:rppal", "dep:serialport"]  # Real GPIO/I2C/SPI/UART
 mqtt = ["dep:rumqttc", "std"]  # MQTT publish to AWS IoT / Azure / local
 dashboard = ["dep:alice-analytics", "std"]  # ALICE-Analytics dashboard

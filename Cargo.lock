@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "alice-edge"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "alice-analytics",
  "alice-codec",

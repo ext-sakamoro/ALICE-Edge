@@ -270,7 +270,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 | gate | 状態 | 注記 |
 |---|---|---|
 | G1 no-libm-direct | 適合 | every banned method of the G1 list is in clippy.toml, every feature is linted with -D warnings (edge-pipeline and pyo3 included), and the canary plants every … |
-| G2 ieee-max-min | 適合 | the replacement moved no golden: tests/determinism_golden.rs (object_features, the ml and law scenarios included) passes unchanged in debug and release with … |
+| G2 ieee-max-min | 未達 | unmet (located 2026-10-18): src/edge_pipeline.rs:450-455 (compute_bounds_size, the per-axis min / max fold whose size feeds SdfFeatures in … |
 | G3 no-outer-fneg-of-fma | 未確認 | unverified: no violation is known; the only mul_add sites are src/sensors.rs:865 (lat_deg.mul_add(-100.0, lat_raw)) and src/sensors.rs:874 … |
 | G4 debug-release-arch-goldens | 適合 | Edge's arithmetic is Q16.16 integer for the fits; its float entry points are the Q16 conversion, the Kalman / fusion filters and the classifier features, which … |
 | G5 release-profile-test-leg | 適合 | the release steps sit in the same required test job as the debug ones, on all four legs. |

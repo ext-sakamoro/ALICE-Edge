@@ -92,6 +92,7 @@ pub mod python;
 pub mod ring_buffer;
 #[cfg(feature = "sdf")]
 pub mod sdf_compress;
+pub mod semantics;
 pub mod sensor_fusion;
 #[cfg(feature = "sensors")]
 pub mod sensors;
@@ -133,6 +134,12 @@ pub use crate::simd_fit::*;
 
 /// Identifier of the numeric semantics this crate computes with
 ///
+/// This is the arithmetic identifier only: it names `alice-det-math`'s
+/// transcendental functions, not this crate's own rules. The identifier of
+/// this crate's semantics, which folds its scenario goldens with this value
+/// and the identifiers of its other Law-bearing dependencies, is
+/// [`EDGE_SEMANTICS_ID`].
+///
 /// Every float transcendental in this crate goes through [`alice_det_math`],
 /// and this is that crate's identifier of its own numeric behaviour,
 /// re-exported here.
@@ -149,3 +156,4 @@ pub use crate::simd_fit::*;
 /// law and the arithmetic it is evaluated with (not linked here: the module is
 /// behind that feature, so the link would not resolve in a build without it).
 pub use alice_det_math::SEMANTICS_ID;
+pub use semantics::{EDGE_SEMANTICS_ID, EDGE_SEMANTICS_PINS, PREVIOUS_EDGE_SEMANTICS_IDS};

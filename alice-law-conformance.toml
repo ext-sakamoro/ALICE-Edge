@@ -64,14 +64,16 @@ note = "unmet: the release profile runs only tests/panic_contract.rs (.github/wo
 reference_repo = "ALICE-LOL"
 
 [G6]
-status = "fail-known"
+status = "pass"
 evidence = [
-    "src/lib.rs:151 (pub use alice_det_math::SEMANTICS_ID)",
-    "tests/determinism_golden.rs golden_semantics_id (line 888, recorded hex at line 884)",
+    "src/semantics.rs EDGE_SEMANTICS_ID (exported from the crate root with EDGE_SEMANTICS_PINS and PREVIOUS_EDGE_SEMANTICS_IDS): the fold (sorted by name, u32 big-endian name length, name, 32 digest bytes, SHA-256) of 22 pins: the 13 scenario goldens of tests/determinism_golden.rs (q16_linear, adaptive_polyfit, constant_fit, simd_fit, sensor_fusion, ring_buffer, det_math, piecewise, delta, law, object_features, sensors, depth_capture), the four GOLDEN_ROBUST rows (k = 1, 3, 10, i32::MAX), and the identifiers of the Law-bearing dependencies alice-det-math SEMANTICS_ID, alice-zip law::SEMANTICS_ID, alice-db SEMANTICS_ID, alice-analytics SEMANTICS_ID and alice-sdf SEMANTICS_ID, recorded as hex so the value does not depend on cargo features",
+    "src/lib.rs: the re-exported SEMANTICS_ID is documented as the arithmetic identifier only and points to EDGE_SEMANTICS_ID as the crate's own",
+    "tests/edge_semantics_id.rs: the_identifier_is_the_fold_of_its_pins (constant, module-doc hex and recomputed fold agree), golden_pins_are_the_recorded_goldens (read from tests/determinism_golden.rs, not copied, 17 compared), det_math_pin_is_the_resolved_arithmetic_identifier, zip / db / analytics / sdf pins against the resolved constants (law, db, dashboard, sdf features), every_pin_moves_the_identifier (each of the 22 pins flipped moves the fold)",
 ]
+mutant = "measured 2026-10-17, each reverted: the robust_k10 pin with its last hex digit changed fails the fold test and golden_pins_are_the_recorded_goldens; the alice-db pin changed fails db_pin_is_the_resolved_db_identifier and the fold test; GOLDEN_DELTA changed fails golden_pins_are_the_recorded_goldens (and golden_delta with std)"
 since = ""
-note = "unmet: src/lib.rs:151 re-exports alice-det-math's identifier instead of computing one that folds this crate's own pins (the Q16.16 normal equations, src/q16_linear.rs and src/simd_fit.rs; the MAD rejection constants, src/robust.rs) with the identifiers of its Law-bearing dependencies (alice-zip, alice-db, alice-analytics), so a change to this crate's own rounding rules moves no identifier, and nothing ties the identifier to this crate's version or toolchain. tests/determinism_golden.rs:888 pins the re-exported value to its hex and to alice_det_math::SEMANTICS_ID, which shows an arithmetic change in the dependency only."
-reference_repo = "ALICE-Zip"
+note = "the identifier is a constant of this crate version: a dependency bump or a toolchain change that moved any pinned bits fails a golden, and re-recording a golden or resolving another upstream identifier moves the identifier; earlier identifiers whose pinned bits are still reproduced go into PREVIOUS_EDGE_SEMANTICS_IDS (empty: this is the first). alice-codec and alice-ml export no identifier, so they have no entry. law::ResidualSummary::law_id stays a per-law identifier taken under the arithmetic SEMANTICS_ID (unchanged); the identifier goldens GOLDEN_SEMANTICS_ID and GOLDEN_LAW_ID_* are not pins, being functions of the entries. This crate tracks no Cargo.lock for consumers: a new upstream release with another identifier turns the pin tests red without a change here, which is the intended failure. Paths with no golden are not pins."
+reference_repo = "ALICE-Physics"
 
 [G7]
 status = "unverified"

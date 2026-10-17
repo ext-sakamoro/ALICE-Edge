@@ -20,6 +20,10 @@
 # Pinned by tests/determinism_golden.rs (SHA-256 of bit patterns, run on the
 # four-OS CI matrix).
 disallowed-methods = [
+    { path = "f32::max", reason = "the sign of an equal pair of zeros is unspecified and differs between targets (G2); use alice_det_math::max / min / max64 / min64 (maximumNumber / minimumNumber)" },
+    { path = "f32::min", reason = "the sign of an equal pair of zeros is unspecified and differs between targets (G2); use alice_det_math::max / min / max64 / min64 (maximumNumber / minimumNumber)" },
+    { path = "f64::max", reason = "the sign of an equal pair of zeros is unspecified and differs between targets (G2); use alice_det_math::max / min / max64 / min64 (maximumNumber / minimumNumber)" },
+    { path = "f64::min", reason = "the sign of an equal pair of zeros is unspecified and differs between targets (G2); use alice_det_math::max / min / max64 / min64 (maximumNumber / minimumNumber)" },
     { path = "f32::sin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
     { path = "f32::cos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },
     { path = "f32::sin_cos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math" },

@@ -29,10 +29,16 @@ note = "every banned method of the G1 list is in clippy.toml, every feature is l
 reference_repo = "ALICE-SDF"
 
 [G2]
-status = "fail-known"
+status = "pass"
+evidence = [
+    "every f32 max / min in library code calls alice_det_math::max / min, which define the sign of an equal pair of zeros (+0 from max, -0 from min) and return the other operand for a NaN (maximumNumber / minimumNumber): src/object_classifier.rs (SdfFeatures::from_* bounding box, aspect, density and elongation features, the two ReLU layers and the softmax max logit), src/ml_bridge.rs (ReLU), src/sdf_compress.rs and src/edge_pipeline.rs (point cloud bounds); 37 sites measured with the four methods banned and every feature but sensors-hw (which has no max / min) before the change",
+    "clippy.toml disallowed-methods f32::max, f32::min, f64::max, f64::min on every target, enforced by the ci.yml clippy steps (no_std, no_std + law, std, FULL_FEATURES, FULL_FEATURES + edge-pipeline, pyo3, sensors-hw) with -D warnings; tests/analytic_oracle.rs uses alice_det_math::max64 for its two tolerances",
+    "scripts/clippy_canary_calls.tsv (generated from clippy.toml, ci.yml --check step) plants the four max / min rows with every other entry, and scripts/clippy_canary.py fails unless each gets a disallowed_methods diagnostic: 62 planted, 0 skipped, measured 2026-10-17",
+]
+mutant = "measured 2026-10-17, reverted: src/ml_bridge.rs ReLU back to (*h + b).max(0.0) fails `cargo clippy --lib --features ml -- -D warnings` with `use of a disallowed method f32::max`; removing one max / min entry from clippy.toml fails the canary data --check step"
 since = ""
-note = "unmet: no ban on f32::max / f32::min / f64::max / f64::min in clippy.toml, no Law helper and no default-deny manifest of raw_* sites. Library sites, measured by adding the four methods to clippy.toml temporarily and running cargo clippy --lib with every feature (std, zip, law, codec, db, ml, sdf, depth-camera, asp, sensors, mqtt, dashboard, ffi, edge-pipeline, pyo3): src/object_classifier.rs:86, :87, :88, :94, :104, :110 (2), :116, :134, :135, :136, :142, :148 (2), :152, :360, :367, :374 (fold(f32::max) / fold(f32::min)); src/sdf_compress.rs:287 to :292; src/edge_pipeline.rs:456 to :461 and :464 to :466; src/ml_bridge.rs:105. The fits are integer Q16.16 arithmetic and the SIMD kernels (src/simd_fit.rs, SSE2 / NEON) are integer, so no SIMD width does a float max/min."
-reference_repo = "ALICE-SDF"
+note = "the replacement moved no golden: tests/determinism_golden.rs (object_features, the ml and law scenarios included) passes unchanged in debug and release with every feature but sensors-hw and pyo3, so EDGE_SEMANTICS_ID is unchanged; std and the helper differ only on an equal pair of zeros of different sign (a ReLU of -0.0 now gives +0.0 on every target) and a NaN pair's payload. The ban covers every target, so no raw_* site exists and no exception manifest is needed. SIMD widths: src/simd_fit.rs SSE2 / NEON kernels are integer (Q16.16), no float lane max / min, so the per-width (+0, -0) clause has no float width here; the scalar helper's (+0, -0) tests live in alice-det-math."
+reference_repo = "ALICE-Physics"
 
 [G3]
 status = "unverified"

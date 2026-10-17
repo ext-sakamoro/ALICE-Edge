@@ -102,7 +102,7 @@ impl EdgeClassifier {
         let mut hidden = [0.0f32; HIDDEN_DIM];
         ternary_matvec_kernel(&input, &self.w_hidden, &mut hidden);
         for (h, b) in hidden.iter_mut().zip(self.bias_hidden.iter()) {
-            *h = (*h + b).max(0.0); // ReLU
+            *h = alice_det_math::max(*h + b, 0.0); // ReLU
         }
 
         // Output layer: ternary matvec + bias

@@ -297,11 +297,11 @@ fn kalman_1d_follows_the_scalar_riccati_recursion_and_converges() {
         x += k * (z - x);
         p *= 1.0 - k;
         assert!(
-            (est - x).abs() < 1e-4 * x.abs().max(1.0),
+            (est - x).abs() < 1e-4 * alice_det_math::max64(x.abs(), 1.0),
             "step {i}: x {est} vs {x}"
         );
         assert!(
-            (kf.error() as f64 - p).abs() < 1e-5 * p.max(1e-3),
+            (kf.error() as f64 - p).abs() < 1e-5 * alice_det_math::max64(p, 1e-3),
             "step {i}: P {} vs {p}",
             kf.error()
         );

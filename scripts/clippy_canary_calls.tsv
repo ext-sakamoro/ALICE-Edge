@@ -7,6 +7,10 @@
 #   planted: <clippy.toml key> <path> <Rust statement placed in a library function>
 #   skipped: <clippy.toml key> <path> skip <reason it cannot be planted>
 # scripts/clippy_canary.py plants every row that is not skipped.
+disallowed-methods	f32::max	let _ = f32::max;
+disallowed-methods	f32::min	let _ = f32::min;
+disallowed-methods	f64::max	let _ = f64::max;
+disallowed-methods	f64::min	let _ = f64::min;
 disallowed-methods	f32::sin	let _ = f32::sin;
 disallowed-methods	f32::cos	let _ = f32::cos;
 disallowed-methods	f32::sin_cos	let _ = f32::sin_cos;

@@ -82,16 +82,19 @@ impl SdfFeatures {
         let mut features = [0.0f32; FEATURE_DIM];
 
         // Feature 0-2: Bounding box dimensions (normalized)
-        let max_dim = bounds_size[0]
-            .max(bounds_size[1])
-            .max(bounds_size[2])
-            .max(1e-6);
+        let max_dim = alice_det_math::max(
+            alice_det_math::max(
+                alice_det_math::max(bounds_size[0], bounds_size[1]),
+                bounds_size[2],
+            ),
+            1e-6,
+        );
         let inv_max = 1.0 / max_dim;
         features[0] = bounds_size[0] * inv_max;
         features[1] = bounds_size[1] * inv_max;
         features[2] = bounds_size[2] * inv_max;
 
-        features[3] = bounds_size[1] / bounds_size[0].max(1e-6);
+        features[3] = bounds_size[1] / alice_det_math::max(bounds_size[0], 1e-6);
 
         if (kind as usize) < 4 {
             features[4 + kind as usize] = 1.0;
@@ -101,19 +104,22 @@ impl SdfFeatures {
         features[8] = bounds_size[0] * bounds_size[1] * bounds_size[2];
 
         // Feature 9: Point density
-        features[9] = point_count as f32 * (1.0 / features[8].max(1e-6));
+        features[9] = point_count as f32 * (1.0 / alice_det_math::max(features[8], 1e-6));
 
         for (i, p) in params.iter().take(3).enumerate() {
             features[10 + i] = *p;
         }
 
-        let min_dim = bounds_size[0].min(bounds_size[1]).min(bounds_size[2]);
+        let min_dim = alice_det_math::min(
+            alice_det_math::min(bounds_size[0], bounds_size[1]),
+            bounds_size[2],
+        );
         features[13] = min_dim * inv_max;
 
         // Feature 14: Elongation (max_dim / median_dim)
         let mut sorted = bounds_size;
         sorted.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        features[14] = sorted[2] / sorted[1].max(1e-6);
+        features[14] = sorted[2] / alice_det_math::max(sorted[1], 1e-6);
 
         features[15] = alice_det_math::ln(point_count as f32 + 1.0);
 
@@ -130,26 +136,32 @@ impl SdfFeatures {
     ) -> Self {
         let mut features = [0.0f32; FEATURE_DIM];
 
-        let max_dim = bounds_size[0]
-            .max(bounds_size[1])
-            .max(bounds_size[2])
-            .max(1e-6);
+        let max_dim = alice_det_math::max(
+            alice_det_math::max(
+                alice_det_math::max(bounds_size[0], bounds_size[1]),
+                bounds_size[2],
+            ),
+            1e-6,
+        );
         let inv_max = 1.0 / max_dim;
         features[0] = bounds_size[0] * inv_max;
         features[1] = bounds_size[1] * inv_max;
         features[2] = bounds_size[2] * inv_max;
 
-        features[3] = bounds_size[1] / bounds_size[0].max(1e-6);
+        features[3] = bounds_size[1] / alice_det_math::max(bounds_size[0], 1e-6);
 
         features[8] = node_count as f32;
         features[9] = leaf_count as f32 / node_count.max(1) as f32;
         features[10] = depth as f32;
 
-        features[13] = bounds_size[0].min(bounds_size[1]).min(bounds_size[2]) * inv_max;
+        features[13] = alice_det_math::min(
+            alice_det_math::min(bounds_size[0], bounds_size[1]),
+            bounds_size[2],
+        ) * inv_max;
 
         let mut sorted = bounds_size;
         sorted.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        features[14] = sorted[2] / sorted[1].max(1e-6);
+        features[14] = sorted[2] / alice_det_math::max(sorted[1], 1e-6);
         features[15] = alice_det_math::ln(node_count as f32 + 1.0);
 
         SdfFeatures { features }
@@ -357,21 +369,24 @@ impl TernaryClassifier {
         ternary_matvec_kernel(&features.features, &self.layer1, &mut hidden1);
         // Branchless ReLU
         for v in &mut hidden1 {
-            *v = v.max(0.0);
+            *v = alice_det_math::max(*v, 0.0);
         }
 
         // Layer 2: 32 → 32 + ReLU
         let mut hidden2 = [0.0f32; HIDDEN_DIM];
         ternary_matvec_kernel(&hidden1, &self.layer2, &mut hidden2);
         for v in &mut hidden2 {
-            *v = v.max(0.0);
+            *v = alice_det_math::max(*v, 0.0);
         }
 
         let mut logits_buf = [0.0f32; 16];
         let logits = &mut logits_buf[..self.num_classes];
         ternary_matvec_kernel(&hidden2, &self.layer3, logits);
 
-        let max_logit = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let max_logit = logits
+            .iter()
+            .copied()
+            .fold(f32::NEG_INFINITY, alice_det_math::max);
         let mut sum_exp = 0.0f32;
         for v in logits.iter_mut() {
             *v = alice_det_math::exp(*v - max_logit);

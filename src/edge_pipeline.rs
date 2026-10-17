@@ -453,17 +453,17 @@ fn compute_bounds_size(points: &[[f32; 3]]) -> [f32; 3] {
     let mut min = [f32::MAX; 3];
     let mut max = [f32::MIN; 3];
     for p in points {
-        min[0] = min[0].min(p[0]);
-        min[1] = min[1].min(p[1]);
-        min[2] = min[2].min(p[2]);
-        max[0] = max[0].max(p[0]);
-        max[1] = max[1].max(p[1]);
-        max[2] = max[2].max(p[2]);
+        min[0] = alice_det_math::min(min[0], p[0]);
+        min[1] = alice_det_math::min(min[1], p[1]);
+        min[2] = alice_det_math::min(min[2], p[2]);
+        max[0] = alice_det_math::max(max[0], p[0]);
+        max[1] = alice_det_math::max(max[1], p[1]);
+        max[2] = alice_det_math::max(max[2], p[2]);
     }
     [
-        (max[0] - min[0]).max(0.001),
-        (max[1] - min[1]).max(0.001),
-        (max[2] - min[2]).max(0.001),
+        alice_det_math::max(max[0] - min[0], 0.001),
+        alice_det_math::max(max[1] - min[1], 0.001),
+        alice_det_math::max(max[2] - min[2], 0.001),
     ]
 }
 

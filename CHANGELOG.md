@@ -6,6 +6,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ### Added
 
+- CI (`clippy.toml`、ALICE-Law G2): `f32::max` / `f32::min` / `f64::max` / `f64::min` を全 target で disallowed-methods にした ライブラリの 37 箇所 (`object_classifier` の特徴量・ReLU・softmax の最大 logit、`ml_bridge` の ReLU、`sdf_compress` / `edge_pipeline` の点群の境界) を `alice_det_math::max` / `min` (符号の違う 0 の組で max は +0、min は -0、NaN では他方を返す) に置き換え、試験の許容幅も `max64` にした golden はすべて不変 (debug / release) で `EDGE_SEMANTICS_ID` も変わらない clippy の canary の表を再生成し (62 行)、4 行それぞれが診断されることを CI が確かめる `alice-law-conformance.toml` の G2 を pass にした
 - CI (ALICE-Law G14): 浮動小数点の結果を変える build の flag を静的と動的の 2 段で検査する (ALICE-DB と同一の `scripts/build_config_guard.py` / `scripts/build_flags_check.py` と test) 静的は target/ 以外の設定・script・Rust を comment を除いて読み、`target-cpu=native`、素の literal でない target-cpu / target-feature / llvm-args の値、command や file から取った RUSTFLAGS、fast-math 系の flag、sse / sse2 を外す target-feature を検出する (意図的な出現は `scripts/build_config_allowlist.toml` に理由付きで書く) 動的は新しい target dir で `cargo check -v` を走らせ、cargo が rustc に実際に渡した flag を読む 静的は docs-lint job (ubuntu / macOS / Windows)、動的は新しい build-flags job (ubuntu / macOS、no_std / std / full feature set) と preflight で実行
 - `tests/float_environment.rs` (ALICE-DB と同一): round-to-nearest-even と subnormal が flush されないことを実行時に確かめる test test job (4 OS) の debug と release で `scripts/run_tests.sh` を通して実行 `alice-law-conformance.toml` の G14 を pass にした
 

@@ -7,6 +7,10 @@
 #   planted: <clippy.toml key> <path> <Rust statement placed in a library function>
 #   skipped: <clippy.toml key> <path> skip <reason it cannot be planted>
 # scripts/clippy_canary.py plants every row that is not skipped.
+disallowed-methods	std::thread::spawn	let _ = std::thread::spawn::<fn(), ()>;
+disallowed-methods	std::thread::scope	let _ = std::thread::scope::<'static, for<'s> fn(&'s std::thread::Scope<'s, 'static>), ()>;
+disallowed-methods	std::thread::Builder::spawn	let _ = std::thread::Builder::spawn::<fn(), ()>;
+disallowed-methods	std::thread::Builder::spawn_scoped	let _ = std::thread::Builder::spawn_scoped::<fn(), ()>;
 disallowed-methods	std::thread::available_parallelism	let _ = std::thread::available_parallelism;
 disallowed-methods	f32::max	let _ = f32::max;
 disallowed-methods	f32::min	let _ = f32::min;
@@ -80,5 +84,4 @@ disallowed-types	std::collections::hash_set::IntoIter	#[allow(unused_imports)] u
 disallowed-types	std::thread::Builder	#[allow(unused_imports)] use std::thread::Builder as CanaryType;
 disallowed-types	std::thread::JoinHandle	#[allow(unused_imports)] use std::thread::JoinHandle as CanaryType;
 disallowed-types	std::thread::ScopedJoinHandle	#[allow(unused_imports)] use std::thread::ScopedJoinHandle as CanaryType;
-disallowed-types	std::thread::Scope	#[allow(unused_imports)] use std::thread::Scope as CanaryType;
 disallowed-types	std::collections::hash_map::RandomState	#[allow(unused_imports)] use std::collections::hash_map::RandomState as CanaryType;

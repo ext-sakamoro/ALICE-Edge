@@ -148,15 +148,17 @@ note = "the workflow fetches ALICE-Law's scripts/public_text_check.py at the rev
 reference_repo = "ALICE-Law"
 
 [G13]
-status = "fail-known"
+status = "pass"
 evidence = [
-    "src/depth_capture.rs voxel_downsample and src/mqtt_bridge.rs OtaModelStore now use BTreeSet / BTreeMap (behaviour unchanged: membership and keyed lookup), so src has no HashMap / HashSet",
-    "clippy.toml disallowed-types HashMap, HashSet and their iterators, std::thread::Builder / JoinHandle / ScopedJoinHandle / Scope, disallowed-methods available_parallelism (every target, -D warnings; canary 75 planted)",
-    "interim text layer: scripts/order_guard.py (the same file as ALICE-Analytics', tests scripts/test_order_guard.py; ci.yml docs-lint job and preflight) with scripts/order_allowlist.toml (one site: the MQTT client's event-loop thread, no results combined)",
+    "type-resolved half (the lint): clippy.toml disallowed-methods std::thread::spawn, std::thread::scope, std::thread::Builder::spawn, std::thread::Builder::spawn_scoped and std::thread::available_parallelism, disallowed-types std::collections::HashMap, HashSet and their iterators (hash_map::Iter / Keys / Values / IntoIter, hash_set::Iter / IntoIter) and std::thread::Builder / JoinHandle / ScopedJoinHandle, on every target with -D warnings (ci.yml clippy job); paths resolve through module aliases, re-exports and glob imports; scripts/clippy_canary.py plants every entry, the generic thread functions with turbofish type arguments (scripts/gen_clippy_canary_calls.py GENERIC_PLANTS): 78 planted, 0 skipped",
+    "text and dependency layer: scripts/order_guard.py (tests scripts/test_order_guard.py; ci.yml docs-lint job and preflight) also fails on hash_map:: / hash_set:: paths, std::thread paths and imports other than sleep / yield_now / current / park, rayon / par_iter / crossbeam, pointer-to-integer casts and a normal dependency on rayon / crossbeam / hashbrown / indexmap / dashmap / ahash / fxhash / rustc-hash: 31 files, 1 allowed line (src/mqtt_bridge.rs, the MQTT client's event-loop thread, listed in scripts/order_allowlist.toml with its count, so a second spawn site fails it)",
+    "the one thread site, src/mqtt_bridge.rs MqttPublisher::new (the MQTT client event loop: network I/O, sets a connected flag, combines nothing into a value), carries #[allow(clippy::disallowed_methods)] with that reason on the one statement",
+    "src/depth_capture.rs voxel_downsample and src/mqtt_bridge.rs OtaModelStore use BTreeSet / BTreeMap",
 ]
+mutant = "measured 2026-10-17, each appended to a library source and reverted, each fails cargo clippy --lib -D warnings with disallowed_methods: `use std::thread as t; t::spawn(..)`, `mod zz { pub use std::thread as pool; } zz::pool::spawn(..)`, `use std::thread::{self as t}; t::spawn(..)`, `use std::thread::*; spawn(..)`, `use std as s; s::thread::Builder::new().spawn(..)`, `std::thread::scope(..)`; a HashMap alias, a hash_set::Iter parameter and std::thread::Builder::new() fail with disallowed_types"
 since = ""
-note = "located: std::thread::spawn / scope are not yet in clippy disallowed-methods because the shared clippy canary generator plants a bare path, which does not compile for a generic function; until the generator update (a turbofish table for generic paths) lands in the enforced repos, a spawn reached through a re-export chain is caught only by the text layer, which is evadable, so the cell is not pass."
-reference_repo = "ALICE-Analytics"
+note = "no parallel reduction over floats exists, so the ordered-reduction test with two thread counts has nothing to test; the lint keeps it that way. std::thread::Scope is not a disallowed type because the scope function (its only source) is a disallowed method, and the canary's scope plant names the type."
+reference_repo = ""
 
 [G14]
 status = "pass"

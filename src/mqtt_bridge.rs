@@ -574,6 +574,9 @@ impl MqttPublisher {
         let connected_clone = connected.clone();
 
         // イベントループ: ConnAck 受信で connected=true、切断で false
+        // ALICE-Law G13: the client's event loop drives network I/O on its own thread and only sets
+        // a flag; nothing it computes is combined into a value (listed in scripts/order_allowlist.toml)
+        #[allow(clippy::disallowed_methods)]
         std::thread::spawn(move || {
             for event in connection.iter() {
                 match event {

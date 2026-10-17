@@ -31,6 +31,13 @@
 //! (its `SEMANTICS_ID`, `sdf`). The identifier goldens (`GOLDEN_SEMANTICS_ID`,
 //! `GOLDEN_LAW_ID_*`) are not pins: they are functions of the entries.
 //!
+//! `alice-zip` 0.10 re-exports `alice-det-math`'s identifier as its
+//! `law::SEMANTICS_ID`, so its entry has the same digest as the
+//! `"alice-det-math"` entry today: it names the arithmetic, not alice-zip's
+//! own rules, which reach this identifier through the `"law"` golden. The
+//! entry is kept so that an identifier alice-zip defines later moves this
+//! one.
+//!
 //! # Fold
 //!
 //! The same procedure as the `SEMANTICS_ID` fold of `alice-det-math`: sort

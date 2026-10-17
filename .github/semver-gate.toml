@@ -4,7 +4,9 @@
 # [crate.alice-edge] in ALICE-Law release-train.toml, the roster its publish gate builds the
 # packaged crate with; keep them equal. The gate also runs the default features and no
 # default features
-consumer-features = [["asp", "codec", "dashboard", "db", "depth-camera", "edge-pipeline", "ffi", "law", "ml", "mqtt", "pyo3", "sdf", "sensors", "std", "zip"]]
+# 0.4.0 adds the serde-raw feature (Serialize / Deserialize of CoefficientPayload without the
+# semantics identifier); the roster entry gains it when the 0.4.0 entry replaces 0.3.0's
+consumer-features = [["asp", "codec", "dashboard", "db", "depth-camera", "edge-pipeline", "ffi", "law", "ml", "mqtt", "pyo3", "sdf", "sensors", "serde-raw", "std", "zip"]]
 consumer-features-why = "外す feature: sensors-hw (rppal は特定の Linux board の GPIO 専用で他の target では build できない)"
 exclude-features = { sensors-hw = "rppal は特定の Linux board の GPIO 専用で、他の target では build できない" }
 

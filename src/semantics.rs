@@ -13,7 +13,7 @@
 //! # Hex form
 //!
 //! ```text
-//! a965d82009ce340fe789bb163114d7bbb28a35e87e6564e92663b608ecc75769
+//! 1dd8876b42ffcef5dabc506377466e282d290466acd2369d063d4358ab66ef80
 //! ```
 //!
 //! # Entries
@@ -24,19 +24,18 @@
 //! `"object_features"`, `"sensors"`, `"depth_capture"`, some run only with
 //! the feature that builds the module) and one per `k` of the robust fit
 //! (`"robust_k1"`, `"robust_k3"`, `"robust_k10"`, `"robust_kmax"`), plus the
-//! identifiers of the Law-bearing dependencies: `"alice-det-math"` (its
-//! `SEMANTICS_ID`), `"alice-zip"` (its `law::SEMANTICS_ID`, the `law` and
-//! `zip` features), `"alice-db"` (its `SEMANTICS_ID`, `db`),
-//! `"alice-analytics"` (its `SEMANTICS_ID`, `dashboard`) and `"alice-sdf"`
-//! (its `SEMANTICS_ID`, `sdf`). The identifier goldens (`GOLDEN_SEMANTICS_ID`,
-//! `GOLDEN_LAW_ID_*`) are not pins: they are functions of the entries.
+//! identifiers of the Law-bearing dependencies, each the dependency's own Law
+//! identifier: `"alice-det-math"` (its `SEMANTICS_ID`), `"alice-zip"` (its
+//! `law::SEMANTICS_ID`, the `law` and `zip` features), `"alice-db"` (its
+//! `DB_SEMANTICS_ID`, `db`), `"alice-analytics"` (its `ANALYTICS_SEMANTICS_ID`,
+//! `dashboard`) and `"alice-sdf"` (its `SDF_SEMANTICS_ID`, `sdf`). The
+//! identifier goldens (`GOLDEN_SEMANTICS_ID`, `GOLDEN_LAW_ID_*`) are not pins:
+//! they are functions of the entries.
 //!
-//! `alice-zip` 0.10 re-exports `alice-det-math`'s identifier as its
-//! `law::SEMANTICS_ID`, so its entry has the same digest as the
-//! `"alice-det-math"` entry today: it names the arithmetic, not alice-zip's
-//! own rules, which reach this identifier through the `"law"` golden. The
-//! entry is kept so that an identifier alice-zip defines later moves this
-//! one.
+//! Each upstream identifier folds the arithmetic identifier it was built with
+//! (alice-zip's from 0.11, alice-sdf's `SDF_SEMANTICS_BY_DET_MATH` rows, and the
+//! two built on alice-zip's), so the arithmetic is covered twice: by the
+//! `"alice-det-math"` entry and inside each upstream entry.
 //!
 //! # Fold
 //!
@@ -157,26 +156,26 @@ pub const EDGE_SEMANTICS_PINS: [(&str, [u8; 32]); 22] = [
     ),
     (
         "alice-zip",
-        hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
+        hex32("51ffeb079769ea34bd3cb3df756b6cb940b8d2d6a6a0f1e1115ab8139415935e"),
     ),
     (
         "alice-db",
-        hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
+        hex32("e1a82c6407b1a880267b354647891271929bf2a5765a93dc48944ff64237c4ce"),
     ),
     (
         "alice-analytics",
-        hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
+        hex32("f8ded5961a8ef8be2d79ea4bfafd68f494c2443d725fb926cf9775824e043d4d"),
     ),
     (
         "alice-sdf",
-        hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
+        hex32("151079595c1e8d8fc661909bac7ea0dde0ba5a8b3ef500019d01c6af64defb69"),
     ),
 ];
 
 /// The semantics identifier of this crate: the fold of
 /// [`EDGE_SEMANTICS_PINS`] (see the module documentation).
 pub const EDGE_SEMANTICS_ID: [u8; 32] =
-    hex32("a965d82009ce340fe789bb163114d7bbb28a35e87e6564e92663b608ecc75769");
+    hex32("1dd8876b42ffcef5dabc506377466e282d290466acd2369d063d4358ab66ef80");
 
 /// Earlier values of [`EDGE_SEMANTICS_ID`] whose pinned bits this release
 /// still reproduces (none yet: this is the first identifier).

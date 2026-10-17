@@ -84,13 +84,13 @@ alice-det-math = { version = "0.5.1", default-features = false }
 pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 numpy = { version = "0.29", optional = true }
 # `zip` turns on alice-zip's std + lzma, `law` uses it without them (no_std)
-alice_core = { package = "alice-zip", version = "0.10", optional = true, default-features = false }
+alice_core = { package = "alice-zip", path = "../ALICE-Zip", version = ">=0.11, <0.12", optional = true, default-features = false }
 alice-codec = { version = "0.1", optional = true, default-features = false, features = ["std"] }
 # alice-db (from 0.4) keeps its file backend behind the default `fs` feature; this
 # crate opens on-disk stores, so `fs` is named explicitly
-alice-db = { version = "0.5", optional = true, default-features = false, features = ["fs"] }
+alice-db = { path = "../ALICE-DB", version = ">=0.6, <0.7", optional = true, default-features = false, features = ["fs"] }
 rusb = { version = "0.9", optional = true }
-alice-sdf = { version = "6", optional = true, default-features = false, features = ["svo"] }
+alice-sdf = { path = "../ALICE-SDF", version = ">=7, <8", optional = true, default-features = false, features = ["svo"] }
 alice-ml = { version = "0.2", optional = true, default-features = false, features = ["std"] }
 libasp = { version = "1.0", optional = true, default-features = false }
 # Sensor drivers
@@ -100,7 +100,7 @@ serde = { version = "1", features = ["derive"], optional = true }
 # MQTT bridge
 rumqttc = { version = "0.25", optional = true }
 # Dashboard
-alice-analytics = { version = ">=0.5, <0.7", optional = true }
+alice-analytics = { path = "../ALICE-Analytics", version = ">=0.7, <0.8", optional = true }
 
 # The two float lints that propose re-fusing arithmetic are off as a property
 # of the crate, not case by case: every transcendental goes through

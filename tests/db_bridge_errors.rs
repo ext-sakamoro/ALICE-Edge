@@ -65,7 +65,8 @@ fn a_slope_read_of_foreign_arithmetic_is_an_error_not_an_empty_result() {
     match err.residual() {
         Some(alice_db::ResidualError::Mismatch(m)) => {
             assert_eq!(hex(&m.stored), OLD_ID, "{m:?}");
-            assert_eq!(m.running, alice_edge::SEMANTICS_ID, "{m:?}");
+            // the identifier alice-db stamps and checks (from 0.6, alice-zip's law::SEMANTICS_ID)
+            assert_eq!(m.running, alice_db::SEMANTICS_ID, "{m:?}");
         }
         other => panic!("expected ResidualError::Mismatch, got {other:?} ({err})"),
     }

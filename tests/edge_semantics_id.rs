@@ -141,7 +141,7 @@ fn zip_pin_is_the_resolved_zip_identifier() {
 #[cfg(feature = "db")]
 #[test]
 fn db_pin_is_the_resolved_db_identifier() {
-    assert_eq!(hex(&pin("alice-db")), hex(&alice_db::SEMANTICS_ID));
+    assert_eq!(hex(&pin("alice-db")), hex(&alice_db::DB_SEMANTICS_ID));
 }
 
 #[cfg(feature = "dashboard")]
@@ -149,14 +149,14 @@ fn db_pin_is_the_resolved_db_identifier() {
 fn analytics_pin_is_the_resolved_analytics_identifier() {
     assert_eq!(
         hex(&pin("alice-analytics")),
-        hex(&alice_analytics::SEMANTICS_ID)
+        hex(&alice_analytics::ANALYTICS_SEMANTICS_ID)
     );
 }
 
 #[cfg(feature = "sdf")]
 #[test]
 fn sdf_pin_is_the_resolved_sdf_identifier() {
-    assert_eq!(hex(&pin("alice-sdf")), hex(&alice_sdf::SEMANTICS_ID));
+    assert_eq!(hex(&pin("alice-sdf")), hex(&alice_sdf::SDF_SEMANTICS_ID));
 }
 
 /// Changing any single pin (each golden and each upstream identifier) moves

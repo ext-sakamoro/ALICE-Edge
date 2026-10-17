@@ -274,7 +274,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `41db3adbbe1e` と
 | G3 no-outer-fneg-of-fma | 未確認 | unverified: no violation is known; the only mul_add sites are src/sensors.rs:865 (lat_deg.mul_add(-100.0, lat_raw)) and src/sensors.rs:874 … |
 | G4 debug-release-arch-goldens | 未達 | unmet: (1) no signed-zero or exact-cancellation case is checked against fixed bit patterns (tests/ has no -0.0 literal and no cancellation case; … |
 | G5 release-profile-test-leg | 未達 | unmet: the release profile runs only tests/panic_contract.rs (.github/workflows/ci.yml:108 std and :167 full feature set, on the four-OS matrix including the … |
-| G6 semantics-id | 未達 | unmet: src/lib.rs:151 re-exports alice-det-math's identifier instead of computing one that folds this crate's own pins (the Q16.16 normal equations, … |
+| G6 semantics-id | 適合 | the identifier is a constant of this crate version: a dependency bump or a toolchain change that moved any pinned bits fails a golden, and re-recording a … |
 | G7 handshake-carries-id | 未確認 | unverified: the boundaries within one exchange are listed but not ruled on: src/ffi.rs (22 #[no_mangle] extern "C" functions taking Q16.16 coefficients and … |
 | G8 persisted-semantics-id | 未確認 | unverified: the durable forms are listed but not ruled on: src/object_classifier.rs:287 save_weights and :309 load_weights (float classifier weights in a file, … |
 | G9 persisted-meaning-change-is-major | 未確認 | unverified: depends on G6 and G8; this crate defines no identifier of its own whose history could be audited (src/lib.rs:151 re-exports alice-det-math's, whose … |

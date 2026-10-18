@@ -21,6 +21,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 - `tests/float_environment.rs` (ALICE-DB と同一): round-to-nearest-even と subnormal が flush されないことを実行時に確かめる test test job (4 OS) の debug と release で `scripts/run_tests.sh` を通して実行 `alice-law-conformance.toml` の G14 を pass にした
 
 ### Changed
+- CI: `.gitattributes` に `* text=auto eol=lf` を置き、text の file を保存も checkout も全 OS で LF にした (共有 file は ALICE-Law の表と byte で比べるので、Windows の CRLF の checkout ではずれになる) binary と既存の行はそのまま、`git add --renormalize` で commit 済みの中身は変わらない
 - CI: ALICE-SDF と共有する `scripts/api_boundary.py` / `scripts/test_api_boundary.py` を新しい版に揃えた (--document-private-items の 2 回目の rustdoc で private module の extern "C" も列挙、pyo3 の入口・wasm32 だけの fn の列挙、`pending:` の判定、`--skip-missing-targets`、1 つの OS でだけ compile される入口の `host` 表) この crate の一覧は変わらず、全件の判定はそのまま通る
 - CI: 共有の `scripts/alice_siblings_check.py` と試験、`.github/actions/alice-siblings` を ALICE-Analytics と同じ版にした (workspace の member の manifest も読む、action に入力 `repo-dir`) この repo は workspace ではなく既定の `repo-dir` を使うので、検査の結果と clone 先は変わらない
 - **Breaking:** `SEMANTICS_ID` は alice-zip の `law::SEMANTICS_ID` の再 export になった (`85e08846…` → `51ffeb07…`) alice-zip / alice-db の読み手が確かめるのはこの値で、alice-det-math の識別子を記録すると以前の算術として読まれていた alice-zip は必須の依存になった (`default-features = false`、`law` / `zip` feature は alice-zip を引かない、全 build で同じ値) `law_id` の golden は `20a70060…` / `04a44ecc…` → `521bfeda…` / `c373565c…` 以前の識別子 (`85e08846…` と `135c407d…`、alice-zip の `law::PREVIOUS_SEMANTICS_IDS`) を渡すと 0.3.0 と 0.2.x の law id がそのまま出ることを試験で固定した `EDGE_SEMANTICS_ID` は不変

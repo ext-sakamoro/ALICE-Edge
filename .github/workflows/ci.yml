@@ -204,9 +204,10 @@ jobs:
       # examples/ benches/ with the exact fma-call counts of
       # scripts/no-outer-fneg-of-fma-allowlist.toml (2, both library code in src/sensors.rs);
       # the IR half is g3-ir.yml
-      - name: No negated fma result (syntax tree, tests then check)
+      - name: No negated fma result (syntax tree, format then tests then check)
         shell: bash
         run: |
+          cargo fmt --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml -- --check
           cargo test --quiet --locked --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml
           cargo run --quiet --locked --release --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml -- --root .
 

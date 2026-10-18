@@ -116,8 +116,9 @@ cargo run --quiet --locked --release --manifest-path tools/no-outer-fneg-of-fma/
 python3 scripts/test_fneg_fma_ir_check.py
 python3 scripts/fneg_fma_ir_check.py --package alice-edge --features "std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi,serde-raw,edge-pipeline" --findings-only
 
-step "ci.yml / docs-lint: changed_paths tests (g3-ir.yml's changes job)"
+step "ci.yml / docs-lint: changed_paths tests + sync (the changes jobs of g3-ir / fuzz / security-audit / semver-checks)"
 python3 scripts/test_changed_paths.py
+python3 scripts/changed_paths.py sync
 
 step "ci.yml / docs-lint: run_tests.sh (zero-test guard) tests"
 python3 scripts/test_run_tests.py

@@ -1,0 +1,11 @@
+# the paths that run .github/workflows/fuzz.yml (scripts/changed_paths.py decide)
+# on.pull_request.paths of the workflow must list the same patterns in the same order
+# (scripts/changed_paths.py sync)
+src/**
+Cargo.toml
+fuzz/**
+.github/workflows/fuzz.yml
+.github/alice-siblings
+.github/actions/alice-siblings/**
+scripts/changed_paths.py
+.github/paths/fuzz.txt

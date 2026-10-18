@@ -1,0 +1,15 @@
+# the paths that run .github/workflows/security-audit.yml (scripts/changed_paths.py decide)
+# on.pull_request.paths of the workflow must list the same patterns in the same order
+# (scripts/changed_paths.py sync)
+Cargo.toml
+src/**
+deny.toml
+.github/workflows/security-audit.yml
+scripts/stub_guard.sh
+.github/alice-siblings
+.github/actions/alice-siblings/**
+scripts/alice_siblings_check.py
+scripts/test_package_integrity.py
+scripts/package_integrity.py
+scripts/changed_paths.py
+.github/paths/security-audit.txt

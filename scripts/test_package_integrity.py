@@ -233,6 +233,21 @@ class PackageContents(Fixture):
         rc, out = self.main(f"--test-in-package={spec}", runner=self.runner(test_out="test result: FAILED. 2 passed; 1 failed;"))
         self.assertEqual(rc, 1, out)
 
+    def test_dev_dependency_on_the_crate_itself_is_not_a_sibling(self) -> None:
+        # ALICE-DB: `alice-db = { path = "." }` in [dev-dependencies] (its tests enable a feature);
+        # the root directory is named like a sibling, but it is the crate being packaged
+        manifest = (self.root / "Cargo.toml").read_text()
+        (self.root / "Cargo.toml").write_text(manifest + '\n[dev-dependencies]\nalice-crate = { path = ".", features = ["x"] }\n')
+        rc, out = self.main("--publish-gate")
+        self.assertIn("package_integrity: blocked 1", out)
+        self.assertNotIn("alice-crate", out)
+        # with a version too: still the crate itself, never a dependency to patch onto itself
+        (self.root / "Cargo.toml").write_text(manifest + '\n[dev-dependencies]\nalice-crate = { path = ".", version = "0.6.0" }\n')
+        self.published["alice-crate"] = []
+        rc, out = self.main("--publish-gate")
+        self.assertIn("package_integrity: blocked 1", out)
+        self.assertNotIn("alice-crate", out)
+
     def test_every_cargo_call_carries_the_sibling_patch(self) -> None:
         rc, out = self.main("--require-file", "README.md", "--doctests-min", "1", "--test-in-package=--lib",
                             "--check-args=--lib --all-features", "--locked-check-args=--all-features --all-targets")
@@ -241,6 +256,175 @@ class PackageContents(Fixture):
         self.assertTrue(all(any("patch.crates-io.alice-zip.path=" in a for a in c) for c in self.calls), self.calls)
         self.assertIn(["--lib", "--all-features"], [c[2:4] for c in self.calls if c[1] == "check" and "--locked" not in c])
         self.assertIn(["--locked", "--all-features", "--all-targets"], [c[2:5] for c in self.calls if c[1] == "check" and "--locked" in c])
+
+
+class Workspace(unittest.TestCase):
+    """--member: a workspace whose packaged crate sits in a member directory (ALICE-LOL)."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name)
+        self.root = self.base / "ALICE-Ws"
+        (self.root / ".github").mkdir(parents=True)
+        (self.root / ".github" / "alice-siblings").write_text(f"ALICE-Zip {SHA}\n")
+        (self.root / "Cargo.toml").write_text('[workspace]\nmembers = ["ws-macro", "ws-lib"]\n'
+                                              '[workspace.dependencies]\nws-macro = { path = "ws-macro", version = "=0.4.0" }\n')
+        (self.root / "ws-macro").mkdir()
+        (self.root / "ws-macro" / "Cargo.toml").write_text('[package]\nname = "ws-macro"\nversion = "0.4.0"\n')
+        self.lib = self.root / "ws-lib"
+        self.lib.mkdir()
+        self.write_lib('ws-macro = { path = "../ws-macro", version = "=0.4.0" }\n'
+                       'alice-zip = { path = "../../ALICE-Zip", version = ">=0.11, <0.12" }\n')
+        (self.base / "ALICE-Zip").mkdir()
+        (self.base / "ALICE-Zip" / "Cargo.toml").write_text('[package]\nname = "alice-zip"\nversion = "0.11.0"\n')
+        self.published = {"alice-zip": [(0, 10, 0)], "ws-macro": [(0, 3, 0)]}
+        self.target = self.base / "target"
+        self.calls: list[tuple[list[str], Path]] = []
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def write_lib(self, deps: str, extra: str = "") -> None:
+        (self.lib / "Cargo.toml").write_text(
+            f'[package]\nname = "ws-lib"\nversion = "0.5.0"\n\n[dependencies]\n{deps}{extra}')
+
+    def runner(self, cmd: list[str], cwd: Path) -> tuple[int, str, str]:
+        self.calls.append((cmd, cwd))
+        if cmd[1] == "package":
+            out = self.target / "package"
+            out.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(out / "ws-lib-0.5.0.crate", "w:gz") as tar:
+                data = b'[package]\nname = "ws-lib"\nversion = "0.5.0"\n'
+                info = tarfile.TarInfo("ws-lib-0.5.0/Cargo.toml")
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+            return 0, "", "Packaged"
+        return 0, "", "Finished"
+
+    def main(self, *argv: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        os.environ["CARGO_TARGET_DIR"] = str(self.target)
+        from contextlib import redirect_stderr
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = pi.main(["--root", str(self.root), *argv], versions_of=lambda n: self.published[n], runner=self.runner)
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_root_without_package_needs_member(self) -> None:
+        rc, out, _ = self.main("--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("has no [package] (use --member for a workspace)", out)
+
+    def test_member_sibling_two_levels_up_and_unpublished_member_dep_are_blocked(self) -> None:
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("blocked: ws-macro =0.4.0 unpublished (crates.io max 0.3.0), satisfied only by the "
+                      "workspace member ws-macro (ws-macro 0.4.0)", out)
+        self.assertIn("blocked: alice-zip >=0.11, <0.12 unpublished (crates.io max 0.10.0), satisfied only "
+                      f"by .github/alice-siblings ALICE-Zip {SHA[:12]}", out)
+        self.assertIn("package_integrity: blocked 2", out)
+
+    def test_published_member_version_is_not_patched(self) -> None:
+        self.published["ws-macro"] = [(0, 4, 0)]
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertIn("package_integrity: blocked 1", out)
+        self.assertNotIn("blocked: ws-macro", out)
+
+    def test_member_version_that_does_not_satisfy_is_a_problem(self) -> None:
+        (self.root / "ws-macro" / "Cargo.toml").write_text('[package]\nname = "ws-macro"\nversion = "0.4.1"\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ws-macro: the workspace member ws-macro is 0.4.1, which does not satisfy '=0.4.0'", out)
+
+    def test_member_dep_without_version_is_a_problem_but_dev_dep_is_left_out(self) -> None:
+        self.write_lib('ws-macro = { path = "../ws-macro" }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ws-macro: path dependency without a version cannot be published", out)
+        self.write_lib("", '\n[dev-dependencies]\nws-macro = { path = "../ws-macro" }\nws-lib = { path = "." }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("package_integrity: blocked 0", out)
+
+    def test_unresolved_path_dependency_is_a_problem(self) -> None:
+        for path in ("../../Other", "../../../ALICE-Zip", "../../ALICE-Zip/sub"):
+            self.write_lib(f'thing = {{ path = "{path}", version = "1" }}\n')
+            rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+            self.assertEqual(rc, 1, (path, out))
+            self.assertIn(f"thing: path '{path}' is neither a listed sibling", out)
+
+    def test_version_less_path_in_dependencies_is_a_problem_in_every_kind(self) -> None:
+        # only a dev-dependency is left out of the package; in [dependencies] it is published
+        for spec, expect in (
+            ('other = { path = "../../Other" }', "other: path '../../Other' is neither a listed sibling"),
+            ('ws-macro = { path = "../ws-macro" }', "ws-macro: path dependency without a version"),
+            ('alice-zip = { path = "../../ALICE-Zip" }', "alice-zip: path dependency without a version"),
+        ):
+            self.write_lib(spec + "\n")
+            rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+            self.assertEqual(rc, 1, (spec, out))
+            self.assertIn(expect, out)
+
+    def test_version_less_sibling_dev_dependency_is_left_out(self) -> None:
+        self.write_lib("", '\n[dev-dependencies]\nalice-zip = { path = "../../ALICE-Zip", features = ["x"] }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("package_integrity: blocked 0", out)
+
+    def test_same_name_with_another_path_in_a_target_table_is_checked(self) -> None:
+        self.write_lib('alice-zip = { path = "../../ALICE-Zip", version = ">=0.11, <0.12" }\n',
+                       '\n[target.\'cfg(unix)\'.dependencies]\nalice-zip = { path = "../../Other", version = "1" }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("alice-zip: path '../../Other' is neither a listed sibling", out)
+
+    def test_inherited_workspace_dependency_is_followed(self) -> None:
+        self.write_lib("ws-macro = { workspace = true }\n")
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertIn("blocked: ws-macro =0.4.0 unpublished", out)
+        self.write_lib("nothing = { workspace = true }\n")
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("[workspace.dependencies] has no nothing", out)
+
+    def test_patches_prints_one_config_per_blocked_dep_and_nothing_else(self) -> None:
+        rc, out, err = self.main("--member", "ws-lib", "--patches")
+        self.assertEqual(rc, 0, err)
+        lines = out.splitlines()
+        self.assertEqual(lines, [
+            f'--config=patch.crates-io.ws-macro.path="{(self.root / "ws-macro").resolve()}"',
+            f'--config=patch.crates-io.alice-zip.path="{(self.base / "ALICE-Zip").resolve()}"',
+        ])
+        self.assertIn("blocked 2", err)
+        self.published.update({"ws-macro": [(0, 4, 0)], "alice-zip": [(0, 11, 0)]})
+        rc, out, err = self.main("--member", "ws-lib", "--patches")
+        self.assertEqual((rc, out), (0, ""), err)
+        self.write_lib('thing = { path = "../../Other", version = "1" }\n')
+        rc, out, err = self.main("--member", "ws-lib", "--patches")
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("neither a listed sibling", err)
+
+    def test_member_is_packaged_in_its_directory_into_the_workspace_target(self) -> None:
+        os.environ.pop("CARGO_TARGET_DIR", None)
+        self.target = self.root / "target"
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out):
+            rc = pi.main(["--root", str(self.root), "--member", "ws-lib"],
+                         versions_of=lambda n: self.published[n], runner=self.runner)
+        self.assertEqual(rc, 0, out.getvalue())
+        self.assertIn("packaged ws-lib-0.5.0.crate", out.getvalue())
+        package_calls = [c for c in self.calls if c[0][1] == "package"]
+        self.assertTrue(package_calls)
+        self.assertTrue(all(Path(cwd).resolve() == self.lib.resolve() for _, cwd in package_calls), package_calls)
+        self.assertTrue(all(sum("patch.crates-io." in a for a in c[0]) == 2 for c in self.calls), self.calls)
+
+    def test_sibling_reached_through_a_symlink_is_still_a_sibling(self) -> None:
+        real = self.base / "elsewhere" / "zip"
+        real.parent.mkdir()
+        (self.base / "ALICE-Zip").rename(real)
+        (self.base / "ALICE-Zip").symlink_to(real, target_is_directory=True)
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertIn("blocked: alice-zip", out)
+
 
 if __name__ == "__main__":
     unittest.main()

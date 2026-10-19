@@ -280,7 +280,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `bd45312102fc` と
 | G7 handshake-carries-id | 適合 | breaking (0.4.0): the fit result structs grow a semantics_id field and the evaluate / residual functions take it (C, C# and Python signatures), the MQTT binary … |
 | G8 persisted-semantics-id | 適合 | breaking (0.4.0): save_weights / load_weights return WeightsError instead of String and load_weights returns the IdStatus with the classifier. A weights file … |
 | G9 persisted-meaning-change-is-major | 適合 | definition: EDGE_SEMANTICS_ID (the identifier the weights and payloads carry, [[id]] in scripts/id_move.toml with PREVIOUS_EDGE_SEMANTICS_IDS) may move only … |
-| G10 no-run-varying-artifacts | 適合 | the 23 production .elapsed() reads (a 24th grep hit, src/sensors.rs:1565, is a doc comment) sit under scoped clippy::disallowed_methods allows with a reason … |
+| G10 no-run-varying-artifacts | 適合 | the 23 production .elapsed() reads (a 24th grep hit, `src/sensors.rs#/// its reading from `, is a doc comment) sit under scoped clippy::disallowed_methods … |
 | G11 gate-self-tests | 未達 | unmet: clause (c). scripts/clippy_canary.py, scripts/test_clippy_canary.py, scripts/gen_clippy_canary_calls.py, scripts/test_gen_clippy_canary_calls.py, … |
 | G12 public-repo-text-rules | 適合 | the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (779fa443f95bc0caca5ca2d5bdb9156051fd6143) and refuses … |
 | G13 no-unspecified-order | 適合 | no parallel reduction over floats exists, so the ordered-reduction test with two thread counts has nothing to test; the lint keeps it that way. … |

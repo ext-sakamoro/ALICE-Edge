@@ -5,6 +5,9 @@ All notable changes to ALICE-Edge will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `conformance/g11-own.toml`: ALICE-Law G11 の表のうち、この crate 固有の行 (G4 / G5 の golden、G6 の識別子、比較 0 件は `scripts/run_tests.sh` の試験、G10 の `scripts/entropy_guard.py` とその試験) 共有の検査器の行は ALICE-Law の `conformance/g11-shared-rows.toml` から生成する
+- CI (ALICE-Law G11): test job の goldens と float edges (std, debug) の `scripts/run_tests.sh` に `edge_semantics_id` を足した 識別子の試験の binary が 1 件も走らない時に step が落ちる (G6 の canary がその binary にある、6 件)
+- CI (ALICE-Law G11 (c)): ほかの ALICE の crate と同じ bytes で持つ file を ALICE-Law の表と比べる `scripts/shared_files.sh` (試験 `scripts/test_shared_files.py`、ALICE-DetMath などと同じ中身) と `.github/shared-files-pin` を足し、docs-lint job (3 OS) と preflight で走らせる 表と検査器は pin の版で取得し SHA-256 を確かめる 差、表に無い共有の path、比較 0 件は失敗
 - CI (ALICE-Law G3): 共有の probe 48 / 49 / 50 を足した 48 と 49 は fma の結果の符号反転が後の定数倍や加算に畳まれて IR に fneg が残らない形 (IR の検査は clean、構文木の検査が拒む)、50 は反転した結果を別にも使うので fneg が IR に残る形 (IR の検査が拒む) `scripts/fneg_fma_ir_check.py` の docstring に、IR の半分が見分けられるのは IR に残った反転だけで、源の形は構文木の検査が拒むことを書いた (この crate の src/sensors.rs の緯度の分の形が例)
 - CI: text の file の行末の検査 `scripts/check_eol.py` (試験 `scripts/test_check_eol.py`) と `.github/workflows/eol.yml` を足した `git ls-files --eol` で text の file が index か working tree で CRLF / 混在なら失敗 (`-text` と binary は除く、比べた数を出し 0 件は失敗)、workflow は ubuntu / macos / windows で走り、preflight にも同じ検査を足した (ALICE の crate で同じ中身の file)
 - `scripts/package_integrity.py` を ALICE-Analytics と同じ版にした (workspace の member を検査する `--member DIR`、repository 内の未公開 package への path 依存を blocked にする、隣でも repository 内でもない path 依存を失敗にする、blocked の patch 引数だけを出す `--patches`) この repository での出力は変更前と同じ

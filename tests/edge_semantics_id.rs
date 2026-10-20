@@ -171,7 +171,7 @@ fn every_pin_moves_the_identifier() {
         changed[i].1[31] ^= 1;
         assert_ne!(
             fold(&changed),
-            EDGE_SEMANTICS_ID,
+            fold(&EDGE_SEMANTICS_PINS),
             "pin {} does not move the identifier",
             changed[i].0
         );

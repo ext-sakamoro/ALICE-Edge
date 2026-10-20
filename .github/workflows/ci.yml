@@ -103,7 +103,7 @@ jobs:
       # reassociation one target's optimiser makes is a changed bit
       - name: Test — goldens and float edges (std, debug)
         shell: bash
-        run: scripts/run_tests.sh determinism_golden,float_edge_golden -- cargo test --test determinism_golden --test float_edge_golden --features "std,law"
+        run: scripts/run_tests.sh determinism_golden,float_edge_golden,edge_semantics_id -- cargo test --test determinism_golden --test float_edge_golden --test edge_semantics_id --features "std,law"
 
       - name: Test — goldens and float edges (std, release)
         shell: bash
@@ -471,6 +471,14 @@ jobs:
       # OS's own bash
       - name: run_tests.sh (tests)
         run: python scripts/test_run_tests.py
+      # ALICE-Law G11 (c): the files shared with the other crates are the bytes ALICE-Law's
+      # table records (table and checker fetched at .github/shared-files-pin, both SHA-256
+      # pinned); a difference, an unlisted shared path or nothing compared fails
+      - name: Shared files equal ALICE-Law's table
+        shell: bash
+        run: |
+          python scripts/test_shared_files.py
+          scripts/shared_files.sh
       # the path decision, gate and trigger lint of g3-ir.yml's changes job (shared with ALICE-DB)
       - name: changed_paths oracle (path filter decision, gate and trigger lint)
         run: python scripts/test_changed_paths.py

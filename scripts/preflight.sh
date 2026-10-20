@@ -128,6 +128,10 @@ python3 scripts/changed_paths.py sync
 step "ci.yml / docs-lint: run_tests.sh (zero-test guard) tests"
 python3 scripts/test_run_tests.py
 
+step "ci.yml / docs-lint: Shared files equal ALICE-Law's table"
+python3 scripts/test_shared_files.py
+scripts/shared_files.sh
+
 step "ci.yml / clippy: clippy canary data (generator tests, generated from clippy.toml, no drift)"
 python3 scripts/test_gen_clippy_canary_calls.py
 python3 scripts/gen_clippy_canary_calls.py --check
@@ -206,7 +210,7 @@ if [[ $quick -eq 1 ]]; then
   scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --no-default-features
   scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "std"
   scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "law"
-  scripts/run_tests.sh determinism_golden,float_edge_golden -- cargo test --test determinism_golden --test float_edge_golden --features "std,law"
+  scripts/run_tests.sh determinism_golden,float_edge_golden,edge_semantics_id -- cargo test --test determinism_golden --test float_edge_golden --test edge_semantics_id --features "std,law"
   scripts/run_tests.sh determinism_golden,float_edge_golden -- cargo test --release --test determinism_golden --test float_edge_golden --features "std,law"
   cargo test --test panic_contract --features "std"
   echo; echo "preflight --quick OK (the other test suites, the release-profile panic contract, MSRV, powerset, fuzz build and security jobs are skipped)"; exit 0
@@ -252,7 +256,7 @@ scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden 
 scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "std"
 scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "law"
 scripts/run_tests.sh determinism_golden -- cargo test --test determinism_golden --features "$FULL"
-scripts/run_tests.sh determinism_golden,float_edge_golden -- cargo test --test determinism_golden --test float_edge_golden --features "std,law"
+scripts/run_tests.sh determinism_golden,float_edge_golden,edge_semantics_id -- cargo test --test determinism_golden --test float_edge_golden --test edge_semantics_id --features "std,law"
 scripts/run_tests.sh determinism_golden,float_edge_golden -- cargo test --release --test determinism_golden --test float_edge_golden --features "std,law"
 scripts/run_tests.sh determinism_golden -- cargo test --release --test determinism_golden --features "$FULL"
 

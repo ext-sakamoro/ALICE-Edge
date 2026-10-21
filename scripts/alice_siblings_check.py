@@ -2,7 +2,8 @@
 """The local ../ALICE-* checkouts are the commits CI builds against.
 
 Until the versions a manifest needs are on crates.io, it takes them from sibling
-checkouts ("../ALICE-Zip"); CI clones each at the full SHA in .github/alice-siblings
+checkouts ("../ALICE-Zip", or a package inside one, "../ALICE-Physics/crates/alice-physics");
+CI clones each at the full SHA in .github/alice-siblings
 ("<Repo> <40-hex SHA>" per line, "#" comments) through .github/actions/alice-siblings.
 This check makes the local build use the same commits. It fails when a line is
 malformed or repeated, when nothing is listed, when a manifest names a sibling path
@@ -27,7 +28,11 @@ LIST_FILE = ".github/alice-siblings"
 # [workspace].exclude removes matches): the package manifest and its fuzz manifest
 MANIFESTS = ("Cargo.toml", "fuzz/Cargo.toml")
 LINE_RE = re.compile(r"(ALICE-[A-Za-z0-9-]+) ([0-9a-f]{40})")
-PATH_RE = re.compile(r'path\s*=\s*"((?:\.\./)+)(ALICE-[A-Za-z0-9-]+)"')
+# a sibling, or a package inside one: after the repository only plain components (no "."
+# or "..", no empty one), so the repository the path names is the one it reaches
+PATH_RE = re.compile(r'path\s*=\s*"((?:\.\./)+)(ALICE-[A-Za-z0-9-]+)((?:/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*)/?"')
+# every path that names an ALICE repository; one PATH_RE does not read is a finding
+ALICE_PATH_RE = re.compile(r'path\s*=\s*"[^"]*ALICE-[^"]*"')
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -97,7 +102,11 @@ def check(root: Path) -> list[str]:
 
     named: set[str] = set()
     for rel, manifest in found:
-        for m in PATH_RE.finditer(manifest.read_text(encoding="utf-8")):
+        text = manifest.read_text(encoding="utf-8")
+        for m in ALICE_PATH_RE.finditer(text):
+            if not PATH_RE.fullmatch(m.group(0)):
+                problems.append(f"{rel} names {m.group(0)}, not ../ALICE-<Repo> or a plain path inside it")
+        for m in PATH_RE.finditer(text):
             repo = m.group(2)
             named.add(repo)
             if (manifest.parent / f"{m.group(1)}{repo}").resolve() != (root / ".." / repo).resolve():

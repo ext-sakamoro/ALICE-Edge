@@ -110,6 +110,30 @@ class SiblingsCheck(unittest.TestCase):
         (self.root / "fuzz" / "Cargo.toml").write_text('[dependencies]\nalice-zip = { path = "../../ALICE-Zip" }\n')
         self.assertEqual(self.problems(), [])
 
+    def test_package_inside_a_sibling_names_that_sibling(self) -> None:
+        (self.root / "Cargo.toml").write_text(
+            "[dependencies]\n"
+            'alice-zip = { path = "../ALICE-Zip/crates/alice-zip" }\n'
+            'alice-db = { path = "../ALICE-DB" }\n'
+        )
+        self.assertEqual(self.problems(), [])
+        (self.root / "Cargo.toml").write_text(
+            '[dependencies]\nalice-zip = { path = "../../ALICE-Zip/crates/alice-zip" }\nalice-db = { path = "../ALICE-DB" }\n'
+        )
+        self.assertProblem("not the sibling ../ALICE-Zip")
+        (self.root / "Cargo.toml").write_text(
+            '[dependencies]\nalice-zip = { path = "../ALICE-Zip/" }\nalice-db = { path = "../ALICE-DB" }\n'
+        )
+        self.assertEqual(self.problems(), [])
+
+    def test_a_path_that_leaves_the_sibling_is_refused(self) -> None:
+        # the repository after ".." is the one the path reaches; it must not be read as ALICE-Zip
+        for path in ("../ALICE-Zip/../ALICE-Other", "../ALICE-Zip/./crates", "../ALICE-Zip//crates"):
+            (self.root / "Cargo.toml").write_text(
+                f'[dependencies]\nalice-zip = {{ path = "{path}" }}\nalice-db = {{ path = "../ALICE-DB" }}\n'
+            )
+            self.assertProblem(f'names path = "{path}", not ../ALICE-<Repo> or a plain path inside it')
+
     def test_missing_sibling_fails(self) -> None:
         shutil.move(str(self.root.parent / "ALICE-DB"), str(self.root.parent / "elsewhere"))
         self.assertProblem("../ALICE-DB is not a git checkout")

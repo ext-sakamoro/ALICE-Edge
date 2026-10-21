@@ -142,7 +142,7 @@ are in `tests/edge_law.rs`.
 | `edge-pipeline` | no | | `depth-camera` + `sdf` + `ml` + `asp` |
 | `sensors` | no | serde | simulated sensor drivers |
 | `sensors-hw` | no | rppal, serialport | I2C / SPI / GPIO / UART drivers (Linux) |
-| `mqtt` | no | rumqttc | MQTT publish (AWS IoT Core, Azure IoT Hub, Mosquitto) |
+| `mqtt` | no | rustls (ring) | MQTT 3.1.1 publish at QoS 1 over TCP or mutual TLS (AWS IoT Core, Azure IoT Hub, Mosquitto) |
 | `dashboard` | no | alice-analytics | HyperLogLog / Count-Min sketch dashboard |
 | `ffi` | no | | C ABI (22 functions), see `bindings/` |
 | `pyo3` | no | pyo3, numpy | Python bindings |

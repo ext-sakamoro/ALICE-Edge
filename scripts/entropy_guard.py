@@ -88,6 +88,11 @@ ALLOWED: dict[tuple[str, str], tuple[int, str]] = {
            "never into the returned packet/compress_stats; run_for's 2 timers pace a duration-bounded real-time "
            "frame loop (the loop's own contract), not the content of any one packet",
     ),
+    ("src/mqtt_bridge.rs", "Instant::now"): (
+        2, "the MQTT network thread's clock (origin and elapsed): it decides when a PINGREQ is due, when a "
+           "missing CONNACK or PINGRESP closes the connection and when a reconnect is attempted; it never "
+           "enters a payload, a coefficient or any other computed value",
+    ),
     ("src/watchdog.rs", "Instant::now"): (
         3, "Watchdog is a liveness/safety mechanism: is_expired() asks whether real wall-clock time since the "
            "last kick exceeds timeout, a hardware-hang detector that is inherently wall-clock-driven; the "

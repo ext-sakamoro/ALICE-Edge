@@ -83,6 +83,10 @@ pub mod law;
 pub mod ml_bridge;
 #[cfg(feature = "mqtt")]
 pub mod mqtt_bridge;
+#[cfg(feature = "mqtt")]
+mod mqtt_session;
+#[cfg(feature = "mqtt")]
+mod mqtt_wire;
 #[cfg(feature = "ml")]
 pub mod object_classifier;
 #[cfg(feature = "std")]

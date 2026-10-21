@@ -136,7 +136,7 @@ assert!(matches!(law.ingest(&sample_points(&[0, 1, 4, 9, 16]), &policy), Verdict
 | `edge-pipeline` | no | | `depth-camera` + `sdf` + `ml` + `asp` |
 | `sensors` | no | serde | シミュレートしたセンサードライバ |
 | `sensors-hw` | no | rppal, serialport | I2C / SPI / GPIO / UART ドライバ (Linux) |
-| `mqtt` | no | rumqttc | MQTT publish (AWS IoT Core、Azure IoT Hub、Mosquitto) |
+| `mqtt` | no | rustls (ring) | MQTT 3.1.1 の publish (QoS 1、TCP か相互認証の TLS、AWS IoT Core、Azure IoT Hub、Mosquitto) |
 | `dashboard` | no | alice-analytics | HyperLogLog / Count-Min sketch のダッシュボード |
 | `ffi` | no | | C ABI (22 関数)、`bindings/` を参照 |
 | `pyo3` | no | pyo3, numpy | Python バインディング |

@@ -43,6 +43,7 @@ features = "std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,
 "fn::CoefficientStore::open" = "handshake: a_slope_read_of_foreign_arithmetic_is_an_error_not_an_empty_result"
 "fn::CoefficientStore::open_with_options" = "handshake: a_slope_read_of_foreign_arithmetic_is_an_error_not_an_empty_result"
 "fn::CoefficientStore::open_with_policy" = "handshake: a_slope_read_of_foreign_arithmetic_is_an_error_not_an_empty_result"
+"fn::ConnectRefused::code" = "local: the MQTT 3.1.1 CONNACK return code (1 to 5) of a refusal, typed u8; a protocol status, not bytes and not a Law-bearing value"
 "fn::DashboardSnapshot::to_binary" = "local: operational metrics (uptime, rates, counters) for monitoring; nothing in this crate reads them back"
 "fn::DashboardSnapshot::to_json" = "local: operational metrics for monitoring; nothing in this crate reads them back"
 "fn::Dht22Sensor::new" = "local: a GPIO pin number typed u8, not bytes"

@@ -68,7 +68,7 @@ sensors = ["dep:serde", "std"]  # Sensor drivers (simulated)
 # identifier through CoefficientPayload::to_json / to_binary
 serde-raw = ["dep:serde"]
 sensors-hw = ["sensors", "dep:rppal", "dep:serialport"]  # Real GPIO/I2C/SPI/UART
-mqtt = ["dep:rumqttc", "std"]  # MQTT publish to AWS IoT / Azure / local
+mqtt = ["dep:rustls", "std"]  # MQTT 3.1.1 publish (QoS 1, TCP or mutual TLS) to AWS IoT / Azure / local
 dashboard = ["dep:alice-analytics", "std"]  # ALICE-Analytics dashboard
 ffi = []  # C-ABI FFI exports (extern "C" functions)、panic 隔離は std 時のみ (bare-metal は unwinding なし)
 
@@ -97,8 +97,9 @@ libasp = { version = "1.0", optional = true, default-features = false }
 rppal = { version = "0.19", optional = true }
 serialport = { version = "4.6", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
-# MQTT bridge
-rumqttc = { version = "0.25", optional = true }
+# MQTT bridge: TLS for the built-in MQTT 3.1.1 client, `ring` provider (no
+# cmake / NASM build), PEM parsing through the re-exported rustls-pki-types
+rustls = { version = "0.23.46", optional = true, default-features = false, features = ["ring", "std", "tls12"] }
 # Dashboard
 alice-analytics = { path = "../ALICE-Analytics", version = ">=0.7, <0.8", optional = true }
 
@@ -124,8 +125,14 @@ strip = true
 # For testing on host
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
-# cross-platform golden hashes (tests/determinism_golden.rs)
-sha2 = "0.10"
+# cross-platform golden hashes (tests/determinism_golden.rs); `oid` names
+# SHA-256 in the test certificates below
+sha2 = { version = "0.10", features = ["oid"] }
+# certificates for the mutual-TLS tests of the MQTT client (tests/mqtt_tls.rs),
+# made at test time in pure Rust (no C build, so `--all-targets` cross checks
+# need no C cross compiler); keys are derived from fixed labels
+x509-cert = { version = "0.2.5", default-features = false, features = ["builder", "pem", "std"] }
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem", "std"] }
 
 [[bench]]
 name = "edge_bench"

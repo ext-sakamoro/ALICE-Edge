@@ -42,7 +42,7 @@ jobs:
         # - ubuntu-latest     → x86_64-unknown-linux-gnu
         # - windows-latest    → x86_64-pc-windows-msvc
         # The core, std and law suites run on every OS. The steps that pull in
-        # the optional bridges (rusb / rumqttc / alice-sdf and the other
+        # the optional bridges (rusb / alice-sdf and the other
         # crates.io siblings) run on Linux and macOS only.
         os: [macos-latest, ubuntu-24.04-arm, ubuntu-latest, windows-latest]
     steps:
@@ -146,6 +146,14 @@ jobs:
       - name: Test — analytic oracles (std + sdf)
         if: runner.os != 'Windows'
         run: cargo test --test analytic_oracle --features "std,sdf"
+
+      # The MQTT 3.1.1 client against a scripted broker on loopback (tests/mqtt_client.rs) and
+      # over mutual TLS with certificates made at test time (tests/mqtt_tls.rs); every OS,
+      # since the client's sockets and TLS stack differ per platform (scripts/run_tests.sh
+      # fails when either binary ran fewer tests)
+      - name: Test — MQTT client (std + mqtt)
+        shell: bash
+        run: scripts/run_tests.sh mqtt_client=10,mqtt_tls=8 -- cargo test --test mqtt_client --test mqtt_tls --features "std,mqtt"
 
       # fit_linear_robust against the rule in its documentation
       # (tests/support/robust_reference.rs, shared with the fuzz target)

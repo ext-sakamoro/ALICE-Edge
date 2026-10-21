@@ -2,7 +2,8 @@
 //! MQTT bridge for ALICE-Edge
 //!
 //! Publishes compressed model coefficients to MQTT brokers.
-//! Supports AWS `IoT` Core, Azure `IoT` Hub, and standard MQTT 3.1.1/5.0 brokers.
+//! Supports AWS `IoT` Core, Azure `IoT` Hub, and standard MQTT 3.1.1 brokers:
+//! publish only, QoS 1, over TCP or mutually authenticated TLS (rustls).
 //!
 //! # Example
 //!
@@ -26,10 +27,18 @@
 //!
 //! Author: Moroya Sakamoto
 
-use rumqttc::{Client, Event, MqttOptions, Packet, QoS};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::io::{self, Read, Write};
+use std::net::{TcpStream, ToSocketAddrs};
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TryRecvError, TrySendError};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+
+use crate::mqtt_session::{Session, Status};
+use crate::mqtt_wire as wire;
 
 /// TLS configuration for MQTT connections (AWS `IoT` Core / Azure `IoT` Hub)
 #[derive(Debug, Clone)]
@@ -523,12 +532,330 @@ fn check_binary_header<'a>(
     Ok((status, &data[38..]))
 }
 
+/// The broker's answer to CONNECT, as reported by [`MqttPublisher::connection_state`]
+pub use crate::mqtt_wire::ConnectRefused;
+
+/// Connection state reported by [`MqttPublisher::connection_state`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ConnectionState {
+    /// No connection yet, or a connection is being opened
+    Connecting,
+    /// The broker accepted the connection (CONNACK return code 0)
+    Connected,
+    /// The connection was lost or could not be opened (TCP, TLS or protocol
+    /// failure); a new one is attempted after a backoff of 1 s doubling to 32 s
+    Disconnected,
+    /// The broker refused the last connection with this CONNACK return code;
+    /// attempts continue after the backoff
+    Refused(ConnectRefused),
+}
+
+const STATE_CONNECTING: u8 = 0;
+const STATE_CONNECTED: u8 = 1;
+const STATE_DISCONNECTED: u8 = 2;
+const STATE_REFUSED: u8 = 0x10;
+
+fn encode_state(status: Status) -> u8 {
+    match status {
+        Status::Connecting => STATE_CONNECTING,
+        Status::Connected => STATE_CONNECTED,
+        Status::Disconnected => STATE_DISCONNECTED,
+        Status::Refused(r) => STATE_REFUSED | r.code(),
+    }
+}
+
+fn decode_state(value: u8) -> ConnectionState {
+    match value {
+        STATE_CONNECTED => ConnectionState::Connected,
+        STATE_DISCONNECTED => ConnectionState::Disconnected,
+        v if v & STATE_REFUSED != 0 => ConnectRefused::from_code(v & 0x0f)
+            .map_or(ConnectionState::Connecting, ConnectionState::Refused),
+        _ => ConnectionState::Connecting,
+    }
+}
+
+/// Messages waiting for the network thread (beyond the ones in flight)
+const REQUEST_QUEUE: usize = 64;
+/// How long one read waits before the thread checks its queue and timers
+const IO_POLL: Duration = Duration::from_millis(50);
+/// TCP connect and TLS handshake limit
+const OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+
+enum Request {
+    Publish { topic: String, payload: Vec<u8> },
+}
+
+/// How a connection is opened, fixed when the publisher is created: a TLS
+/// configuration never falls back to plaintext
+enum Transport {
+    Plain,
+    Tls {
+        config: Arc<rustls::ClientConfig>,
+        server_name: ServerName<'static>,
+    },
+}
+
+enum Stream {
+    Plain(TcpStream),
+    Tls(Box<rustls::StreamOwned<rustls::ClientConnection, TcpStream>>),
+}
+
+impl Read for Stream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Stream::Plain(s) => s.read(buf),
+            Stream::Tls(s) => s.read(buf),
+        }
+    }
+}
+
+impl Write for Stream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Stream::Plain(s) => s.write(buf),
+            Stream::Tls(s) => s.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Stream::Plain(s) => s.flush(),
+            Stream::Tls(s) => s.flush(),
+        }
+    }
+}
+
+fn tls_error(what: &str, e: impl std::fmt::Display) -> MqttError {
+    MqttError::Connection(format!("TLS {what}: {e}"))
+}
+
+/// rustls client configuration with the `ring` provider: the CA PEM is the
+/// only trust anchor (no system store) and the client certificate and key are
+/// always presented (mutual TLS)
+fn tls_transport(tls: &MqttTlsConfig, host: &str) -> Result<Transport, MqttError> {
+    let mut roots = rustls::RootCertStore::empty();
+    for cert in CertificateDer::pem_slice_iter(&tls.ca_cert) {
+        let cert = cert.map_err(|e| tls_error("CA certificate", e))?;
+        roots
+            .add(cert)
+            .map_err(|e| tls_error("CA certificate", e))?;
+    }
+    if roots.is_empty() {
+        return Err(tls_error("CA certificate", "no PEM certificate found"));
+    }
+    let chain = CertificateDer::pem_slice_iter(&tls.client_cert)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| tls_error("client certificate", e))?;
+    if chain.is_empty() {
+        return Err(tls_error("client certificate", "no PEM certificate found"));
+    }
+    let key =
+        PrivateKeyDer::from_pem_slice(&tls.client_key).map_err(|e| tls_error("client key", e))?;
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let config = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|e| tls_error("protocol versions", e))?
+        .with_root_certificates(roots)
+        .with_client_auth_cert(chain, key)
+        .map_err(|e| tls_error("client certificate", e))?;
+    let server_name =
+        ServerName::try_from(host.to_owned()).map_err(|e| tls_error("server name", e))?;
+    Ok(Transport::Tls {
+        config: Arc::new(config),
+        server_name,
+    })
+}
+
+fn connect_tcp(host: &str, port: u16) -> io::Result<TcpStream> {
+    let mut last = io::Error::new(
+        io::ErrorKind::NotFound,
+        format!("{host}:{port} resolved to no address"),
+    );
+    for addr in (host, port).to_socket_addrs()? {
+        match TcpStream::connect_timeout(&addr, OPEN_TIMEOUT) {
+            Ok(stream) => return Ok(stream),
+            Err(e) => last = e,
+        }
+    }
+    Err(last)
+}
+
+impl Transport {
+    fn open(&self, host: &str, port: u16) -> io::Result<Stream> {
+        let mut tcp = connect_tcp(host, port)?;
+        tcp.set_nodelay(true)?;
+        tcp.set_write_timeout(Some(OPEN_TIMEOUT))?;
+        match self {
+            Transport::Plain => {
+                tcp.set_read_timeout(Some(IO_POLL))?;
+                Ok(Stream::Plain(tcp))
+            }
+            Transport::Tls {
+                config,
+                server_name,
+            } => {
+                tcp.set_read_timeout(Some(OPEN_TIMEOUT))?;
+                let mut conn =
+                    rustls::ClientConnection::new(Arc::clone(config), server_name.clone())
+                        .map_err(io::Error::other)?;
+                // the handshake (server certificate verified against the CA)
+                // finishes before the first MQTT byte; an error drops the socket
+                while conn.is_handshaking() {
+                    conn.complete_io(&mut tcp)?;
+                }
+                tcp.set_read_timeout(Some(IO_POLL))?;
+                Ok(Stream::Tls(Box::new(rustls::StreamOwned::new(conn, tcp))))
+            }
+        }
+    }
+}
+
+/// The network thread: owns the connection and the session, takes messages
+/// from the publisher's queue and publishes the connection state
+struct Driver {
+    host: String,
+    port: u16,
+    transport: Transport,
+    session: Session,
+    requests: Receiver<Request>,
+    state: Arc<AtomicU8>,
+    stream: Option<Stream>,
+}
+
+impl Driver {
+    fn run(mut self) {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "the MQTT network thread's clock: it decides when a PINGREQ is due, when a missing \
+                      CONNACK or PINGRESP closes the connection and when a reconnect is attempted; it \
+                      never enters a payload, a coefficient or any other computed value"
+        )]
+        let origin = Instant::now();
+        let mut buf = [0u8; 4096];
+        loop {
+            let now = Self::millis(origin);
+            while self.session.can_accept() {
+                match self.requests.try_recv() {
+                    Ok(Request::Publish { topic, payload }) => {
+                        // the publisher checked the topic and size, so this cannot fail
+                        if let Ok(bytes) = self.session.publish(now, topic, payload) {
+                            self.write(now, &bytes);
+                        }
+                    }
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        self.shutdown();
+                        return;
+                    }
+                }
+            }
+            if self.stream.is_none() && self.session.should_connect(now) {
+                let opened = self.transport.open(&self.host, self.port);
+                let now = Self::millis(origin);
+                match opened {
+                    Ok(stream) => {
+                        self.stream = Some(stream);
+                        let connect = self.session.on_open(now);
+                        self.write(now, &connect);
+                    }
+                    Err(_) => self.session.on_close(now),
+                }
+            }
+            let now = Self::millis(origin);
+            if let Some(stream) = self.stream.as_mut() {
+                match stream.read(&mut buf) {
+                    Ok(0) => self.close(now),
+                    Ok(n) => match self.session.on_bytes(now, &buf[..n]) {
+                        Ok(reply) => self.write(now, &reply),
+                        Err(_) => self.close(now),
+                    },
+                    Err(e)
+                        if matches!(
+                            e.kind(),
+                            io::ErrorKind::WouldBlock
+                                | io::ErrorKind::TimedOut
+                                | io::ErrorKind::Interrupted
+                        ) => {}
+                    Err(_) => self.close(now),
+                }
+            } else {
+                std::thread::sleep(IO_POLL);
+            }
+            let now = Self::millis(origin);
+            match self.session.tick(now) {
+                Ok(bytes) => self.write(now, &bytes),
+                Err(_) => self.close(now),
+            }
+            self.state
+                .store(encode_state(self.session.status()), Ordering::Release);
+        }
+    }
+
+    fn millis(origin: Instant) -> u64 {
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "same clock as Driver::run's origin: timers only"
+        )]
+        let elapsed = Instant::now().duration_since(origin);
+        u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+    }
+
+    fn write(&mut self, now: u64, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+        let failed = match self.stream.as_mut() {
+            Some(stream) => stream
+                .write_all(bytes)
+                .and_then(|()| stream.flush())
+                .is_err(),
+            None => false,
+        };
+        if failed {
+            self.close(now);
+        }
+    }
+
+    fn close(&mut self, now: u64) {
+        if let Some(Stream::Tls(stream)) = self.stream.as_mut() {
+            stream.conn.send_close_notify();
+            let _ = stream.flush();
+        }
+        self.stream = None;
+        self.session.on_close(now);
+    }
+
+    /// The publisher was dropped: say DISCONNECT on an open session and stop
+    fn shutdown(&mut self) {
+        if self.session.status() == Status::Connected {
+            if let Some(stream) = self.stream.as_mut() {
+                let _ = stream
+                    .write_all(&wire::encode_disconnect())
+                    .and_then(|()| stream.flush());
+            }
+        }
+        if let Some(Stream::Tls(stream)) = self.stream.as_mut() {
+            stream.conn.send_close_notify();
+            let _ = stream.flush();
+        }
+        self.stream = None;
+        self.state.store(STATE_DISCONNECTED, Ordering::Release);
+    }
+}
+
 /// MQTT publisher for ALICE-Edge coefficients
+///
+/// Publishes at QoS 1 over MQTT 3.1.1 (TCP, or TLS 1.2 / 1.3 through rustls
+/// with mutual authentication). [`MqttPublisher::new`] returns at once; a
+/// network thread opens the connection, keeps it alive (PINGREQ after
+/// `keep_alive` without traffic), reconnects after a backoff of 1 s doubling
+/// to 32 s, and sends every unacknowledged message again after a reconnect.
 pub struct MqttPublisher {
-    client: Client,
+    requests: SyncSender<Request>,
     config: MqttConfig,
-    /// 接続状態（バックグラウンドスレッドが `ConnAck` 受信時に true にセット）
-    connected: Arc<AtomicBool>,
+    /// Connection state, written by the network thread
+    state: Arc<AtomicU8>,
     /// Total messages published
     pub messages_sent: u64,
     /// Total bytes published
@@ -543,60 +870,55 @@ impl MqttPublisher {
     ///
     /// # Errors
     ///
-    /// Returns `MqttError::Connection` if TLS is enabled but no `tls_config` is provided.
+    /// Returns `MqttError::Connection` if TLS is enabled but no `tls_config` is
+    /// provided, if a PEM in `tls_config` does not parse, if the host is not a
+    /// valid TLS server name, or if the client identifier, user name or
+    /// password cannot be carried by MQTT 3.1.1 (a password needs a user name).
     pub fn new(config: MqttConfig) -> Result<Self, MqttError> {
-        let mut opts = MqttOptions::new(&config.client_id, &config.host, config.port);
-        opts.set_keep_alive(config.keep_alive);
-
-        if let (Some(user), Some(pass)) = (&config.username, &config.password) {
-            opts.set_credentials(user, pass);
-        }
-
-        // TLS 設定
-        if config.use_tls {
-            if let Some(ref tls) = config.tls_config {
-                let transport =
-                    rumqttc::Transport::tls_with_config(rumqttc::TlsConfiguration::Simple {
-                        ca: tls.ca_cert.clone(),
-                        alpn: None,
-                        client_auth: Some((tls.client_cert.clone(), tls.client_key.clone())),
-                    });
-                opts.set_transport(transport);
-            } else {
-                return Err(MqttError::Connection(
-                    "TLS enabled but no tls_config provided. Use MqttConfig::with_tls() to set certificates.".into(),
-                ));
+        let transport = if config.use_tls {
+            match &config.tls_config {
+                Some(tls) => tls_transport(tls, &config.host)?,
+                None => {
+                    return Err(MqttError::Connection(
+                        "TLS enabled but no tls_config provided. Use MqttConfig::with_tls() to set certificates.".into(),
+                    ))
+                }
             }
-        }
+        } else {
+            Transport::Plain
+        };
+        let session = Session::new(&wire::Connect {
+            client_id: &config.client_id,
+            keep_alive_secs: u16::try_from(config.keep_alive.as_secs()).unwrap_or(u16::MAX),
+            clean_session: true,
+            user_name: config.username.as_deref(),
+            password: config.password.as_deref().map(str::as_bytes),
+        })
+        .map_err(|e| MqttError::Connection(format!("CONNECT: {e}")))?;
 
-        let (client, mut connection) = Client::new(opts, 64);
-        let connected = Arc::new(AtomicBool::new(false));
-        let connected_clone = connected.clone();
+        let (requests, receiver) = sync_channel(REQUEST_QUEUE);
+        let state = Arc::new(AtomicU8::new(STATE_CONNECTING));
+        let driver = Driver {
+            host: config.host.clone(),
+            port: config.port,
+            transport,
+            session,
+            requests: receiver,
+            state: Arc::clone(&state),
+            stream: None,
+        };
 
-        // イベントループ: ConnAck 受信で connected=true、切断で false
         // ALICE-Law G13: the client's event loop drives network I/O on its own thread and only sets
         // a flag; nothing it computes is combined into a value (listed in scripts/order_allowlist.toml)
         #[allow(clippy::disallowed_methods)]
         std::thread::spawn(move || {
-            for event in connection.iter() {
-                match event {
-                    Ok(Event::Incoming(Packet::ConnAck(_))) => {
-                        connected_clone.store(true, Ordering::Release);
-                    }
-                    Ok(Event::Incoming(Packet::Disconnect)) | Err(_) => {
-                        connected_clone.store(false, Ordering::Release);
-                    }
-                    _ => {}
-                }
-            }
-            // イベントループ終了 → 切断
-            connected_clone.store(false, Ordering::Release);
+            driver.run();
         });
 
         Ok(Self {
-            client,
+            requests,
             config,
-            connected,
+            state,
             messages_sent: 0,
             bytes_sent: 0,
         })
@@ -605,52 +927,62 @@ impl MqttPublisher {
     /// ブローカーに接続済みかどうかを返す
     #[must_use]
     pub fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Acquire)
+        self.connection_state() == ConnectionState::Connected
+    }
+
+    /// The connection state, including the broker's refusal code
+    #[must_use]
+    pub fn connection_state(&self) -> ConnectionState {
+        decode_state(self.state.load(Ordering::Acquire))
+    }
+
+    fn enqueue(&mut self, topic: String, payload: Vec<u8>) -> Result<(), MqttError> {
+        wire::check_publish(&topic, payload.len())
+            .map_err(|e| MqttError::Publish(format!("topic {topic:?}: {e}")))?;
+        let bytes = payload.len() as u64;
+        match self.requests.try_send(Request::Publish { topic, payload }) {
+            Ok(()) => {
+                self.messages_sent += 1;
+                self.bytes_sent += bytes;
+                Ok(())
+            }
+            Err(TrySendError::Full(_)) => Err(MqttError::Publish(format!(
+                "send queue full ({REQUEST_QUEUE} messages waiting for the network thread)"
+            ))),
+            Err(TrySendError::Disconnected(_)) => {
+                Err(MqttError::Publish("the network thread has stopped".into()))
+            }
+        }
     }
 
     /// Publish coefficients as JSON
     ///
     /// # Errors
     ///
-    /// Returns `MqttError::Publish` if the MQTT client's send queue is full or the broker rejects the message.
+    /// Returns `MqttError::Publish` if the topic is not publishable (empty or
+    /// with a `+` / `#` wildcard) or the send queue is full.
     pub fn publish_coefficients(
         &mut self,
         topic_suffix: &str,
         payload: &CoefficientPayload,
     ) -> Result<(), MqttError> {
         let topic = format!("{}/{}", self.config.topic_prefix, topic_suffix);
-        let json = payload.to_json();
-        let bytes = json.len() as u64;
-
-        self.client
-            .try_publish(&topic, QoS::AtLeastOnce, false, json.as_bytes())
-            .map_err(|e| MqttError::Publish(format!("{e}")))?;
-
-        self.messages_sent += 1;
-        self.bytes_sent += bytes;
-        Ok(())
+        self.enqueue(topic, payload.to_json().into_bytes())
     }
 
     /// Publish coefficients as compact binary ([`PAYLOAD_BINARY_LEN`] bytes per message)
     ///
     /// # Errors
     ///
-    /// Returns `MqttError::Publish` if the MQTT client's send queue is full or the broker rejects the message.
+    /// Returns `MqttError::Publish` if the topic is not publishable (empty or
+    /// with a `+` / `#` wildcard) or the send queue is full.
     pub fn publish_binary(
         &mut self,
         topic_suffix: &str,
         payload: &CoefficientPayload,
     ) -> Result<(), MqttError> {
         let topic = format!("{}/{}", self.config.topic_prefix, topic_suffix);
-        let binary = payload.to_binary();
-
-        self.client
-            .try_publish(&topic, QoS::AtLeastOnce, false, binary)
-            .map_err(|e| MqttError::Publish(format!("{e}")))?;
-
-        self.messages_sent += 1;
-        self.bytes_sent += PAYLOAD_BINARY_LEN as u64;
-        Ok(())
+        self.enqueue(topic, payload.to_binary().to_vec())
     }
 
     /// Publish a batch of coefficients for multiple channels

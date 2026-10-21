@@ -248,6 +248,9 @@ cargo test --test analytic_oracle --features "std,sdf"
 step "ci.yml / test: robust fit contract (tests/robust_contract.rs, std)"
 cargo test --test robust_contract --features "std"
 
+step "ci.yml / test: MQTT client against a scripted broker and over mutual TLS (std + mqtt)"
+scripts/run_tests.sh mqtt_client=10,mqtt_tls=8 -- cargo test --test mqtt_client --test mqtt_tls --features "std,mqtt"
+
 step "ci.yml / test: db bridge errors (tests/db_bridge_errors.rs, db)"
 cargo test --test db_bridge_errors --features "db"
 

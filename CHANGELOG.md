@@ -54,6 +54,9 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 - `edge_pipeline::PacketSink` (呼ばれていない公開 trait) を削除した 実装していた利用者は自前の trait に置き換える (この crate の pipeline は一度もこの trait を呼んでいなかった)
 
+### Security
+- deny.toml と cargo audit (security-audit.yml、preflight) の ignore から RUSTSEC-2026-0049 / 0098 / 0099 / 0104 (rustls-webpki 0.102) と RUSTSEC-2025-0134 (rustls-pemfile) を削除した 同じ経路の RUSTSEC-2026-0382 も依存の木から消えた (lock の rustls-webpki は 0.103.16 だけ) 残る ignore は RUSTSEC-2026-0235 (rkyv 0.7、alice-db 経由) と RUSTSEC-2025-0141 (bincode 1.x / 2.x の unmaintained、ALICE の兄弟 crate 経由) の 2 件で、どちらも MQTT とは関係のない従来からの分
+
 ## [0.3.0] - 2026-10-15
 
 ### Fixed

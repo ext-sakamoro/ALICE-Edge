@@ -300,13 +300,8 @@ need cargo-deny "cargo install cargo-deny --locked"
 need cargo-machete "cargo install cargo-machete --locked"
 # same ignore list as security-audit.yml (mirrors deny.toml [advisories].ignore)
 cargo audit --db "${CARGO_TARGET_DIR:-target}/advisory-db" --deny yanked \
-  --ignore RUSTSEC-2026-0049 \
-  --ignore RUSTSEC-2026-0098 \
-  --ignore RUSTSEC-2026-0099 \
-  --ignore RUSTSEC-2026-0104 \
   --ignore RUSTSEC-2026-0235 \
-  --ignore RUSTSEC-2025-0141 \
-  --ignore RUSTSEC-2025-0134
+  --ignore RUSTSEC-2025-0141
 cargo deny --features "$FULL" check all
 cargo machete
 

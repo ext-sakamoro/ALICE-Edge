@@ -45,3 +45,10 @@ path = "fuzz_targets/fuzz_delta_roundtrip.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_mqtt_decode"
+path = "fuzz_targets/fuzz_mqtt_decode.rs"
+test = false
+doc = false
+bench = false

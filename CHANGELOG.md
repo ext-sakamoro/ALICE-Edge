@@ -6,6 +6,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ### Added
 - `mqtt_bridge::ConnectionState` / `ConnectRefused` / `MqttPublisher::connection_state`: CONNACK の拒否 (return code 1〜5) をそれぞれ別の状態で返す (`is_connected` は従来どおり) 試験 `tests/mqtt_client.rs` (10 件、loopback の台本どおりに動く broker と、仕様から書いた独立の packet 読み取り、再接続が backoff を待つことと送信の統計を含む) と `tests/mqtt_tls.rs` (8 件、close_notify なしで切れた broker からすぐ離れることを含む、相互認証の TLS 証明書は試験の中で x509-cert と p256 で作る pure Rust、鍵は固定の名前から導くので毎回同じ) を test job の 4 OS と preflight で `scripts/run_tests.sh` を通して走らせる
+- fuzz target `fuzz_mqtt_decode`: MQTT client の decoder (`src/mqtt_wire.rs` を path で取り込む) を任意の broker の bytes で走らせ、panic しないこと、受け取れる 3 種の packet の規則、途中で切った入力が別の packet にならないこと、remaining length の往復を確かめる regression の入力 7 件 (最短でない remaining length を含む)
 - `conformance/g11-own.toml`: ALICE-Law G11 の表のうち、この crate 固有の行 (G4 / G5 の golden、G6 の識別子、比較 0 件は `scripts/run_tests.sh` の試験、G10 の `scripts/entropy_guard.py` とその試験) 共有の検査器の行は ALICE-Law の `conformance/g11-shared-rows.toml` から生成する
 - CI (ALICE-Law G11): test job の goldens と float edges (std, debug) の `scripts/run_tests.sh` に `edge_semantics_id` を足した 識別子の試験の binary が 1 件も走らない時に step が落ちる (G6 の canary がその binary にある、6 件)
 - CI (ALICE-Law G11 (c)): ほかの ALICE の crate と同じ bytes で持つ file を ALICE-Law の表と比べる `scripts/shared_files.sh` (試験 `scripts/test_shared_files.py`、ALICE-DetMath などと同じ中身) と `.github/shared-files-pin` を足し、docs-lint job (3 OS) と preflight で走らせる 表と検査器は pin の版で取得し SHA-256 を確かめる 差、表に無い共有の path、比較 0 件は失敗

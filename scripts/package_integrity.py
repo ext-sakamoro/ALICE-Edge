@@ -17,7 +17,8 @@ package` can never pass for it, so such a dependency is *blocked*: it is package
 built with the sibling patched in (`--config patch.crates-io.<name>.path=...`) and
 reported as `blocked: ...`. A dependency is blocked only when all of these hold, checked
 and not assumed:
-  - its manifest entry names `path = "../<Repo>"` for a listed repository,
+  - its manifest entry names `path = "../<Repo>"` (or a package inside it,
+    `"../<Repo>/crates/<package>"`) for a listed repository,
   - the sibling's own [package] version satisfies the requirement,
   - no published, non-yanked version in the crates.io index satisfies it.
 A sibling whose requirement crates.io already satisfies is not patched, so it cannot hide
@@ -26,7 +27,9 @@ a failure. Every other packaging or build error fails. No .crate produced fails.
 --root is the repository (the git top-level): .github/alice-siblings is read there and a
 sibling is <root>/../<Repo>. --member DIR packages the crate in <root>/DIR instead of the
 root crate; its path dependencies may climb any number of `../` as long as they land on
-<root>/../<Repo>. A path dependency on another package inside the repository (a workspace
+<root>/../<Repo> or a directory inside it. After the climb the path may hold only plain
+components (no ".", ".." or empty one), so the repository it names is the one it reaches;
+any other form fails. A path dependency on another package inside the repository (a workspace
 member) is blocked the same way: it names a version, the member's own version satisfies
 it, and no published version does (the member is about to be published with this crate).
 Any other path dependency (outside the repository and not a listed sibling, or a
@@ -178,15 +181,35 @@ def manifest_deps(pkg_dir: Path, top: Path) -> list[tuple[str, str, dict]]:
                     raise Problem(f"{key}: `workspace = true` but [workspace.dependencies] has no {key}")
                 base = {"version": base} if isinstance(base, str) else dict(base)
                 if "path" in base:
+                    base[WRITTEN] = base["path"]  # as written in [workspace.dependencies], relative to top
                     base["path"] = os.path.normpath(top / base["path"])
                 spec = {**base, **{k: v for k, v in spec.items() if k != "workspace"}}
             out.append((table, key, spec))
     return out
 
 
+WRITTEN = "written path"  # not a cargo key: the path of an inherited dependency before joining to top
+
+
+def plain_after_climb(path: str) -> bool:
+    """`../` any number of times, then only plain components (one trailing "/" allowed).
+    Read only for a target already below <root>/.. and outside root, where both bounds are implied:
+    a path with no leading `..` is absolute (its first component is "", refused) or has no `..` at
+    all (any later `..` is refused) and so stays inside the directory it is relative to (the package,
+    or root for an inherited path); a path of `..` only ends at an ancestor of that directory, which
+    is root, <root>/.. or above. `i > 0 and i < len(parts)` states
+    them anyway, so the function means the same where it is read on its own."""
+    parts = path[:-1].split("/") if path.endswith("/") else path.split("/")
+    i = 0
+    while i < len(parts) and parts[i] == "..":
+        i += 1
+    return i > 0 and i < len(parts) and all(c not in ("", ".", "..") for c in parts[i:])
+
+
 def sibling_deps(root: Path, member: str = ".") -> list[dict]:
     """Every path dependency of the packaged crate (any dependency table), classified:
-    kind "sibling" (<root>/../<Repo>), "member" (a package inside root) or "unresolved"."""
+    kind "sibling" (<root>/../<Repo>, or a package inside it: "subdir"), "member" (a package
+    inside root) or "unresolved"."""
     # lexical paths (no symlink resolution): a sibling may be a link to a checkout elsewhere
     top = Path(os.path.normpath(root.absolute()))
     pkg_dir = Path(os.path.normpath(top / member))
@@ -200,8 +223,10 @@ def sibling_deps(root: Path, member: str = ".") -> list[dict]:
             continue  # the crate itself (a dev-dependency on "." for features)
         if target == top or top in target.parents:
             deps.append({**dep, "kind": "member", "dir": target})
-        elif target.parent == top.parent and SIBLING_RE.fullmatch(target.name):
-            deps.append({**dep, "kind": "sibling", "repo": target.name})
+        elif top.parent in target.parents and SIBLING_RE.fullmatch(target.relative_to(top.parent).parts[0]) \
+                and plain_after_climb(spec.get(WRITTEN, spec["path"])):
+            repo, *inner = target.relative_to(top.parent).parts
+            deps.append({**dep, "kind": "sibling", "repo": repo, "subdir": "/".join(inner)})
         else:
             deps.append({**dep, "kind": "unresolved", "path": spec["path"]})
     return deps
@@ -245,7 +270,9 @@ def classify(
     for dep in deps:
         # one entry per (name, place): the same crate named in two tables is checked once,
         # a second spec of it with another path (a target table) is checked on its own
-        key = (dep["name"], str(dep.get("repo") or dep.get("dir") or dep.get("path")))
+        # (a package inside a sibling is its own place: two subdirs of one repository are two)
+        key = ((dep["name"], dep["repo"], dep["subdir"]) if dep["kind"] == "sibling"
+               else (dep["name"], str(dep.get("dir") or dep.get("path"))))
         if key in seen:
             continue
         seen.add(key)
@@ -253,7 +280,7 @@ def classify(
             if dep["table"] == "dev-dependencies" and not dep["req"]:
                 continue  # cargo leaves a version-less path dev-dependency out of the package
             problems.append(f"{dep['name']}: path {dep['path']!r} is neither a listed sibling "
-                            f"(<root>/../<Repo>) nor a package in this repository")
+                            f"(<root>/../<Repo>, or plain components inside it) nor a package in this repository")
             continue
         if dep["kind"] == "member":
             if not dep["req"]:
@@ -279,7 +306,8 @@ def classify(
             problems.append(f"{dep['name']}: path dependency without a version cannot be published")
             continue
         try:
-            b = check_requirement(dep, f"../{dep['repo']}", "sibling", root / ".." / dep["repo"] / "Cargo.toml", versions_of)
+            label = f"../{dep['repo']}" + (f"/{dep['subdir']}" if dep["subdir"] else "")
+            b = check_requirement(dep, label, "sibling", root / ".." / dep["repo"] / dep["subdir"] / "Cargo.toml", versions_of)
         except Problem as e:
             problems.append(f"{dep['name']}: {e}")
             continue

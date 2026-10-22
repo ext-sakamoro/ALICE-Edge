@@ -346,11 +346,169 @@ class Workspace(unittest.TestCase):
         self.assertIn("package_integrity: blocked 0", out)
 
     def test_unresolved_path_dependency_is_a_problem(self) -> None:
-        for path in ("../../Other", "../../../ALICE-Zip", "../../ALICE-Zip/sub"):
+        for path in ("../../Other", "../../../ALICE-Zip", "../../ALICE-Zip/../ALICE-Other",
+                     "../../ALICE-Zip/./sub", "../../ALICE-Zip//sub", "../../ALICE-Zip/sub/.."):
             self.write_lib(f'thing = {{ path = "{path}", version = "1" }}\n')
             rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
             self.assertEqual(rc, 1, (path, out))
-            self.assertIn(f"thing: path '{path}' is neither a listed sibling", out)
+            self.assertIn(f"thing: path '{path}' is neither a listed sibling (<root>/../<Repo>, or plain "
+                          "components inside it) nor a package in this repository", out)
+
+    def test_package_inside_a_sibling_is_that_sibling(self) -> None:
+        # a repository whose root is one package and whose other package sits in crates/<name>
+        (self.root / ".github" / "alice-siblings").write_text(f"ALICE-Zip {SHA}\nALICE-Physics {SHA}\n")
+        pkg = self.base / "ALICE-Physics" / "crates" / "alice-physics"
+        pkg.mkdir(parents=True)
+        (pkg / "Cargo.toml").write_text('[package]\nname = "alice-physics"\nversion = "4.0.0"\n')
+        for path in ("../../ALICE-Physics/crates/alice-physics", "../../ALICE-Physics/crates/alice-physics/"):
+            self.write_lib(f'alice-physics = {{ path = "{path}", version = ">=3.0, <5" }}\n')
+            self.published["alice-physics"] = [(3, 1, 0)]
+            rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+            self.assertEqual(rc, 0, (path, out))
+            self.assertIn("package_integrity: blocked 0", out)
+            self.published["alice-physics"] = [(2, 0, 0)]
+            rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+            self.assertEqual(rc, 1, out)
+            self.assertIn("blocked: alice-physics >=3.0, <5 unpublished (crates.io max 2.0.0), satisfied only by "
+                          f".github/alice-siblings ALICE-Physics {SHA[:12]}", out)
+            rc, out, err = self.main("--member", "ws-lib", "--patches")
+            self.assertEqual((rc, out.splitlines()), (0, [f'--config=patch.crates-io.alice-physics.path="{pkg.resolve()}"']), err)
+        # the package is read from that directory: no manifest there fails
+        self.write_lib('alice-physics = { path = "../../ALICE-Physics/crates/missing", version = ">=3.0, <5" }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("alice-physics: ../ALICE-Physics/crates/missing/Cargo.toml is missing", out)
+
+    def physics_repo(self) -> Path:
+        """ALICE-Physics: package alice-physics-core at the root, alice-physics in crates/."""
+        (self.root / ".github" / "alice-siblings").write_text(f"ALICE-Zip {SHA}\nALICE-Physics {SHA}\n")
+        repo = self.base / "ALICE-Physics"
+        (repo / "crates" / "alice-physics").mkdir(parents=True)
+        (repo / "Cargo.toml").write_text('[package]\nname = "alice-physics-core"\nversion = "4.0.0"\n')
+        (repo / "crates" / "alice-physics" / "Cargo.toml").write_text('[package]\nname = "alice-physics"\nversion = "4.0.0"\n')
+        self.published.update({"alice-physics": [(3, 1, 0)], "alice-physics-core": [(4, 0, 0)]})
+        return repo
+
+    def test_two_packages_of_one_sibling_are_both_checked(self) -> None:
+        self.physics_repo()
+        both = ('alice-physics-core = {{ path = "../../ALICE-Physics", version = "{}" }}\n'
+                'alice-physics = {{ path = "../../ALICE-Physics/crates/alice-physics", version = ">=3.0, <5" }}\n')
+        self.write_lib(both.format("4"))
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("package_integrity: blocked 0", out)
+        self.write_lib(both.format("5"))
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("alice-physics-core: the sibling ../ALICE-Physics is 4.0.0, which does not satisfy '5'", out)
+
+    def test_one_name_in_two_places_of_one_sibling_is_checked_in_each(self) -> None:
+        # the same dependency name in a target table, pointing at another directory of the same
+        # repository: the second place is checked on its own, not taken as the first
+        self.physics_repo()
+        self.write_lib('alice-physics = { path = "../../ALICE-Physics/crates/alice-physics", version = ">=3.0, <5" }\n',
+                       '\n[target.\'cfg(unix)\'.dependencies]\n'
+                       'alice-physics = { path = "../../ALICE-Physics", version = ">=3.0, <5" }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("alice-physics: ../ALICE-Physics is package 'alice-physics-core', not alice-physics", out)
+
+    def test_two_names_for_one_directory_are_each_checked(self) -> None:
+        # a second name for the same directory is its own claim: the package there must be it
+        self.physics_repo()
+        self.write_lib('alice-physics = { path = "../../ALICE-Physics/crates/alice-physics", version = ">=3.0, <5" }\n'
+                       'alice-physics-core = { path = "../../ALICE-Physics/crates/alice-physics", version = "4" }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("alice-physics-core: ../ALICE-Physics/crates/alice-physics is package 'alice-physics', "
+                      "not alice-physics-core", out)
+
+    def test_one_name_at_one_subdir_of_two_siblings_is_checked_in_each(self) -> None:
+        # the same name and the same place inside two different repositories: the repository is
+        # part of where the claim points, so the second is checked on its own
+        self.physics_repo()
+        self.write_lib('alice-physics-core = { path = "../../ALICE-Physics", version = "4" }\n',
+                       '\n[target.\'cfg(unix)\'.dependencies]\n'
+                       'alice-physics-core = { path = "../../ALICE-Zip", version = "4" }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("alice-physics-core: ../ALICE-Zip is package 'alice-zip', not alice-physics-core", out)
+
+    def other_member(self) -> None:
+        (self.root / "ws-other").mkdir()
+        (self.root / "ws-other" / "Cargo.toml").write_text('[package]\nname = "ws-other"\nversion = "0.4.0"\n')
+
+    def test_one_name_at_two_member_dirs_is_checked_in_each(self) -> None:
+        self.other_member()
+        self.write_lib('ws-macro = { path = "../ws-macro", version = "=0.4.0" }\n',
+                       '\n[target.\'cfg(unix)\'.dependencies]\n'
+                       'ws-macro = { path = "../ws-other", version = "=0.4.0" }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ws-macro: ws-other is package 'ws-other', not ws-macro", out)
+
+    def test_two_names_for_one_member_dir_are_each_checked(self) -> None:
+        self.write_lib('ws-macro = { path = "../ws-macro", version = "=0.4.0" }\n'
+                       'ws-other = { path = "../ws-macro", version = "=0.4.0" }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("ws-other: ws-macro is package 'ws-macro', not ws-other", out)
+
+    def test_same_crate_in_two_tables_is_checked_once(self) -> None:
+        # one name at one place in [dependencies] and [build-dependencies]: one entry, one patch
+        self.write_lib('alice-zip = { path = "../../ALICE-Zip", version = ">=0.11, <0.12" }\n',
+                       '\n[build-dependencies]\nalice-zip = { path = "../../ALICE-Zip", version = ">=0.11, <0.12" }\n')
+        rc, out, err = self.main("--member", "ws-lib", "--patches")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(out.splitlines(),
+                         [f'--config=patch.crates-io.alice-zip.path="{(self.base / "ALICE-Zip").resolve()}"'])
+        self.assertIn("blocked 1", err)
+
+    def test_dependency_on_the_workspace_root_package_is_a_member(self) -> None:
+        (self.root / "Cargo.toml").write_text('[package]\nname = "ws-root"\nversion = "0.4.0"\n\n'
+                                              '[workspace]\nmembers = ["ws-macro", "ws-lib"]\n')
+        self.published["ws-root"] = []
+        self.write_lib('ws-root = { path = "..", version = "=0.4.0" }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertIn("satisfied only by the workspace member . (ws-root 0.4.0)", out)
+
+    def test_renamed_dependency_is_checked_under_its_package_name(self) -> None:
+        self.write_lib('zip = { package = "alice-zip", path = "../../ALICE-Zip", version = ">=0.11, <0.12" }\n')
+        rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+        self.assertIn("blocked: alice-zip >=0.11, <0.12 unpublished", out)
+        self.assertNotIn("not zip", out)
+
+    def test_inherited_sibling_path_is_read_as_written(self) -> None:
+        # [workspace.dependencies] paths are relative to the workspace root, joined before use
+        for path, sibling in (("../ALICE-Zip", True), ("../ALICE-Zip/../ALICE-Other", False)):
+            with self.subTest(path=path):
+                (self.root / "Cargo.toml").write_text(
+                    '[workspace]\nmembers = ["ws-macro", "ws-lib"]\n[workspace.dependencies]\n'
+                    f'alice-zip = {{ path = "{path}", version = ">=0.11, <0.12" }}\n')
+                self.write_lib("alice-zip = { workspace = true }\n")
+                rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+                self.assertEqual(rc, 1, out)
+                if sibling:
+                    self.assertIn("blocked: alice-zip >=0.11, <0.12 unpublished", out)
+                else:
+                    self.assertIn("alice-zip: path ", out)
+                    self.assertIn("is neither a listed sibling", out)
+
+    def test_unresolved_paths_are_reported_per_name_and_per_path(self) -> None:
+        for deps, extra, name, path in (
+            # one name at two paths: the second path is its own problem
+            ('alice-zip = { path = "../../Other", version = "1" }\n',
+             '\n[target.\'cfg(unix)\'.dependencies]\nalice-zip = { path = "../../Else", version = "1" }\n',
+             "alice-zip", "../../Else"),
+            # two names for one path: the second name is its own problem
+            ('alice-zip = { path = "../../Other", version = "1" }\n'
+             'alice-other = { path = "../../Other", version = "1" }\n', "", "alice-other", "../../Other"),
+        ):
+            with self.subTest(name=name, path=path):
+                self.write_lib(deps, extra)
+                rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
+                self.assertEqual(rc, 1, out)
+                self.assertIn(f"{name}: path {path!r} is neither a listed sibling", out)
 
     def test_version_less_path_in_dependencies_is_a_problem_in_every_kind(self) -> None:
         # only a dev-dependency is left out of the package; in [dependencies] it is published

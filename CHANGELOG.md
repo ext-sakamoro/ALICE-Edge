@@ -50,6 +50,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 - `mqtt_bridge` の module doc の例の client id を `"edge-node-1"` にした
 - CI: `scripts/run_tests.sh` が名前ごとの最低の件数 (`float_environment=2`) を受け付けるようにし (ALICE-DB と同じ中身)、G14 の `tests/float_environment.rs` を名指す全 step を `float_environment=2` にした 2 つの試験の片方を `#[ignore]` にする・cfg で外す・名前を変えると、その step が失敗する
 - CI: 公開する文面の検査の pin を ALICE-Law 779fa44 (checker sha256 e439fdd7…) に進めた 新しい版で HEAD の全 file に指摘 0 件
+- CI: `scripts/package_integrity.py` と試験を ALICE-Analytics と同じ bytes に (隣の repo の中の package を指す path もその repo の sibling として読む)、shared-files の pin を ALICE-Law bb9f229 に移す
 
 ### Removed
 

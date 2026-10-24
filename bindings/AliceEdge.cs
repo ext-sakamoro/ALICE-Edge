@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // ALICE-Edge Unity C# Bindings — Auto-generated from ffi.rs
 // Author: Moroya Sakamoto
 //

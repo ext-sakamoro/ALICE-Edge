@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! `PyO3` Python Bindings for ALICE-Edge
 //!
 //! Embedded Model Generator for IoT / embedded Linux.

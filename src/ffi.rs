@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! C-ABI FFI bindings for ALICE-Edge core functions
 //!
 //! Exposes Q16.16 fixed-point fitting, evaluation, and utility functions

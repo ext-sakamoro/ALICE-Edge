@@ -9,9 +9,9 @@ dynamic = ["version"]
 requires-python = ">=3.8"
 description = "Embedded Model Generator — Don't send data, send the law"
 # the SPDX expression from Cargo.toml (checked by scripts/check_py_license.py);
-# the crate is dual-licensed, the two files below are the terms
-license = "MIT OR Apache-2.0"
-license-files = ["LICENSE", "LICENSE-APACHE"]
+# LICENSE-Proprietary holds the terms
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE-Proprietary"]
 authors = [{ name = "Moroya Sakamoto" }]
 classifiers = [
     "Programming Language :: Rust",

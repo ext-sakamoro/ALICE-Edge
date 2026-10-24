@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! ALICE-Analytics dashboard for ALICE-Edge
 //!
 //! Provides real-time monitoring of edge sensor processing using

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! ASP Bridge — SDF to ALICE Streaming Protocol Packet Encoding
 //!
 //! Encodes compressed SDF data into ASP I-Packets (keyframes) and

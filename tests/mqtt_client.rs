@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! The MQTT client against a scripted broker over loopback TCP
 //! (tests/support/mqtt_broker.rs): what goes over the wire, the CONNACK
 //! refusals, QoS 1 redelivery after a reconnect, keep-alive and the errors a

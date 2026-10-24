@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! The MQTT client over mutual TLS against a rustls broker in the test thread,
 //! with certificates made here (P-256 keys derived from fixed labels, pure Rust): the happy path, and every way the
 //! handshake can fail closing the connection without a byte of MQTT in

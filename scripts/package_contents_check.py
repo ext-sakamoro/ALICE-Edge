@@ -48,8 +48,7 @@ FORBIDDEN_FILES = {
 REQUIRED_FILES = (
     "Cargo.toml",
     "README.md",
-    "LICENSE",
-    "LICENSE-APACHE",
+    "LICENSE-Proprietary",
     "bindings/alice_edge.h",
     "bindings/AliceEdge.cs",
 )

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! ALICE-Codec bridge: Wavelet denoising for sensor data
 //!
 //! Applies integer wavelet denoising to noisy sensor readings

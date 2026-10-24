@@ -48,7 +48,7 @@
 //! - [ALICE-DB](https://github.com/ext-sakamoro/ALICE-DB) - Model-based database
 //! - [ALICE-Streaming-Protocol](https://github.com/ext-sakamoro/ALICE-Streaming-Protocol) - Video streaming
 
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,

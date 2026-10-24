@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! ALICE-Edge × ALICE-ML bridge
 //!
 //! Edge sensor data → ternary ML inference for anomaly classification.

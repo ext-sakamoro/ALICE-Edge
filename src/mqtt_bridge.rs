@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! MQTT bridge for ALICE-Edge
 //!
 //! Publishes compressed model coefficients to MQTT brokers.

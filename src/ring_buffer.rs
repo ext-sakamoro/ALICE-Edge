@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! Fixed-size ring buffer for `no_std` environments
 //!
 //! `MaybeUninit<T>` ベースの固定長リングバッファ。ヒープ不要。

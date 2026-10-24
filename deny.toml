@@ -35,7 +35,8 @@ ignore = [
 
 # ---------------------------------------------------------------------------
 # Licenses (allow-list; anything else is denied)
-# alice-edge itself is MIT OR Apache-2.0
+# alice-edge itself is LicenseRef-Proprietary (publish = false, see
+# [licenses.private] below)
 # ---------------------------------------------------------------------------
 [licenses]
 version = 2
@@ -56,6 +57,11 @@ allow = [
     "MPL-2.0",
     "OpenSSL",
 ]
+
+# this crate is publish = false and LicenseRef-Proprietary: unpublished
+# workspace crates are not checked against the allow list
+[licenses.private]
+ignore = true
 
 # ALICE siblings that are AGPL-3.0-or-later. They are optional features
 # (default OFF) consumed as crates.io deps; the exception is scoped to these

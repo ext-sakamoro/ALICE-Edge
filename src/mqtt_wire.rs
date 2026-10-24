@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! MQTT 3.1.1 wire format for the publish-only client in [`crate::mqtt_bridge`]
 //!
 //! Encodes the packets a publishing client sends (CONNECT, PUBLISH at QoS 1,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! A scripted MQTT 3.1.1 broker for the client tests, run in the test's own
 //! thread. Its packet reader is written from the specification (section
 //! 2.2.3 remaining length, 3.1 CONNECT, 3.3 PUBLISH) and shares no code with

@@ -21,7 +21,7 @@
 として返す 送信する係数に、fit 元の sample、その sample に対して測った残差、
 有効範囲、出典を付けたもの
 
-License: MIT OR Apache-2.0
+License: LicenseRef-Proprietary
 
 ## 目次
 
@@ -311,4 +311,6 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `bd45312102fc` と
 
 ## ライセンス
 
-MIT OR Apache-2.0 ([LICENSE](LICENSE), [LICENSE-APACHE](LICENSE-APACHE))
+`LicenseRef-Proprietary` 条文は [LICENSE-Proprietary](LICENSE-Proprietary)
+
+Enquiries: https://extoria.co.jp/

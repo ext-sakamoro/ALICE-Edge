@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! SDF Compression for Point Clouds
 //!
 //! Two-stage compression pipeline:

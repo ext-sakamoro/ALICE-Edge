@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! Connection state of the publish-only MQTT 3.1.1 client, without I/O
 //!
 //! [`Session`] is driven by the transport loop in [`crate::mqtt_bridge`]: it is

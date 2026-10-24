@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! Software Watchdog Timer for ALICE-Edge
 //!
 //! センサー読み取りやMQTT送信のハングアップを検出するためのウォッチドッグ。

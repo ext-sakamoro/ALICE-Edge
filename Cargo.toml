@@ -9,9 +9,10 @@ rust-version = "1.87"
 # MSRV-aware dependency resolution (cargo 1.84+): `cargo update` never picks a
 # dep whose rust-version exceeds the one declared above.
 resolver = "3"
-authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
+authors = ["Moroya Sakamoto"]
 description = "Embedded Model Generator - Don't send data, send the law"
-license = "MIT OR Apache-2.0"
+license = "LicenseRef-Proprietary"
+publish = false
 repository = "https://github.com/ext-sakamoro/ALICE-Edge"
 keywords = ["embedded", "no_std", "compression", "edge", "iot"]
 categories = ["embedded", "no-std", "compression"]
@@ -32,8 +33,7 @@ include = [
     "/README.md",
     "/README_JP.md",
     "/CHANGELOG.md",
-    "/LICENSE",
-    "/LICENSE-APACHE",
+    "/LICENSE-Proprietary",
     "/TRADEMARK_NOTICE",
 ]
 

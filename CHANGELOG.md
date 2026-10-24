@@ -58,6 +58,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ### Security
 - deny.toml と cargo audit (security-audit.yml、preflight) の ignore から RUSTSEC-2026-0049 / 0098 / 0099 / 0104 (rustls-webpki 0.102) と RUSTSEC-2025-0134 (rustls-pemfile) を削除した 同じ経路の RUSTSEC-2026-0382 も依存の木から消えた (lock の rustls-webpki は 0.103.16 だけ) 残る ignore は RUSTSEC-2026-0235 (rkyv 0.7、alice-db 経由) と RUSTSEC-2025-0141 (bincode 1.x / 2.x の unmaintained、ALICE の兄弟 crate 経由) の 2 件で、どちらも MQTT とは関係のない従来からの分
+- 試験の証明書を作る dev-dependency を p256 0.14 / x509-cert 0.3 / sha2 0.11 に上げ、RUSTSEC-2026-0387 (crypto-bigint 0.5.5 の定数時間でない演算) を依存の木から外した (lock の crypto-bigint は 0.7.6 だけ) `tests/mqtt_tls.rs` は x509-cert 0.3 の builder に合わせ、root と leaf の拡張 (key identifier・basic constraints・key usage) を試験内の profile で以前と同じに作る 本体の依存と公開 API は不変
 
 ## [0.3.0] - 2026-10-15
 

@@ -20,15 +20,21 @@ use p256::ecdsa::{DerSignature, SigningKey};
 use p256::pkcs8::{EncodePrivateKey, LineEnding};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use sha2::{Digest, Sha256};
-use x509_cert::builder::{Builder, CertificateBuilder, Profile};
+use x509_cert::builder::profile::BuilderProfile;
+use x509_cert::builder::{Builder, CertificateBuilder};
 use x509_cert::der::asn1::{GeneralizedTime, Ia5String, ObjectIdentifier, OctetString};
 use x509_cert::der::{Encode, EncodePem};
 use x509_cert::ext::pkix::name::GeneralName;
-use x509_cert::ext::pkix::{ExtendedKeyUsage, SubjectAltName};
+use x509_cert::ext::pkix::{
+    AuthorityKeyIdentifier, BasicConstraints, ExtendedKeyUsage, KeyUsage, KeyUsages,
+    SubjectAltName, SubjectKeyIdentifier,
+};
+use x509_cert::ext::{Extension, ToExtension};
 use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
-use x509_cert::spki::SubjectPublicKeyInfoOwned;
+use x509_cert::spki::{SubjectPublicKeyInfoOwned, SubjectPublicKeyInfoRef};
 use x509_cert::time::{Time, Validity};
+use x509_cert::TbsCertificate;
 
 const MQTT_PROTOCOL_NAME: &[u8] = &[0x00, 0x04, b'M', b'Q', b'T', b'T'];
 
@@ -63,9 +69,56 @@ fn validity() -> Validity {
             GeneralizedTime::from_unix_duration(Duration::from_secs(secs)).expect("in range"),
         )
     };
-    Validity {
-        not_before: at(946_684_800),
-        not_after: at(4_102_358_400),
+    Validity::new(at(946_684_800), at(4_102_358_400))
+}
+
+/// The two certificate profiles of these tests: a self-signed root CA and a
+/// leaf it issues, each with the extensions of a CA and of an end entity
+/// (subject and authority key identifiers, basic constraints, key usage)
+enum TestProfile {
+    Root { subject: Name },
+    Leaf { issuer: Name, subject: Name },
+}
+
+impl BuilderProfile for TestProfile {
+    fn get_issuer(&self, subject: &Name) -> Name {
+        match self {
+            Self::Root { .. } => subject.clone(),
+            Self::Leaf { issuer, .. } => issuer.clone(),
+        }
+    }
+
+    fn get_subject(&self) -> Name {
+        match self {
+            Self::Root { subject } | Self::Leaf { subject, .. } => subject.clone(),
+        }
+    }
+
+    fn build_extensions(
+        &self,
+        spk: SubjectPublicKeyInfoRef<'_>,
+        issuer_spk: SubjectPublicKeyInfoRef<'_>,
+        tbs: &TbsCertificate,
+    ) -> x509_cert::builder::Result<Vec<Extension>> {
+        let subject = tbs.subject();
+        let mut extensions = Vec::new();
+        let ski = SubjectKeyIdentifier::try_from(spk)?;
+        extensions.push((&ski).to_extension(subject, &extensions)?);
+        let (ca, usage) = match self {
+            Self::Root { .. } => (true, KeyUsages::KeyCertSign | KeyUsages::CRLSign),
+            Self::Leaf { .. } => {
+                let aki = AuthorityKeyIdentifier::try_from(issuer_spk)?;
+                extensions.push((&aki).to_extension(subject, &extensions)?);
+                (false, KeyUsages::DigitalSignature | KeyUsages::NonRepudiation)
+            }
+        };
+        let constraints = BasicConstraints {
+            ca,
+            path_len_constraint: None,
+        };
+        extensions.push((&constraints).to_extension(subject, &extensions)?);
+        extensions.push((&KeyUsage(usage.into())).to_extension(subject, &extensions)?);
+        Ok(extensions)
     }
 }
 
@@ -87,17 +140,17 @@ impl Ca {
     fn new(common_name: &str) -> Self {
         let key = key(common_name);
         let name: Name = format!("CN={common_name}").parse().expect("a name");
-        let spki = SubjectPublicKeyInfoOwned::from_key(*key.verifying_key()).expect("SPKI");
+        let spki = SubjectPublicKeyInfoOwned::from_key(key.verifying_key()).expect("SPKI");
         let cert = CertificateBuilder::new(
-            Profile::Root,
+            TestProfile::Root {
+                subject: name.clone(),
+            },
             SerialNumber::from(1u32),
             validity(),
-            name.clone(),
             spki,
-            &key,
         )
         .expect("root profile")
-        .build::<DerSignature>()
+        .build::<_, DerSignature>(&key)
         .expect("self-signed");
         Self {
             name,
@@ -117,21 +170,14 @@ impl Ca {
 
     fn leaf(&self, names: &[&str], purpose: Purpose) -> Leaf {
         let key = key(&format!("{}/{}/{purpose:?}", self.name, names.join(",")));
-        let spki = SubjectPublicKeyInfoOwned::from_key(*key.verifying_key()).expect("SPKI");
-        let profile = Profile::Leaf {
+        let spki = SubjectPublicKeyInfoOwned::from_key(key.verifying_key()).expect("SPKI");
+        let profile = TestProfile::Leaf {
             issuer: self.name.clone(),
-            enable_key_agreement: false,
-            enable_key_encipherment: false,
+            subject: "CN=leaf".parse().expect("a name"),
         };
-        let mut builder = CertificateBuilder::new(
-            profile,
-            SerialNumber::from(2u32),
-            validity(),
-            "CN=leaf".parse().expect("a name"),
-            spki,
-            &self.key,
-        )
-        .expect("leaf profile");
+        let mut builder =
+            CertificateBuilder::new(profile, SerialNumber::from(2u32), validity(), spki)
+                .expect("leaf profile");
         let alt_names = names
             .iter()
             .map(|name| match name.parse::<std::net::IpAddr>() {
@@ -150,7 +196,9 @@ impl Ca {
         builder
             .add_extension(&ExtendedKeyUsage(vec![purpose.oid()]))
             .expect("EKU");
-        let cert = builder.build::<DerSignature>().expect("signed by the CA");
+        let cert = builder
+            .build::<_, DerSignature>(&self.key)
+            .expect("signed by the CA");
         Leaf {
             cert_pem: cert.to_pem(LineEnding::LF).expect("PEM"),
             cert_der: CertificateDer::from(cert.to_der().expect("DER")),

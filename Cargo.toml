@@ -127,12 +127,12 @@ criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
 # cross-platform golden hashes (tests/determinism_golden.rs); `oid` names
 # SHA-256 in the test certificates below
-sha2 = { version = "0.10", features = ["oid"] }
+sha2 = { version = "0.11", features = ["oid"] }
 # certificates for the mutual-TLS tests of the MQTT client (tests/mqtt_tls.rs),
 # made at test time in pure Rust (no C build, so `--all-targets` cross checks
 # need no C cross compiler); keys are derived from fixed labels
-x509-cert = { version = "0.2.5", default-features = false, features = ["builder", "pem", "std"] }
-p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "pem", "std"] }
+x509-cert = { version = "0.3", default-features = false, features = ["builder", "pem", "std"] }
+p256 = { version = "0.14", default-features = false, features = ["ecdsa", "pkcs8", "pem", "std"] }
 
 [[bench]]
 name = "edge_bench"

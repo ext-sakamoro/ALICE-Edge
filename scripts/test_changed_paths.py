@@ -27,6 +27,8 @@ GIT_ENV = {
     "GIT_CONFIG_NOSYSTEM": "1",
 }
 
+FIXTURE_CONFIG = {"gc.auto": "0", "gc.autoDetach": "false", "maintenance.auto": "false"}
+
 
 class Repo:
     def __init__(self, path: Path):
@@ -37,6 +39,10 @@ class Repo:
         # git for Windows refuses a tab, quote or control character in an index path by
         # default (core.protectNTFS); the fixture records such names without writing them
         self.run("config", "core.protectNTFS", "false")
+        # no automatic gc or maintenance: a detached one writes into .git while the fixture's
+        # directory is being removed, and the cleanup fails with "Directory not empty"
+        for key, value in FIXTURE_CONFIG.items():
+            self.run("config", key, value)
 
     def run(self, *args: str) -> str:
         p = subprocess.run(["git", "-C", str(self.path), *args], capture_output=True, text=True,
@@ -83,6 +89,15 @@ def args(repo_: Repo | None, **kw) -> SimpleNamespace:
                 repo=str(repo_.path) if repo_ else ".")
     base.update(kw)
     return SimpleNamespace(**base)
+
+
+class FixtureCases(unittest.TestCase):
+    def test_a_fixture_repository_runs_no_automatic_gc_or_maintenance(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = Repo(Path(d))
+            for key, value in FIXTURE_CONFIG.items():
+                self.assertEqual(r.run("config", "--get", key), value, key)
+            self.assertEqual(FIXTURE_CONFIG, {"gc.auto": "0", "gc.autoDetach": "false", "maintenance.auto": "false"})
 
 
 class PushCases(unittest.TestCase):

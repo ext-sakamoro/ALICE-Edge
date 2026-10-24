@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! Linux GPIO/I2C/SPI/UART sensor drivers for ALICE-Edge
 //!
 //! Provides traits and drivers for common `IoT` sensors on Linux boards (rppal).

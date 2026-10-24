@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! ALICE-DB bridge: Persist model coefficients
 //!
 //! Stores fitted linear model coefficients (slope, intercept) from

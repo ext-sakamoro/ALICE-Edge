@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 //! ALICE-Edge × ALICE-Zip Bridge
 //!
 //! Compress edge model coefficients (slope, intercept) using

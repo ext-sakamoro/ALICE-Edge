@@ -487,6 +487,11 @@ jobs:
         run: |
           python scripts/test_shared_files.py
           scripts/shared_files.sh
+      # ALICE-Law G11: every gate declared pass has a row in conformance/g11.toml; the checker
+      # (scripts/g11_table_check.py) is fetched at .github/g11-table-pin and SHA-256 pinned; 0 compared fails
+      - name: G11 table matches the declared gates
+        shell: bash
+        run: scripts/g11_table.sh
       # the path decision, gate and trigger lint of g3-ir.yml's changes job (shared with ALICE-DB)
       - name: changed_paths oracle (path filter decision, gate and trigger lint)
         run: python scripts/test_changed_paths.py

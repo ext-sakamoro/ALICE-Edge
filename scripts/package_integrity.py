@@ -66,6 +66,7 @@ import tarfile
 import tempfile
 import time
 import tomllib
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Callable
@@ -145,20 +146,44 @@ def satisfies(version: Version, req: str) -> bool:
     return True
 
 
-def registry_versions(name: str) -> list[Version]:
-    """Published, non-yanked release versions of `name` from the crates.io sparse index."""
+def index_path(name: str) -> str:
+    """The path of `name` in the crates.io sparse index (lower case; 1, 2 and 3 characters
+    have their own directories, longer names two levels of two characters)."""
     n = name.lower()
     prefix = {1: "1", 2: "2", 3: f"3/{n[0]}"}.get(len(n), f"{n[:2]}/{n[2:4]}")
-    url = f"https://index.crates.io/{prefix}/{n}"
+    return f"{prefix}/{n}"
+
+
+def fetch_index(url: str) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "alice-package-integrity"})
     with urllib.request.urlopen(req, timeout=30) as resp:
-        lines = resp.read().decode("utf-8").splitlines()
-    out = []
-    for line in lines:
-        entry = json.loads(line)
-        if entry.get("yanked") or "-" in entry["vers"] or "+" in entry["vers"]:
-            continue
-        out.append(parse_version(entry["vers"]))
+        return resp.read()
+
+
+def registry_versions(name: str, fetch: Callable[[str], bytes] = fetch_index) -> list[Version]:
+    """Published, non-yanked release versions of `name` from the crates.io sparse index.
+
+    The index answers 404 for a crate that was never published: no version is published, so
+    the list is empty (a sibling it names is then blocked). Every other failure (another HTTP
+    status, a timeout, a name that does not resolve, a body that is not index lines) raises
+    OSError: the index was not read, which is never a pass."""
+    url = f"https://index.crates.io/{index_path(name)}"
+    try:
+        body = fetch(url)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return []
+        raise
+    try:
+        out = []
+        for line in body.decode("utf-8").splitlines():
+            entry = json.loads(line)
+            vers = entry["vers"]
+            if entry.get("yanked") or "-" in vers or "+" in vers:
+                continue
+            out.append(parse_version(vers))
+    except (UnicodeDecodeError, ValueError, KeyError, TypeError) as e:
+        raise OSError(f"{url}: not an index file ({e})") from e
     return out
 
 

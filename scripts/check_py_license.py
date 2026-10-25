@@ -2,8 +2,8 @@
 """The Python package license metadata must equal the crate license.
 
 The crate's declared license (`Cargo.toml` `[package] license`) is the source of
-truth; the wheel must not drift from it (it once shipped `MIT` while the crate was
-`AGPL-3.0-or-later OR LicenseRef-Commercial`). Fails if the two differ, and fails
+truth; the wheel must not drift from it (it once shipped a license string different
+from the crate's). Fails if the two differ, and fails
 if it cannot compare them (0 compared is not a pass).
 
 usage: scripts/check_py_license.py

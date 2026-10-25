@@ -91,9 +91,10 @@ class SiblingsCheck(unittest.TestCase):
         self.write(f"ALICE-Zip {self.zip}\nALICE-Zip {self.zip}\nALICE-DB {self.db}\n")
         self.assertProblem("listed twice")
 
-    def test_empty_list_fails(self) -> None:
+    def test_empty_list_beside_a_path_dependency_fails_naming_it(self) -> None:
         self.write("# nothing\n\n")
-        self.assertProblem("compared nothing")
+        self.assertProblem("Cargo.toml:2 names ../ALICE-Zip, which .github/alice-siblings does not list")
+        self.assertProblem("Cargo.toml:3 names ../ALICE-DB, which .github/alice-siblings does not list")
 
     def test_unlisted_manifest_path_fails(self) -> None:
         self.write(f"ALICE-Zip {self.zip}\n")
@@ -186,9 +187,91 @@ class SiblingsCheck(unittest.TestCase):
         (self.root / "Cargo.toml").unlink()
         self.assertProblem("no Cargo.toml was read")
 
-    def test_missing_list_fails(self) -> None:
+    def test_missing_list_beside_a_path_dependency_fails_naming_it(self) -> None:
         (self.root / ".github" / "alice-siblings").unlink()
-        self.assertEqual(self.problems(), [".github/alice-siblings is missing"])
+        self.assertProblem("Cargo.toml:2 names ../ALICE-Zip, which .github/alice-siblings does not list")
+
+    def no_path_dependency(self) -> None:
+        (self.root / "Cargo.toml").write_text(
+            "[dependencies]\n"
+            'alice-zip = { git = "https://github.com/ext-sakamoro/ALICE-Zip", rev = "%s", version = "0.11" }\n'
+            '# alice-db = { path = "../ALICE-DB", version = "0.6" }  (a comment names no dependency)\n'
+            'serde = { version = "1", features = ["derive"] }  # path = "../ALICE-DB" in a comment\n' % ("0" * 40)
+        )
+
+    def main_output(self) -> tuple[int, str]:
+        import contextlib
+        import io
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = c.main(["x", str(self.root)])
+        return code, out.getvalue()
+
+    def test_empty_list_with_no_path_dependency_passes_saying_so(self) -> None:
+        self.no_path_dependency()
+        self.write("# no sibling path dependency\n")
+        self.assertEqual(self.problems(), [])
+        code, out = self.main_output()
+        self.assertEqual(code, 0, out)
+        self.assertIn("alice_siblings_check: 1 manifests scanned, 0 path deps, nothing to pin\n", out)
+
+    def test_missing_list_with_no_path_dependency_passes_saying_so(self) -> None:
+        self.no_path_dependency()
+        (self.root / ".github" / "alice-siblings").unlink()
+        self.assertEqual(self.problems(), [])
+        self.assertIn("1 manifests scanned, 0 path deps, nothing to pin", self.main_output()[1])
+
+    def test_an_empty_list_with_no_manifest_read_fails(self) -> None:
+        (self.root / "Cargo.toml").unlink()
+        self.write("")
+        self.assertProblem("no Cargo.toml was read (compared nothing)")
+
+    def test_a_single_quoted_path_dependency_counts(self) -> None:
+        (self.root / "Cargo.toml").write_text("[dependencies]\nalice-zip = { path = '../ALICE-Zip', version = '0.11' }\n")
+        self.write("")
+        self.assertProblem("Cargo.toml:2 names ../ALICE-Zip, which .github/alice-siblings does not list")
+        self.write(f"ALICE-Zip {self.zip}\n")
+        self.assertEqual(self.problems(), [])
+
+    def test_a_path_dependency_toml_hides_from_a_line_scan_still_counts(self) -> None:
+        # the manifest is read as TOML: a quoted key, a multi-line literal string, and an escaped quote followed
+        # by a "#" earlier on the line all still name the sibling
+        cases = {
+            "quoted key": '[dependencies]\nalice-zip = { "path" = "../ALICE-Zip", version = "0.11" }\n',
+            "multi-line literal": "[dependencies]\nalice-zip = { version = \"0.11\", path = \'\'\'../ALICE-Zip\'\'\' }\n",
+            "escaped quote and #": '[dependencies]\nalice-zip = { version = "0.11", features = ["a\\" # x"], path = "../ALICE-Zip" }\n',
+            "dotted key": "[dependencies]\nalice-zip.path = \"../ALICE-Zip\"\nalice-zip.version = \"0.11\"\n",
+            "target table": "[target.'cfg(unix)'.dependencies]\nalice-zip = { path = \"../ALICE-Zip\" }\n",
+            "dev-dependencies": "[dev-dependencies]\nalice-zip = { path = \"../ALICE-Zip\" }\n",
+            "build-dependencies": "[build-dependencies]\nalice-zip = { path = \"../ALICE-Zip\" }\n",
+            "workspace dependencies": "[workspace.dependencies]\nalice-zip = { path = \"../ALICE-Zip\" }\n",
+            "patch": "[patch.crates-io]\nalice-zip = { path = \"../ALICE-Zip\" }\n",
+        }
+        for name, text in cases.items():
+            with self.subTest(name=name):
+                (self.root / "Cargo.toml").write_text(text)
+                self.write("")
+                self.assertProblem("names ../ALICE-Zip, which .github/alice-siblings does not list")
+
+    def test_a_manifest_that_does_not_parse_fails_closed(self) -> None:
+        (self.root / "Cargo.toml").write_text("[dependencies\nalice-zip = { path = ")
+        self.write("")
+        self.assertProblem("Cargo.toml is not TOML")
+
+    def test_a_path_that_is_not_a_dependency_is_not_a_sibling(self) -> None:
+        # [lib] / [[bin]] paths, and a string that only mentions a sibling, name no dependency
+        (self.root / "Cargo.toml").write_text(
+            '[package]\nname = "x"\nversion = "0.1.0"\ndescription = "see path = \\"../ALICE-Zip\\""\n'
+            '[lib]\npath = "src/lib.rs"\n[[bin]]\nname = "b"\npath = "src/bin/b.rs"\n')
+        self.write("")
+        self.assertEqual(self.problems(), [])
+
+    def test_read_list_of_a_missing_or_empty_file_is_an_empty_mapping(self) -> None:
+        self.write("# none\n")
+        self.assertEqual(c.read_list(self.root), ({}, []))
+        (self.root / ".github" / "alice-siblings").unlink()
+        self.assertEqual(c.read_list(self.root), ({}, []))
 
 
 

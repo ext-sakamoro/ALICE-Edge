@@ -256,10 +256,10 @@ scripts/preflight.sh --quick    # static checks, clippy, builds, docs, cargo tes
 - [ALICE-Analytics](https://github.com/ext-sakamoro/ALICE-Analytics) — ダッシュボード用 sketch
 - [ALICE-Streaming-Protocol](https://github.com/ext-sakamoro/ALICE-Streaming-Protocol) — ストリーミングブリッジ
 
-<!-- law-integration:begin law=bd45312102fca0ccf37a9cbcd8c32a193eef513b -->
+<!-- law-integration:begin law=0a5de013ca1268eac22fe44908138d09a431fce0 -->
 ## ALICE-Law との統合
 
-ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `bd45312102fc` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
+ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `0a5de013ca12` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
 
 | | |
 |---|---|
@@ -281,7 +281,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `bd45312102fc` と
 | G8 persisted-semantics-id | 適合 | breaking (0.4.0): save_weights / load_weights return WeightsError instead of String and load_weights returns the IdStatus with the classifier. A weights file … |
 | G9 persisted-meaning-change-is-major | 適合 | definition: EDGE_SEMANTICS_ID (the identifier the weights and payloads carry, [[id]] in scripts/id_move.toml with PREVIOUS_EDGE_SEMANTICS_IDS) may move only … |
 | G10 no-run-varying-artifacts | 適合 | the 23 production .elapsed() reads (a 24th grep hit, `src/sensors.rs#/// its reading from `, is a doc comment) sit under scoped clippy::disallowed_methods … |
-| G11 gate-self-tests | 未達 | unmet: clause (c). scripts/clippy_canary.py, scripts/test_clippy_canary.py, scripts/gen_clippy_canary_calls.py, scripts/test_gen_clippy_canary_calls.py, … |
+| G11 gate-self-tests | 未達 | clause (c) has a check: scripts/g11_table.sh runs ALICE-Law's scripts/g11_table_check.py (fetched at .github/g11-table-pin, SHA-256 pinned, 0 compared fails) … |
 | G12 public-repo-text-rules | 適合 | the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (779fa443f95bc0caca5ca2d5bdb9156051fd6143) and refuses … |
 | G13 no-unspecified-order | 適合 | no parallel reduction over floats exists, so the ordered-reduction test with two thread counts has nothing to test; the lint keeps it that way. … |
 | G14 float-environment-invariants | 適合 | the static scan covers the files of this repository and the dynamic check covers the builds CI runs on ubuntu and macOS; a flag passed by a build outside this … |

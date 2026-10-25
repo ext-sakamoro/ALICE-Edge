@@ -8,11 +8,13 @@ runner for cargo, so each case fixes exactly what is published and what cargo re
 from __future__ import annotations
 
 import io
+import json
 import os
 import sys
 import tarfile
 import tempfile
 import unittest
+import urllib.error
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -182,6 +184,91 @@ class PackageIntegrity(Fixture):
         self.assertEqual(rc, 1, buf.getvalue())
         self.assertIn("index unreadable", buf.getvalue())
 
+
+
+class RegistryIndex(unittest.TestCase):
+    """The sparse index read: its path (a known-answer table) and how an answer is read"""
+
+    def test_index_path_known_answers(self) -> None:
+        # https://doc.rust-lang.org/cargo/reference/registry-index.html (index files)
+        for name, path in [("a", "1/a"), ("ab", "2/ab"), ("abc", "3/a/abc"), ("abcd", "ab/cd/abcd"),
+                           ("alice-sign", "al/ic/alice-sign"), ("Serde", "se/rd/serde"),
+                           ("Abc", "3/a/abc")]:
+            self.assertEqual(pi.index_path(name), path, name)
+
+    @staticmethod
+    def http_error(code: int):
+        def fetch(url: str) -> bytes:
+            raise urllib.error.HTTPError(url, code, "status", None, None)
+        return fetch
+
+    def test_a_crate_never_published_has_no_version(self) -> None:
+        asked: list[str] = []
+
+        def fetch(url: str) -> bytes:
+            asked.append(url)
+            raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+
+        self.assertEqual(pi.registry_versions("alice-sign", fetch=fetch), [])
+        self.assertEqual(asked, ["https://index.crates.io/al/ic/alice-sign"])
+
+    def test_every_other_failure_stays_unreadable(self) -> None:
+        def timeout(url: str) -> bytes:
+            raise TimeoutError("timed out")
+
+        def dns(url: str) -> bytes:
+            raise urllib.error.URLError("nodename nor servname provided")
+
+        for fetch in [self.http_error(403), self.http_error(429), self.http_error(500),
+                      self.http_error(503), timeout, dns]:
+            with self.assertRaises(OSError):
+                pi.registry_versions("alice-sign", fetch=fetch)
+
+    def test_a_malformed_body_is_unreadable(self) -> None:
+        for body in [b"not json\n", b'{"vers": "1.0.0"\n', b'{"name": "x"}\n', b"\xff\xfe\n"]:
+            with self.assertRaises(OSError, msg=body):
+                pi.registry_versions("alice-sign", fetch=lambda url, b=body: b)
+
+    def test_published_versions_are_read_without_yanked_and_prereleases(self) -> None:
+        body = b"\n".join([
+            b'{"name": "alice-sign", "vers": "0.1.0", "yanked": false}',
+            b'{"name": "alice-sign", "vers": "0.2.0", "yanked": true}',
+            b'{"name": "alice-sign", "vers": "0.3.0-rc.1", "yanked": false}',
+            b'{"name": "alice-sign", "vers": "0.1.1", "yanked": false}',
+        ])
+        self.assertEqual(pi.registry_versions("alice-sign", fetch=lambda url: body), [(0, 1, 0), (0, 1, 1)])
+
+
+class NeverPublishedSibling(Fixture):
+    """A sibling the index has never heard of (404) is blocked and patched, as one whose
+    published versions are all too old; any other index failure is still red"""
+
+    def run_with(self, fetch) -> tuple[int, str]:
+        buf = io.StringIO()
+        os.environ["CARGO_TARGET_DIR"] = str(self.target)
+        with redirect_stdout(buf):
+            rc = pi.main(["--root", str(self.root), "--expect-in-lock", "alice-det-math"],
+                         versions_of=lambda n: pi.registry_versions(n, fetch=fetch), runner=self.runner())
+        return rc, buf.getvalue()
+
+    def test_404_is_blocked_patched_and_green(self) -> None:
+        rc, out = self.run_with(RegistryIndex.http_error(404))
+        self.assertEqual(rc, 0, out)
+        self.assertIn("blocked: alice-zip >=0.11, <0.12 unpublished (crates.io max none)", out)
+        self.assertTrue(all(any("patch.crates-io.alice-zip.path=" in a for a in c) for c in self.calls), self.calls)
+
+    def test_500_is_unreadable_and_red(self) -> None:
+        rc, out = self.run_with(RegistryIndex.http_error(500))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("index unreadable", out)
+        self.assertEqual(self.calls, [])
+
+    def test_a_published_version_that_satisfies_resolves_without_a_patch(self) -> None:
+        body = b'{"name": "alice-zip", "vers": "0.11.2", "yanked": false}'
+        rc, out = self.run_with(lambda url: body)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("blocked 0", out)
+        self.assertFalse(any("patch.crates-io" in a for c in self.calls for a in c), self.calls)
 
 
 class PackageContents(Fixture):
@@ -372,7 +459,7 @@ class Workspace(unittest.TestCase):
             self.assertIn("blocked: alice-physics >=3.0, <5 unpublished (crates.io max 2.0.0), satisfied only by "
                           f".github/alice-siblings ALICE-Physics {SHA[:12]}", out)
             rc, out, err = self.main("--member", "ws-lib", "--patches")
-            self.assertEqual((rc, out.splitlines()), (0, [f'--config=patch.crates-io.alice-physics.path="{pkg.resolve()}"']), err)
+            self.assertEqual((rc, out.splitlines()), (0, [f'--config=patch.crates-io.alice-physics.path={json.dumps(str(pkg.resolve()))}']), err)
         # the package is read from that directory: no manifest there fails
         self.write_lib('alice-physics = { path = "../../ALICE-Physics/crates/missing", version = ">=3.0, <5" }\n')
         rc, out, _ = self.main("--member", "ws-lib", "--publish-gate")
@@ -461,7 +548,7 @@ class Workspace(unittest.TestCase):
         rc, out, err = self.main("--member", "ws-lib", "--patches")
         self.assertEqual(rc, 0, err)
         self.assertEqual(out.splitlines(),
-                         [f'--config=patch.crates-io.alice-zip.path="{(self.base / "ALICE-Zip").resolve()}"'])
+                         [f'--config=patch.crates-io.alice-zip.path={json.dumps(str((self.base / "ALICE-Zip").resolve()))}'])
         self.assertIn("blocked 1", err)
 
     def test_dependency_on_the_workspace_root_package_is_a_member(self) -> None:
@@ -549,8 +636,8 @@ class Workspace(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         lines = out.splitlines()
         self.assertEqual(lines, [
-            f'--config=patch.crates-io.ws-macro.path="{(self.root / "ws-macro").resolve()}"',
-            f'--config=patch.crates-io.alice-zip.path="{(self.base / "ALICE-Zip").resolve()}"',
+            f'--config=patch.crates-io.ws-macro.path={json.dumps(str((self.root / "ws-macro").resolve()))}',
+            f'--config=patch.crates-io.alice-zip.path={json.dumps(str((self.base / "ALICE-Zip").resolve()))}',
         ])
         self.assertIn("blocked 2", err)
         self.published.update({"ws-macro": [(0, 4, 0)], "alice-zip": [(0, 11, 0)]})

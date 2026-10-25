@@ -132,6 +132,9 @@ step "ci.yml / docs-lint: Shared files equal ALICE-Law's table"
 python3 scripts/test_shared_files.py
 scripts/shared_files.sh
 
+step "ci.yml / url-crate: G11 table matches the declared gates (G11)"
+scripts/g11_table.sh
+
 step "ci.yml / clippy: clippy canary data (generator tests, generated from clippy.toml, no drift)"
 python3 scripts/test_gen_clippy_canary_calls.py
 python3 scripts/gen_clippy_canary_calls.py --check

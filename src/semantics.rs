@@ -13,7 +13,7 @@
 //! # Hex form
 //!
 //! ```text
-//! 1dd8876b42ffcef5dabc506377466e282d290466acd2369d063d4358ab66ef80
+//! 573e1af1a6d4556748faeff04c0a4bebe827cc42cbe95c38ef81fa9e09547e8b
 //! ```
 //!
 //! # Entries
@@ -21,7 +21,8 @@
 //! [`EDGE_SEMANTICS_PINS`]: one entry per scenario golden (`"q16_linear"`,
 //! `"adaptive_polyfit"`, `"constant_fit"`, `"simd_fit"`, `"sensor_fusion"`,
 //! `"ring_buffer"`, `"det_math"`, `"piecewise"`, `"delta"`, `"law"`,
-//! `"object_features"`, `"sensors"`, `"depth_capture"`, some run only with
+//! `"object_features"`, `"sensors"`, `"depth_capture"`, `"depth_frames_below_2_13"`,
+//! `"depth_frames_from_2_13"`, some run only with
 //! the feature that builds the module) and one per `k` of the robust fit
 //! (`"robust_k1"`, `"robust_k3"`, `"robust_k10"`, `"robust_kmax"`), plus the
 //! identifiers of the Law-bearing dependencies, each the dependency's own Law
@@ -81,7 +82,7 @@ pub(crate) const fn hex32(s: &str) -> [u8; 32] {
 }
 
 /// The pins folded into [`EDGE_SEMANTICS_ID`], as `(name, digest)`.
-pub const EDGE_SEMANTICS_PINS: [(&str, [u8; 32]); 22] = [
+pub const EDGE_SEMANTICS_PINS: [(&str, [u8; 32]); 24] = [
     (
         "q16_linear",
         hex32("105580c224a8b5fe8ac11762db84662a699ad8aed740a52892f10ef92892041d"),
@@ -151,34 +152,48 @@ pub const EDGE_SEMANTICS_PINS: [(&str, [u8; 32]); 22] = [
         hex32("a8de2b48247fbe7108931a655310ab569dc4f1999aa1ac000ac616004d81b5bd"),
     ),
     (
+        "depth_frames_below_2_13",
+        hex32("e74d950a951ef412c5cbf59d61868659920f0504bc7063b9da83f081f23cff1a"),
+    ),
+    (
+        "depth_frames_from_2_13",
+        hex32("a1146387667a53203d869d83e05ae0c7a1e57f84716f578efa5177aac67df764"),
+    ),
+    (
         "alice-det-math",
-        hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
+        hex32("a2a11b9b826227fa7a9ed8ab2c1ce63dbb07ad4c39aa2c46a363ddea6b47dbe9"),
     ),
     (
         "alice-zip",
-        hex32("51ffeb079769ea34bd3cb3df756b6cb940b8d2d6a6a0f1e1115ab8139415935e"),
+        hex32("17d0df1d7c0a6e63d1a7380129f12386b677ac96e7ac193dece546805f4fe84c"),
     ),
     (
         "alice-db",
-        hex32("e1a82c6407b1a880267b354647891271929bf2a5765a93dc48944ff64237c4ce"),
+        hex32("670fa328eed6ddf2e28f96eb5ebabfe602eabd80dd025199edece388241223a7"),
     ),
     (
         "alice-analytics",
-        hex32("f8ded5961a8ef8be2d79ea4bfafd68f494c2443d725fb926cf9775824e043d4d"),
+        hex32("38e4dba4aeda3ea1a291d620c0183470aaffb9c9d3cd9a101b1435b0d93909df"),
     ),
     (
         "alice-sdf",
-        hex32("151079595c1e8d8fc661909bac7ea0dde0ba5a8b3ef500019d01c6af64defb69"),
+        hex32("ad04549c331ec33377ef1d4419c0c6756cef6a852520e470a53f642257da4938"),
     ),
 ];
 
 /// The semantics identifier of this crate: the fold of
 /// [`EDGE_SEMANTICS_PINS`] (see the module documentation).
 pub const EDGE_SEMANTICS_ID: [u8; 32] =
-    hex32("1dd8876b42ffcef5dabc506377466e282d290466acd2369d063d4358ab66ef80");
+    hex32("573e1af1a6d4556748faeff04c0a4bebe827cc42cbe95c38ef81fa9e09547e8b");
 
 /// Earlier values of [`EDGE_SEMANTICS_ID`] whose pinned bits this release
-/// still reproduces (none yet: this is the first identifier).
+/// still reproduces
+///
+/// Empty: with alice-det-math at 2d01c63f the upstream identifiers moved and
+/// this crate's own simulated depth frames move from frame 81920 on (`sin` /
+/// `cos` reduce arguments from `2^13` on in double precision), so
+/// `1dd8876b…` (alice-det-math 0.5.1) does not name this build's bits.
+/// `tests/edge_semantics_id.rs` shows which pins moved.
 pub const PREVIOUS_EDGE_SEMANTICS_IDS: &[[u8; 32]] = &[];
 
 /// How a stored or received identifier relates to this build's

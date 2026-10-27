@@ -869,6 +869,70 @@ fn golden_depth_capture() {
 }
 
 // ---------------------------------------------------------------------------
+// 14b. depth frames past 2^13 — the simulated frame's depth is
+//      `1 + 0.1 sin(x pi + f) cos(z 2.71 + f)` with `f = frame * 0.1`, so the
+//      arguments grow with the frame counter. alice-det-math 2d01c63f reduces
+//      `sin` / `cos` arguments from `2^13` on in double precision (where the
+//      earlier generations reduced them in single precision), so a long
+//      simulation moves from frame 81920 on. Two windows of 80 frames each:
+//      frames 81800..81880 keep every argument below 2^13 (f <= 8187.9 and
+//      |x pi|, |z 2.71| <= 1.42), frames 81940..82020 keep every argument at
+//      or above it (f >= 8194). No feature: only alice-det-math is called.
+// ---------------------------------------------------------------------------
+
+const GOLDEN_DEPTH_FRAMES_BELOW_2_13: &str =
+    "e74d950a951ef412c5cbf59d61868659920f0504bc7063b9da83f081f23cff1a";
+const GOLDEN_DEPTH_FRAMES_FROM_2_13: &str =
+    "a1146387667a53203d869d83e05ae0c7a1e57f84716f578efa5177aac67df764";
+
+/// The depth of every point of the simulated frames `frames` (the formula of
+/// `DolphinD5Driver`'s simulated capture, which `init` reaches only without a
+/// device), and the smallest and largest `sin` / `cos` argument it took
+fn depth_frames(frames: core::ops::Range<u32>) -> (Sink, f32, f32) {
+    let mut s = Sink::default();
+    let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
+    for frame in frames {
+        let frame_f = frame as f32 * 0.1;
+        for iy in 0..10 {
+            for ix in 0..10 {
+                let x = (ix as f32 - 4.5) * 0.1;
+                let z = (iy as f32 - 4.5) * 0.1;
+                let (a, b) = (x * core::f32::consts::PI + frame_f, z * 2.71 + frame_f);
+                for t in [a, b] {
+                    lo = if t < lo { t } else { lo };
+                    hi = if t > hi { t } else { hi };
+                }
+                let y = 1.0 + 0.1 * alice_det_math::sin(a) * alice_det_math::cos(b);
+                s.f32(y);
+            }
+        }
+    }
+    (s, lo, hi)
+}
+
+#[test]
+fn golden_depth_frames_below_and_from_2_13() {
+    // the windows are where the comment says: every argument below 2^13, then
+    // every argument at or above it
+    let (below, _, hi) = depth_frames(81_800..81_880);
+    assert!(hi < 8192.0, "largest argument {hi} of the lower window");
+    assert_golden(
+        "depth_frames_below_2_13",
+        below,
+        32_000,
+        GOLDEN_DEPTH_FRAMES_BELOW_2_13,
+    );
+    let (from, lo, _) = depth_frames(81_940..82_020);
+    assert!(lo >= 8192.0, "smallest argument {lo} of the upper window");
+    assert_golden(
+        "depth_frames_from_2_13",
+        from,
+        32_000,
+        GOLDEN_DEPTH_FRAMES_FROM_2_13,
+    );
+}
+
+// ---------------------------------------------------------------------------
 // 15. the arithmetic identifier — names the numeric semantics every scenario
 //     above was computed under. The scenarios pin outputs; this pins the name
 //     a stored or transmitted result is recorded with.
@@ -886,7 +950,7 @@ fn golden_depth_capture() {
 /// the scenario hashes above are unchanged (or explained), then update this
 /// constant and record both in CHANGELOG.
 const GOLDEN_SEMANTICS_ID: &str =
-    "51ffeb079769ea34bd3cb3df756b6cb940b8d2d6a6a0f1e1115ab8139415935e";
+    "17d0df1d7c0a6e63d1a7380129f12386b677ac96e7ac193dece546805f4fe84c";
 
 #[test]
 fn golden_semantics_id() {
@@ -936,19 +1000,27 @@ fn golden_semantics_id() {
 /// rather than whatever happened to come out.
 #[cfg(feature = "law")]
 const GOLDEN_LAW_ID_RISING: &str =
-    "521bfedaa6fd37097ac92be35eb7170c69d032311531f2562a7ee2373d4a232f";
+    "a4090eaba8ab4ae79d7ea35d3d5711da56210675ed13c78d3614fe84a87f1f93";
 #[cfg(feature = "law")]
 const GOLDEN_LAW_ID_FALLING: &str =
-    "c373565c60b4056847c031ad65e6e62b5d7724d332b4a8a507d34c0ae564cf92";
+    "3e8dca44d15f87b27b6cd7ca5345b91a9a8aacc1941fdd01149638e0432f84c4";
 
-/// The law identifiers this crate published before 0.4.0, when it exported
-/// alice-det-math's identifier: `(that identifier, rising, falling)`. 0.3.0
+/// The law identifiers this crate recorded under earlier identifiers:
+/// `(that identifier, rising, falling)`. Before the alice-det-math 2d01c63f
+/// fold, 0.4.0 recorded them under alice-zip's `51ffeb07…` (alice-det-math
+/// 0.5.1); before 0.4.0, when it exported alice-det-math's identifier, 0.3.0
 /// recorded them under 0.5.1's `85e08846…`, 0.2.0 and 0.2.1 under 0.5.0's
-/// `135c407d…`; both identifiers are in alice-zip's `law::PREVIOUS_SEMANTICS_IDS`,
-/// so the same fits under them still give these values, which shows that the 0.4.0
-/// re-recording of `GOLDEN_LAW_ID_*` moved the identifier input only
+/// `135c407d…`. All three identifiers are in alice-zip's
+/// `law::PREVIOUS_SEMANTICS_IDS`, so the same fits under them still give these
+/// values, which shows that each re-recording of `GOLDEN_LAW_ID_*` moved the
+/// identifier input only
 #[cfg(feature = "law")]
-const PREVIOUS_GOLDEN_LAW_IDS: [(&str, &str, &str); 2] = [
+const PREVIOUS_GOLDEN_LAW_IDS: [(&str, &str, &str); 3] = [
+    (
+        "51ffeb079769ea34bd3cb3df756b6cb940b8d2d6a6a0f1e1115ab8139415935e",
+        "521bfedaa6fd37097ac92be35eb7170c69d032311531f2562a7ee2373d4a232f",
+        "c373565c60b4056847c031ad65e6e62b5d7724d332b4a8a507d34c0ae564cf92",
+    ),
     (
         "85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315",
         "20a700605df5ef03b40b4a377fcf358f1cd21406afbd5f75f2f7e470cd8249a9",
@@ -994,8 +1066,8 @@ fn golden_law_id_under_the_previous_identifiers_is_unchanged() {
         }
     }
     assert_eq!(
-        compared, 4,
-        "compared {compared} law identifiers, expected 4"
+        compared, 6,
+        "compared {compared} law identifiers, expected 6"
     );
 }
 

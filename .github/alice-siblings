@@ -1,7 +1,7 @@
 # Sibling repositories the manifests take by path until the versions they need are on
 # crates.io: "<Repo> <full commit SHA>", cloned by .github/actions/alice-siblings and
 # checked against the local checkouts by scripts/alice_siblings_check.py
-ALICE-Zip 72cd19faf37760e228ba6155fd3bdb5a0a85bcfa
-ALICE-DB 2789c414b5f5c73cd5318fd69837745a11a75291
-ALICE-Analytics bf1abd52f8e2a4b047c83de4086e140233daeeaa
-ALICE-SDF c5cc4e0dc47b5a7c2ec72b448aab4985d7e281fd
+ALICE-Zip 19f6f2c1ff5537642cefca006e37e2f00570d6ba
+ALICE-DB 866b8f11575c0bc936bdb322450066625b49e449
+ALICE-Analytics c70ff0439d3630e9b81dcf4404726f57d11b3686
+ALICE-SDF 834705cfcff20779b99dbd704ff806bfe613cb0a

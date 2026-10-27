@@ -9,6 +9,14 @@ description: >-
   no key. Fails when a line is malformed, nothing is listed, a private repository is not listed
   or has no key, a key is given for a repository that is not private, or a checkout ends at
   another commit.
+
+  With `list:` the action reads that file instead (same line form, path relative to repo-dir), for
+  the extra commits a later step needs present, such as the base trees' siblings
+  `scripts/id_move_check.py --print-siblings` lists: a repository not yet cloned is cloned and
+  checked out at its commit as above; one already cloned keeps its checkout (the build of this
+  repository uses it) and gets the commit fetched. Then it fails when the file is missing, a line
+  is malformed or a commit is not present afterwards; an empty file clones nothing, and a private
+  repository need not be in it.
 inputs:
   repo-dir:
     description: >-
@@ -16,6 +24,12 @@ inputs:
       the workspace root, `ALICE-LOL` when the workflow checks it out with `path: ALICE-LOL`)
     required: false
     default: "."
+  list:
+    description: >-
+      Another file of pins, relative to repo-dir, whose commits are made present without moving an
+      existing checkout (empty: .github/alice-siblings, cloned and checked out)
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -23,10 +37,20 @@ runs:
       shell: bash
       env:
         REPO_DIR: ${{ inputs.repo-dir }}
+        LIST: ${{ inputs.list }}
       run: |
         set -euo pipefail
         base="$GITHUB_WORKSPACE/$REPO_DIR"
         list="$base/.github/alice-siblings"
+        list_mode=0
+        if [ -n "${LIST:-}" ]; then
+          list="$base/$LIST"
+          list_mode=1
+          if [ ! -f "$list" ]; then
+            echo "::error::list: $LIST is not a file under $REPO_DIR"
+            exit 1
+          fi
+        fi
         private_list="$base/.github/alice-siblings-private"
         # the clone URL prefixes; ALICE_SIBLINGS_GIT_BASE and ALICE_SIBLINGS_PRIVATE_GIT_BASE exist
         # for the action's own test (local repositories). Redirecting them does not weaken the pin:
@@ -80,6 +104,8 @@ runs:
           fi
           listed="$listed$repo "
           dest="$base/../$repo"
+          fresh=1
+          [ -d "$dest/.git" ] && fresh=0
           if [[ "$private" == *" $repo "* ]]; then
             var="$(key_var "$repo")"
             if [ -z "${RUNNER_TEMP:-}" ]; then
@@ -108,6 +134,15 @@ runs:
             fi
             git -C "$dest" cat-file -e "$ref^{commit}" 2>/dev/null || git -C "$dest" fetch -q origin "$ref"
           fi
+          if [ "$list_mode" -eq 1 ] && [ "$fresh" -eq 0 ]; then
+            if ! git -C "$dest" cat-file -e "$ref^{commit}" 2>/dev/null; then
+              echo "::error::$repo has no commit $ref after the fetch ($LIST)"
+              exit 1
+            fi
+            echo "$repo commit $ref present (checkout kept at $(git -C "$dest" rev-parse HEAD))"
+            n=$((n + 1))
+            continue
+          fi
           git -C "$dest" checkout -q --detach "$ref"
           got=$(git -C "$dest" rev-parse HEAD)
           if [ "$got" != "$ref" ]; then
@@ -117,6 +152,10 @@ runs:
           echo "$repo sibling at $got"
           n=$((n + 1))
         done < "$list"
+        if [ "$list_mode" -eq 1 ]; then
+          echo "$LIST: $n commit(s) present"
+          exit 0
+        fi
         for repo in $private; do
           if [[ "$listed" != *" $repo "* ]]; then
             echo "::error::$repo is in .github/alice-siblings-private but not in .github/alice-siblings"

@@ -84,7 +84,7 @@ alice-det-math = { git = "https://github.com/ext-sakamoro/ALICE-DetMath", rev = 
 pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 numpy = { version = "0.29", optional = true }
 # `zip` turns on alice-zip's std + lzma, `law` uses it without them (no_std)
-alice_core = { package = "alice-zip", path = "../ALICE-Zip", version = ">=0.11, <0.12", default-features = false }
+alice_core = { package = "alice-zip", git = "https://github.com/ext-sakamoro/ALICE-Zip", rev = "19f6f2c1ff5537642cefca006e37e2f00570d6ba", version = "0.11", default-features = false }
 alice-codec = { version = "0.1", optional = true, default-features = false, features = ["std"] }
 # alice-db (from 0.4) keeps its file backend behind the default `fs` feature; this
 # crate opens on-disk stores, so `fs` is named explicitly

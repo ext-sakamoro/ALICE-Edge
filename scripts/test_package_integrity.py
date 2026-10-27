@@ -186,6 +186,129 @@ class PackageIntegrity(Fixture):
 
 
 
+GIT = "https://github.com/ext-sakamoro/ALICE-DetMath"
+REV = "2d01c63ff0849cf0ab82eafb89f87f1b729bd2a8"
+PINNED = f"git+{GIT}?rev={REV}#{REV}"
+
+
+class GitPinned(Fixture):
+    """A dependency taken from git at a pinned rev while its version is not on crates.io"""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.root / "Cargo.toml").write_text(
+            '[package]\nname = "alice-crate"\nversion = "0.6.0"\n\n[dependencies]\n'
+            f'alice-det-math = {{ git = "{GIT}", rev = "{REV}", version = "0.5.2" }}\n'
+        )
+        (self.root / ".github" / "alice-siblings").write_text("")
+        self.published = {"alice-det-math": [(0, 5, 1), (0, 4, 0)]}
+
+    def lock(self, source: str | None) -> str:
+        if source is None:
+            return '[[package]]\nname = "alice-crate"\nversion = "0.6.0"\n'
+        return f'[[package]]\nname = "alice-det-math"\nversion = "0.5.2"\nsource = "{source}"\n'
+
+    def git_runner(self, fresh: str | None = PINNED, shipped: str | None = None):
+        base = self.runner()
+
+        def run(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
+            rc, out, err = base(cmd, cwd)
+            if cmd[1] == "check" and "--locked" in cmd and shipped is not None:
+                (cwd / "Cargo.lock").write_text(self.lock(shipped))
+            if cmd[1] == "check" and "--locked" not in cmd:
+                (cwd / "Cargo.lock").write_text(self.lock(fresh))
+            return rc, out, err
+
+        return run
+
+    def test_unpublished_git_dep_is_blocked_patched_and_its_lock_source_checked(self) -> None:
+        rc, out = self.main(runner=self.git_runner(shipped=PINNED))
+        self.assertEqual(rc, 0, out)
+        self.assertIn(f"blocked: alice-det-math 0.5.2 unpublished (crates.io max 0.5.1), taken from git {GIT} at {REV[:12]}", out)
+        self.assertIn("git pins: 1, compared 2 against the locks", out)
+        cargo = [c for c in self.calls if c[0] == "cargo"]
+        self.assertTrue(cargo)
+        for c in cargo:
+            self.assertIn(f'patch.crates-io.alice-det-math.git={json.dumps(GIT)}', c)
+            self.assertIn(f'patch.crates-io.alice-det-math.rev={json.dumps(REV)}', c)
+
+    def test_pinned_rev_not_used_fails(self) -> None:
+        for fresh, why in [
+            ("registry+https://github.com/rust-lang/crates.io-index", "not " + PINNED),
+            (f"git+{GIT}?rev={'0' * 40}#{'0' * 40}", "not " + PINNED),
+            (None, "has no alice-det-math (the git pin was not used)"),
+        ]:
+            rc, out = self.main(runner=self.git_runner(fresh=fresh))
+            self.assertEqual(rc, 1, out)
+            self.assertIn(why, out)
+
+    def test_shipped_lock_is_checked_too(self) -> None:
+        rc, out = self.main(runner=self.git_runner(shipped="registry+https://github.com/rust-lang/crates.io-index"))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("the shipped Cargo.lock takes alice-det-math from", out)
+
+    def test_git_dep_not_pinned_to_a_full_rev_is_a_problem(self) -> None:
+        for spec in (f'git = "{GIT}", branch = "main", version = "0.5.2"',
+                     f'git = "{GIT}", rev = "{REV[:12]}", version = "0.5.2"',
+                     f'git = "{GIT}", rev = "{REV.upper()}", version = "0.5.2"',
+                     f'git = "{GIT}", version = "0.5.2"'):
+            (self.root / "Cargo.toml").write_text(
+                '[package]\nname = "alice-crate"\nversion = "0.6.0"\n\n[dependencies]\n'
+                f'alice-det-math = {{ {spec} }}\n'
+            )
+            rc, out = self.main(runner=self.git_runner())
+            self.assertEqual(rc, 1, out)
+            self.assertIn("is not pinned to a 40-hex rev", out)
+
+    def test_git_dep_without_a_version_is_a_problem_but_a_dev_dependency_is_left_out(self) -> None:
+        (self.root / "Cargo.toml").write_text(
+            '[package]\nname = "alice-crate"\nversion = "0.6.0"\n\n[dependencies]\n'
+            f'alice-det-math = {{ git = "{GIT}", rev = "{REV}" }}\n'
+        )
+        rc, out = self.main(runner=self.git_runner())
+        self.assertEqual(rc, 1, out)
+        self.assertIn("git dependency without a version", out)
+        (self.root / "Cargo.toml").write_text(
+            '[package]\nname = "alice-crate"\nversion = "0.6.0"\n\n[dev-dependencies]\n'
+            f'alice-det-math = {{ git = "{GIT}", rev = "{REV}" }}\n'
+        )
+        rc, out = self.main(runner=self.git_runner())
+        self.assertEqual(rc, 0, out)
+        self.assertIn("blocked 0", out)
+
+    def test_a_published_version_that_satisfies_is_not_patched(self) -> None:
+        self.published["alice-det-math"] = [(0, 5, 2)]
+        rc, out = self.main(runner=self.git_runner(fresh="registry+https://github.com/rust-lang/crates.io-index"))
+        self.assertEqual(rc, 0, out)
+        self.assertIn("blocked 0", out)
+        self.assertFalse(any("patch.crates-io" in a for c in self.calls for a in c), self.calls)
+
+    def test_renamed_git_dependency_is_patched_under_its_package_name(self) -> None:
+        (self.root / "Cargo.toml").write_text(
+            '[package]\nname = "alice-crate"\nversion = "0.6.0"\n\n[dependencies]\n'
+            f'dm = {{ package = "alice-det-math", git = "{GIT}", rev = "{REV}", version = "0.5.2" }}\n'
+        )
+        rc, out = self.main(runner=self.git_runner())
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(any(f'patch.crates-io.alice-det-math.rev={json.dumps(REV)}' in c for c in self.calls))
+
+    def test_publish_gate_is_red_for_a_git_pin(self) -> None:
+        rc, out = self.main("--publish-gate")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("publish gate: FAIL", out)
+
+    def test_patches_prints_the_git_and_rev_pair(self) -> None:
+        buf, err = io.StringIO(), io.StringIO()
+        from contextlib import redirect_stderr
+        with redirect_stdout(buf), redirect_stderr(err):
+            rc = pi.main(["--root", str(self.root), "--patches"], versions_of=self.versions_of, runner=self.git_runner())
+        self.assertEqual(rc, 0, err.getvalue())
+        self.assertEqual(buf.getvalue().splitlines(), [
+            f'--config=patch.crates-io.alice-det-math.git={json.dumps(GIT)}',
+            f'--config=patch.crates-io.alice-det-math.rev={json.dumps(REV)}',
+        ])
+
+
 class RegistryIndex(unittest.TestCase):
     """The sparse index read: its path (a known-answer table) and how an answer is read"""
 

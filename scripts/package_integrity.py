@@ -36,6 +36,17 @@ Any other path dependency (outside the repository and not a listed sibling, or a
 directory without a package) fails, except a dev-dependency without a version, which
 cargo leaves out of the package.
 
+A dependency taken from git at a pinned commit (`{ git = URL, rev = <40 hex>, version = "X" }`,
+used while that version is not on crates.io) is blocked the same way: `cargo package` drops
+`git` and `rev`, so the packaged crate would resolve the version from crates.io. It is blocked
+when its requirement names a version, `rev` is 40 lowercase hex digits (a `branch` / `tag` or a
+missing or short `rev` fails: the package would not name one commit) and no published version
+satisfies the requirement; every cargo call then carries `patch.crates-io.<name>.git` and
+`.rev` at that commit, and the shipped and the freshly resolved Cargo.lock of the unpacked crate
+must take <name> from exactly `git+URL?rev=REV#REV` (a lock without it, or with another source,
+fails: the pin was not used). A git dependency whose requirement crates.io already satisfies is
+not patched.
+
 --patches prints the patch arguments of the blocked dependencies, one per line
 (`--config=patch.crates-io.<name>.path="<dir>"`), and nothing else on stdout, for a
 script that builds the packaged crate itself (`mapfile -t P < <(...)`, then `"${P[@]}"`).
@@ -257,6 +268,23 @@ def sibling_deps(root: Path, member: str = ".") -> list[dict]:
     return deps
 
 
+REV_RE = re.compile(r"[0-9a-f]{40}")
+
+
+def git_deps(root: Path, member: str = ".") -> list[dict]:
+    """Every dependency of the packaged crate taken from git (any dependency table)."""
+    top = Path(os.path.normpath(root.absolute()))
+    pkg_dir = Path(os.path.normpath(top / member))
+    deps = []
+    for table, key, spec in manifest_deps(pkg_dir, top):
+        if not isinstance(spec, dict) or "git" not in spec:
+            continue
+        deps.append({"name": spec.get("package", key), "req": spec.get("version"), "table": table,
+                     "kind": "git", "git": spec["git"], "rev": spec.get("rev"),
+                     "other_ref": sorted(k for k in ("branch", "tag") if k in spec)})
+    return deps
+
+
 def check_requirement(dep: dict, label: str, noun: str, pkg_toml: Path, versions_of) -> dict | None:
     """None when crates.io satisfies dep's requirement; the blocked entry when only the local
     package `label` does; a Problem otherwise."""
@@ -338,11 +366,41 @@ def classify(
             continue
         if b:
             blocked.append({**b, "sha": listed[dep["repo"]]})
+    try:
+        gits = git_deps(root, member)
+    except Problem as e:
+        return [], [str(e)]
+    seen_git: set[tuple[str, str, str]] = set()
+    for dep in gits:
+        key = (dep["name"], dep["git"], str(dep["rev"]))
+        if key in seen_git:
+            continue
+        seen_git.add(key)
+        if not dep["req"]:
+            if dep["table"] == "dev-dependencies":
+                continue  # cargo leaves a version-less git dev-dependency out of the package
+            problems.append(f"{dep['name']}: git dependency without a version cannot be published")
+            continue
+        if dep["other_ref"] or not isinstance(dep["rev"], str) or not REV_RE.fullmatch(dep["rev"]):
+            problems.append(f"{dep['name']}: git dependency {dep['git']} is not pinned to a 40-hex rev "
+                            f"(rev {dep['rev']!r}{', ' + ' / '.join(dep['other_ref']) if dep['other_ref'] else ''})")
+            continue
+        published = versions_of(dep["name"])
+        if any(satisfies(v, dep["req"]) for v in published):
+            continue  # resolvable from crates.io: packaged without the pin
+        top = ".".join(map(str, max(published))) if published else "none"
+        blocked.append({**dep, "registry_max": top})
     return blocked, problems
 
 
 def report_blocked(blocked: list[dict]) -> None:
     for b in blocked:
+        if b.get("kind") == "git":
+            print(
+                f"blocked: {b['name']} {b['req']} unpublished (crates.io max {b['registry_max']}), "
+                f"taken from git {b['git']} at {b['rev'][:12]}; publish wave: {b['name']}@{b['req']}"
+            )
+            continue
         if "member" in b:
             print(
                 f"blocked: {b['name']} {b['req']} unpublished (crates.io max {b['registry_max']}), "
@@ -361,8 +419,33 @@ def report_blocked(blocked: list[dict]) -> None:
 def patch_args(blocked: list[dict]) -> list[str]:
     args: list[str] = []
     for b in blocked:
+        if b.get("kind") == "git":
+            args += ["--config", f"patch.crates-io.{b['name']}.git={json.dumps(b['git'])}",
+                     "--config", f"patch.crates-io.{b['name']}.rev={json.dumps(b['rev'])}"]
+            continue
         args += ["--config", f"patch.crates-io.{b['name']}.path={json.dumps(b['path'])}"]
     return args
+
+
+def git_pin_problems(blocked: list[dict], lock_text: str, which: str) -> tuple[list[str], int]:
+    """(problems, pins compared): each blocked git dependency must be in the lock, and only from
+    git at exactly its pinned commit."""
+    try:
+        packages = tomllib.loads(lock_text).get("package", []) if lock_text else []
+    except tomllib.TOMLDecodeError as e:
+        return [f"the {which} Cargo.lock is not TOML: {e}"], 0
+    problems, compared = [], 0
+    for b in blocked:
+        if b.get("kind") != "git":
+            continue
+        want = f"git+{b['git']}?rev={b['rev']}#{b['rev']}"
+        sources = [p.get("source", "path") for p in packages if p.get("name") == b["name"]]
+        compared += 1
+        if not sources:
+            problems.append(f"the {which} Cargo.lock has no {b['name']} (the git pin was not used)")
+        elif any(src != want for src in sources):
+            problems.append(f"the {which} Cargo.lock takes {b['name']} from {sources}, not {want}")
+    return problems, compared
 
 
 # (exit code, stdout, stderr): stdout alone is parsed where it is data (`cargo package --list`)
@@ -434,10 +517,17 @@ def package_and_build(
         pkg = dirs[0]
         with open(pkg / "Cargo.toml", "a", encoding="utf-8") as f:
             f.write("\n[workspace]\n")
+        pins = sum(1 for b in blocked if b.get("kind") == "git")
+        compared = 0
         rc, stdout, stderr = runner(["cargo", "check", "--locked", *shlex.split(opts.locked_check_args), *patches], pkg)
         out = stdout + stderr
         if rc != 0:
             return [f"the unpacked crate does not build with its shipped lock:\n{out}"]
+        if pins and (pkg / "Cargo.lock").exists():
+            problems, n = git_pin_problems(blocked, (pkg / "Cargo.lock").read_text(encoding="utf-8"), "shipped")
+            if problems:
+                return problems
+            compared += n
         if opts.doctests_min:
             rc, stdout, stderr = runner(["cargo", "test", "--doc", "--locked", *shlex.split(opts.doctest_args), *patches], pkg)
             out = stdout + stderr
@@ -465,6 +555,14 @@ def package_and_build(
         missing = [n for n in opts.expect_in_lock if f'name = "{n}"' not in lock]
         if missing:
             return [f"the fresh resolution did not resolve {', '.join(missing)}"]
+        if pins:
+            problems, n = git_pin_problems(blocked, lock, "freshly resolved")
+            if problems:
+                return problems
+            compared += n
+            if compared < pins:
+                return [f"compared {compared} git pin(s) against the locks, expected at least {pins}"]
+            print(f"package_integrity: git pins: {pins}, compared {compared} against the locks")
     return []
 
 
@@ -510,8 +608,9 @@ def main(argv: list[str] | None = None, versions_of=registry_versions, runner: R
     if problems:
         return 1
     if args.patches:
-        for b in blocked:
-            print(f"--config=patch.crates-io.{b['name']}.path={json.dumps(b['path'])}")
+        pairs = patch_args(blocked)
+        for i in range(1, len(pairs), 2):
+            print(f"--config={pairs[i]}")
         print(f"package_integrity: blocked {len(blocked)}", file=sys.stderr)
         return 0
     report_blocked(blocked)

@@ -89,7 +89,7 @@ python3 scripts/test_entropy_guard.py
 python3 scripts/entropy_guard.py
 
 step "ci.yml / clippy: Identifier moves (tests, then against the published release)"
-python3 scripts/test_id_move_check.py
+CARGO_TERM_COLOR=always python3 scripts/test_id_move_check.py
 python3 scripts/id_move_check.py
 
 step "ci.yml / clippy: API boundary and boundary guard (G7 / G8)"

@@ -28,6 +28,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 - `tests/float_environment.rs` (ALICE-DB と同一): round-to-nearest-even と subnormal が flush されないことを実行時に確かめる test test job (4 OS) の debug と release で `scripts/run_tests.sh` を通して実行 `alice-law-conformance.toml` の G14 を pass にした
 
 ### Changed
+- CI: `scripts/workflow_pipefail.py` (試験 `scripts/test_workflow_pipefail.py`、他の repo と同じ中身) が、pipe する `run` step が pipefail で走るかを全 workflow で確かめる 該当の step を `shell: bash` にした
 - CI: toolchain の action を上流の master から届く commit に固定した 固定していた sha は上流の branch の書き換えで届かなくなっていた
 - CI: 共有の `scripts/semver_gate.py`、`scripts/test_semver_gate.py`、`scripts/release_baseline.py`、`scripts/test_release_baseline.py` の subprocess に `encoding="utf-8"` を明示した (text mode は既定で locale の符号化で読むため) ALICE-Law の pin を今の版へ移した
 - CI (ALICE-Law G9 / G11): 識別子の移動の検査器 (`scripts/id_move_check.py` と試験) を共有の新しい bytes にし、新しく足した associated const を受けるようにした 他の共有の file も ALICE-Law 40973a8a の表が計画した bytes にし、shared-files と G11 の表の pin を上げた

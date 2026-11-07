@@ -310,6 +310,10 @@ jobs:
       # per row of scripts/clippy_canary_calls.tsv (0 rows fail). The rows are
       # generated from clippy.toml, one per disallowed-methods / disallowed-types
       # entry; --check fails when the file has drifted from clippy.toml
+      - name: workflow_pipefail (test, then check)
+        run: |
+          python3 scripts/test_workflow_pipefail.py
+          python3 scripts/workflow_pipefail.py
       - name: Clippy canary data (generator tests)
         run: python3 scripts/test_gen_clippy_canary_calls.py
       - name: Clippy canary data (generated from clippy.toml, no drift)
@@ -615,6 +619,7 @@ jobs:
         run: python -c "import alice_edge; print('alice_edge imported, Q16_ONE =', alice_edge.Q16_ONE)"
 
       - name: Python binding tests, fail on 0 tests
+        shell: bash
         run: |
           collected=$(python -m pytest python/tests --collect-only -q 2>/dev/null | grep -c '::')
           echo "collected ${collected} python test(s)"

@@ -28,6 +28,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 - `tests/float_environment.rs` (ALICE-DB と同一): round-to-nearest-even と subnormal が flush されないことを実行時に確かめる test test job (4 OS) の debug と release で `scripts/run_tests.sh` を通して実行 `alice-law-conformance.toml` の G14 を pass にした
 
 ### Changed
+- CI: 共有の `scripts/semver_gate.py`、`scripts/test_semver_gate.py`、`scripts/release_baseline.py`、`scripts/test_release_baseline.py` の subprocess に `encoding="utf-8"` を明示した (text mode は既定で locale の符号化で読むため) ALICE-Law の pin を今の版へ移した
 - CI (ALICE-Law G9 / G11): 識別子の移動の検査器 (`scripts/id_move_check.py` と試験) を共有の新しい bytes にし、新しく足した associated const を受けるようにした 他の共有の file も ALICE-Law 40973a8a の表が計画した bytes にし、shared-files と G11 の表の pin を上げた
 - CI (package integrity): 共有の `scripts/package_integrity.py` が git の rev に pin した依存 (`{ git, rev = <40 桁の小文字 16 進>, version }`、その版が crates.io に無いもの) を blocked にし、全 cargo 呼び出しに `patch.crates-io.<name>.git` / `.rev` を渡して、展開した crate の shipped と再解決の Cargo.lock がその rev から取ることを確かめる (無い・別の source は失敗、比較 0 件は失敗) branch / tag / 短い rev は失敗 試験 `scripts/test_package_integrity.py` に 9 件 (pin した rev が使われない場合を含む) を足した ALICE-Law の表では Edge が新しい bytes の owner
 - CI (ALICE-Law G11): `.github/shared-files-pin` と `.github/g11-table-pin` を ALICE-Law 7c663733 に揃え、`.github/actions/alice-siblings/action.yml` / `scripts/id_move_check.py` / 試験を表の目標の bytes (ALICE-Analytics の main と同じ) にした

@@ -333,7 +333,7 @@ python3 -m venv "$venv"
 "$venv/bin/maturin" build --out "$venv/dist"
 "$venv/bin/pip" install -q --force-reinstall --no-deps "$venv"/dist/alice_edge-"$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"-*.whl
 "$venv/bin/python" -c "import alice_edge"
-collected=$("$venv/bin/python" -m pytest python/tests --collect-only -q 2>/dev/null | grep -c '::' || true)
+collected=$("$venv/bin/python" -m pytest python/tests --collect-only -q | grep -c '::' || true)
 [[ "$collected" -gt 0 ]] || { echo "no python tests collected" >&2; exit 1; }
 "$venv/bin/python" -m pytest python/tests -q
 "$venv/bin/python" examples/python_batch.py >/dev/null

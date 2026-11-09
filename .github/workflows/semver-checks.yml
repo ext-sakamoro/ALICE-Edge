@@ -33,8 +33,6 @@ on:
       - 'scripts/test_semver_gate.py'
       - '.github/semver-gate.toml'
       - '.github/workflows/semver-checks.yml'
-      - '.github/alice-siblings'
-      - '.github/actions/alice-siblings/**'
       - 'scripts/changed_paths.py'
       - '.github/paths/semver-checks.txt'
   schedule:
@@ -97,7 +95,6 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable (branch, default toolchain stable)
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 

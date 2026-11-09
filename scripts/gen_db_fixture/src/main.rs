@@ -5,6 +5,11 @@
 
 use alice_db::{AliceDB, FitConfig, StorageConfig};
 
+/// `alice_det_math::SEMANTICS_ID` of alice-det-math 0.4.0, the arithmetic the
+/// fixture was written with (tests/fixtures/db_store_det_math_0_4/README.md).
+const DET_MATH_0_4_SEMANTICS_ID: &str =
+    "d2209b30f6f1f45baa1b638bcdfee34ac64773b2e63b9c083b2e77afc691398e";
+
 fn main() {
     let out = std::path::PathBuf::from(
         std::env::args()
@@ -41,6 +46,12 @@ fn main() {
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect();
+    // the fixture records alice-det-math 0.4's arithmetic: a resolution with
+    // any other identifier stops the run instead of writing a mislabelled store
+    assert_eq!(
+        hex, DET_MATH_0_4_SEMANTICS_ID,
+        "resolved alice-det-math is not the 0.4 arithmetic this fixture records"
+    );
     println!("arithmetic identifier {hex}");
     for (_, v) in &data {
         print!("0x{:08x}, ", v.to_bits());

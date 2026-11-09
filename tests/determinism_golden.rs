@@ -938,19 +938,18 @@ fn golden_depth_frames_below_and_from_2_13() {
 //     a stored or transmitted result is recorded with.
 // ---------------------------------------------------------------------------
 
-/// `alice_det_math::SEMANTICS_ID` of alice-det-math 0.5.1
+/// `alice_zip::law::SEMANTICS_ID` of alice-zip 0.11 over alice-det-math 0.6
+/// (`65f48962…`, folding the identifier of each alice-det-math function
+/// alice-zip calls), the identifier this crate re-exports as `SEMANTICS_ID`
 ///
-/// 0.5.1 moved it from `135c407d…` (0.5.0, kept in
-/// `alice_det_math::PREVIOUS_SEMANTICS_IDS`): the golden scenario hashes above
-/// did not change, only the identifier input did
-///
-/// Matches `alice_zip::law::SEMANTICS_ID`, `alice_db::SEMANTICS_ID` and
-/// `alice_analytics::SEMANTICS_ID` resolved against the same alice-det-math.
-/// If this test fails, check which alice-det-math version resolved, confirm
-/// the scenario hashes above are unchanged (or explained), then update this
-/// constant and record both in CHANGELOG.
+/// It moved from `17d0df1d…` (alice-zip over alice-det-math 0.5.2, kept in
+/// `alice_zip::law::PREVIOUS_SEMANTICS_IDS`): the golden scenario hashes above
+/// did not change, only the identifier input did.
+/// If this test fails, check which alice-zip and alice-det-math resolved,
+/// confirm the scenario hashes above are unchanged (or explained), then update
+/// this constant and record both in CHANGELOG.
 const GOLDEN_SEMANTICS_ID: &str =
-    "17d0df1d7c0a6e63d1a7380129f12386b677ac96e7ac193dece546805f4fe84c";
+    "65f48962c757ebb619d252f8784f830aca5f3698fbd22f34150f9887863f38dd";
 
 #[test]
 fn golden_semantics_id() {
@@ -1000,10 +999,10 @@ fn golden_semantics_id() {
 /// rather than whatever happened to come out.
 #[cfg(feature = "law")]
 const GOLDEN_LAW_ID_RISING: &str =
-    "a4090eaba8ab4ae79d7ea35d3d5711da56210675ed13c78d3614fe84a87f1f93";
+    "a9e7a5fecc2016b722318fd56010425446d41f017d013ff91bede0e10d6dd4d2";
 #[cfg(feature = "law")]
 const GOLDEN_LAW_ID_FALLING: &str =
-    "3e8dca44d15f87b27b6cd7ca5345b91a9a8aacc1941fdd01149638e0432f84c4";
+    "803e433bcbe653a290f1ec9c462ba24b14529cf791aa56b9ebf4e2a9e4de1ddf";
 
 /// The law identifiers this crate recorded under earlier identifiers:
 /// `(that identifier, rising, falling)`. Before the alice-det-math 2d01c63f
@@ -1015,7 +1014,12 @@ const GOLDEN_LAW_ID_FALLING: &str =
 /// values, which shows that each re-recording of `GOLDEN_LAW_ID_*` moved the
 /// identifier input only
 #[cfg(feature = "law")]
-const PREVIOUS_GOLDEN_LAW_IDS: [(&str, &str, &str); 3] = [
+const PREVIOUS_GOLDEN_LAW_IDS: [(&str, &str, &str); 4] = [
+    (
+        "17d0df1d7c0a6e63d1a7380129f12386b677ac96e7ac193dece546805f4fe84c",
+        "a4090eaba8ab4ae79d7ea35d3d5711da56210675ed13c78d3614fe84a87f1f93",
+        "3e8dca44d15f87b27b6cd7ca5345b91a9a8aacc1941fdd01149638e0432f84c4",
+    ),
     (
         "51ffeb079769ea34bd3cb3df756b6cb940b8d2d6a6a0f1e1115ab8139415935e",
         "521bfedaa6fd37097ac92be35eb7170c69d032311531f2562a7ee2373d4a232f",
@@ -1066,8 +1070,8 @@ fn golden_law_id_under_the_previous_identifiers_is_unchanged() {
         }
     }
     assert_eq!(
-        compared, 6,
-        "compared {compared} law identifiers, expected 6"
+        compared, 8,
+        "compared {compared} law identifiers, expected 8"
     );
 }
 

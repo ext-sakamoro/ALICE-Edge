@@ -13,7 +13,7 @@
 //! # Hex form
 //!
 //! ```text
-//! 573e1af1a6d4556748faeff04c0a4bebe827cc42cbe95c38ef81fa9e09547e8b
+//! d4d143d1d024b2d75778cb8d3667a333eccebc009ef387586cba02c3c8a1c976
 //! ```
 //!
 //! # Entries
@@ -26,17 +26,20 @@
 //! the feature that builds the module) and one per `k` of the robust fit
 //! (`"robust_k1"`, `"robust_k3"`, `"robust_k10"`, `"robust_kmax"`), plus the
 //! identifiers of the Law-bearing dependencies, each the dependency's own Law
-//! identifier: `"alice-det-math"` (its `SEMANTICS_ID`), `"alice-zip"` (its
+//! identifier: `"alice-zip"` (its
 //! `law::SEMANTICS_ID`, the `law` and `zip` features), `"alice-db"` (its
 //! `DB_SEMANTICS_ID`, `db`), `"alice-analytics"` (its `ANALYTICS_SEMANTICS_ID`,
-//! `dashboard`) and `"alice-sdf"` (its `SDF_SEMANTICS_ID`, `sdf`). The
+//! `dashboard`) and `"alice-sdf"` (its `SDF_SEMANTICS_ID`, `sdf`), and one
+//! entry `"det-math <function>"` per `alice-det-math` function this crate calls
+//! itself ([`DET_MATH_FUNCTIONS`], the identifiers of [`DET_MATH_PINS`],
+//! checked against the resolved `alice-det-math` at compile time). The
 //! identifier goldens (`GOLDEN_SEMANTICS_ID`, `GOLDEN_LAW_ID_*`) are not pins:
 //! they are functions of the entries.
 //!
-//! Each upstream identifier folds the arithmetic identifier it was built with
-//! (alice-zip's from 0.11, alice-sdf's `SDF_SEMANTICS_BY_DET_MATH` rows, and the
-//! two built on alice-zip's), so the arithmetic is covered twice: by the
-//! `"alice-det-math"` entry and inside each upstream entry.
+//! Each upstream identifier folds the `alice-det-math` functions its own
+//! crate calls; the `"det-math <function>"` entries cover the ones this crate
+//! calls, so a change to any function either side computes with moves this
+//! identifier, and a change to a function nobody here calls does not.
 //!
 //! # Fold
 //!
@@ -81,8 +84,48 @@ pub(crate) const fn hex32(s: &str) -> [u8; 32] {
     out
 }
 
+/// The `alice-det-math` functions this crate calls itself (ALICE-Law
+/// `scripts/fold_set_check.py print`). Each is folded into
+/// [`EDGE_SEMANTICS_PINS`] as `det-math <function>`; the upstream entries fold
+/// the functions their own crates call.
+pub const DET_MATH_FUNCTIONS: &[&str] = &["cos", "exp", "ln", "max", "min", "sin"];
+
+/// The identifier of each function of [`DET_MATH_FUNCTIONS`], in that order.
+///
+/// The `const _` below compares each with `alice_det_math::function_pin` at
+/// compile time, so a resolved `alice-det-math` whose function computes other
+/// bits stops the compile instead of reporting this identifier.
+pub const DET_MATH_PINS: &[(&str, [u8; 32])] = &[
+    (
+        "cos",
+        hex32("f7627941400acabe93c8dca4090eee12f8910fe4c14a8735ad456cef3c48ed7b"),
+    ),
+    (
+        "exp",
+        hex32("606918f2d637f46f9a792a29b3ee31a991ef3196064456caa7b3a7ca81700a63"),
+    ),
+    (
+        "ln",
+        hex32("6fe18bc0fba8b7e3e871c4cbe555ddb40a460be7b3c7690303ee30accdcb7291"),
+    ),
+    (
+        "max",
+        hex32("8bd32fcb313f7fb3d7a699fc3075273de7e5a4e083912d8dc7f4cc4016fc2286"),
+    ),
+    (
+        "min",
+        hex32("2939e83813b26c868ec3113fb1c25102f16f28d8f24c343a727d4b1bec5904fe"),
+    ),
+    (
+        "sin",
+        hex32("ee1b80d12df18ec0de5bce5a6bf05432484dabfc1cee1bb9b3f3291dd862cfec"),
+    ),
+];
+
+const _: () = alice_det_math::assert_function_pins(DET_MATH_PINS);
+
 /// The pins folded into [`EDGE_SEMANTICS_ID`], as `(name, digest)`.
-pub const EDGE_SEMANTICS_PINS: [(&str, [u8; 32]); 24] = [
+pub const EDGE_SEMANTICS_PINS: [(&str, [u8; 32]); 29] = [
     (
         "q16_linear",
         hex32("105580c224a8b5fe8ac11762db84662a699ad8aed740a52892f10ef92892041d"),
@@ -159,32 +202,34 @@ pub const EDGE_SEMANTICS_PINS: [(&str, [u8; 32]); 24] = [
         "depth_frames_from_2_13",
         hex32("a1146387667a53203d869d83e05ae0c7a1e57f84716f578efa5177aac67df764"),
     ),
-    (
-        "alice-det-math",
-        hex32("a2a11b9b826227fa7a9ed8ab2c1ce63dbb07ad4c39aa2c46a363ddea6b47dbe9"),
-    ),
+    ("det-math cos", DET_MATH_PINS[0].1),
+    ("det-math exp", DET_MATH_PINS[1].1),
+    ("det-math ln", DET_MATH_PINS[2].1),
+    ("det-math max", DET_MATH_PINS[3].1),
+    ("det-math min", DET_MATH_PINS[4].1),
+    ("det-math sin", DET_MATH_PINS[5].1),
     (
         "alice-zip",
-        hex32("17d0df1d7c0a6e63d1a7380129f12386b677ac96e7ac193dece546805f4fe84c"),
+        hex32("65f48962c757ebb619d252f8784f830aca5f3698fbd22f34150f9887863f38dd"),
     ),
     (
         "alice-db",
-        hex32("670fa328eed6ddf2e28f96eb5ebabfe602eabd80dd025199edece388241223a7"),
+        hex32("62d72c5042a8e0b894a02a655803850557882a94abb0de1fc4455c22ecfbffa8"),
     ),
     (
         "alice-analytics",
-        hex32("38e4dba4aeda3ea1a291d620c0183470aaffb9c9d3cd9a101b1435b0d93909df"),
+        hex32("847535174fa305517aa11fe8b98f604d1b1ec48abaa23d2b1dce9ccc8aa8884f"),
     ),
     (
         "alice-sdf",
-        hex32("ad04549c331ec33377ef1d4419c0c6756cef6a852520e470a53f642257da4938"),
+        hex32("0f6ffc20efe7737c4cfbb95d35e74c62edd16c1c0d562faf35a2abdcc5ccb7e7"),
     ),
 ];
 
 /// The semantics identifier of this crate: the fold of
 /// [`EDGE_SEMANTICS_PINS`] (see the module documentation).
 pub const EDGE_SEMANTICS_ID: [u8; 32] =
-    hex32("573e1af1a6d4556748faeff04c0a4bebe827cc42cbe95c38ef81fa9e09547e8b");
+    hex32("d4d143d1d024b2d75778cb8d3667a333eccebc009ef387586cba02c3c8a1c976");
 
 /// Earlier values of [`EDGE_SEMANTICS_ID`] whose pinned bits this release
 /// still reproduces
@@ -193,6 +238,9 @@ pub const EDGE_SEMANTICS_ID: [u8; 32] =
 /// this crate's own simulated depth frames move from frame 81920 on (`sin` /
 /// `cos` reduce arguments from `2^13` on in double precision), so
 /// `1dd8876b…` (alice-det-math 0.5.1) does not name this build's bits.
+/// `573e1af1…` (alice-det-math 0.5.2 at 2d01c63f, folded as one identifier) is
+/// not listed either: its scenario goldens are unchanged, but the upstream
+/// identifiers it folds moved with alice-det-math 0.6.
 /// `tests/edge_semantics_id.rs` shows which pins moved.
 pub const PREVIOUS_EDGE_SEMANTICS_IDS: &[[u8; 32]] = &[];
 

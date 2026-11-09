@@ -119,7 +119,12 @@ fn golden_pins_are_the_recorded_goldens() {
         "robust_k3",
         "robust_k10",
         "robust_kmax",
-        "alice-det-math",
+        "det-math cos",
+        "det-math exp",
+        "det-math ln",
+        "det-math max",
+        "det-math min",
+        "det-math sin",
         "alice-zip",
         "alice-db",
         "alice-analytics",
@@ -129,12 +134,37 @@ fn golden_pins_are_the_recorded_goldens() {
     assert_eq!(names, expected);
 }
 
+/// Each `det-math <function>` entry is the resolved `alice-det-math`'s
+/// identifier of that function, the functions are the ones this crate calls
+/// (`DET_MATH_FUNCTIONS`, in that order in `DET_MATH_PINS`), and no
+/// whole-crate `alice-det-math` identifier is folded.
 #[test]
-fn det_math_pin_is_the_resolved_arithmetic_identifier() {
+fn det_math_pins_are_the_resolved_function_identifiers() {
+    use alice_edge::semantics::{DET_MATH_FUNCTIONS, DET_MATH_PINS};
     assert_eq!(
-        hex(&pin("alice-det-math")),
-        hex(&alice_det_math::SEMANTICS_ID)
+        DET_MATH_FUNCTIONS,
+        ["cos", "exp", "ln", "max", "min", "sin"]
     );
+    assert_eq!(DET_MATH_PINS.len(), DET_MATH_FUNCTIONS.len());
+    let mut compared = 0;
+    for (&function, &(name, digest)) in DET_MATH_FUNCTIONS.iter().zip(DET_MATH_PINS) {
+        assert_eq!(name, function);
+        assert_eq!(
+            hex(&digest),
+            hex(&alice_det_math::function_pin(name)),
+            "{name}"
+        );
+        assert_eq!(
+            hex(&pin(&format!("det-math {name}"))),
+            hex(&digest),
+            "{name}"
+        );
+        compared += 1;
+    }
+    assert_eq!(compared, 6);
+    assert!(EDGE_SEMANTICS_PINS
+        .iter()
+        .all(|(n, _)| *n != "alice-det-math"));
 }
 
 #[cfg(feature = "law")]
@@ -300,7 +330,10 @@ fn the_1dd8876b_identifier_is_rejected_because_exactly_these_pins_moved() {
     let mut compared = 0usize;
     for (name, digest) in PINS_1DD8876B {
         compared += 1;
-        if hex(&pin(name)) != *digest {
+        // an entry this build no longer folds (the whole-crate `alice-det-math`
+        // identifier, now one entry per called function) counts as moved
+        let current = EDGE_SEMANTICS_PINS.iter().find(|(n, _)| n == name);
+        if current.is_none_or(|(_, d)| hex(d) != *digest) {
             moved.push(*name);
         }
     }
@@ -326,6 +359,165 @@ fn the_1dd8876b_identifier_is_rejected_because_exactly_these_pins_moved() {
     );
     assert!(!PREVIOUS_EDGE_SEMANTICS_IDS.contains(&unhex(
         "1dd8876b42ffcef5dabc506377466e282d290466acd2369d063d4358ab66ef80"
+    )));
+}
+
+/// The pins of `573e1af1…` (alice-det-math 0.5.2 at 2d01c63f, folded as one
+/// identifier), frozen as they were: 19 goldens and 5 upstream identifiers
+const PINS_573E1AF1: &[(&str, &str)] = &[
+    (
+        "q16_linear",
+        "105580c224a8b5fe8ac11762db84662a699ad8aed740a52892f10ef92892041d",
+    ),
+    (
+        "adaptive_polyfit",
+        "b4a125049e4d8d4ae0278243c32cc972ec46c81cb8f90295695ac8c638d815b5",
+    ),
+    (
+        "constant_fit",
+        "6f3c6335869a8c6320ba5972a9007a76180aee43ddaaa6be3df785a91baee705",
+    ),
+    (
+        "simd_fit",
+        "6907b2ffc5067ca5c9a5188a709e5f0a217fe7e436542c5c3c5397dfdf034a9a",
+    ),
+    (
+        "sensor_fusion",
+        "976837f60532e082cbbb29a9d987b08080f8cdb8172fba329f66cb875ac3eacf",
+    ),
+    (
+        "ring_buffer",
+        "224f9f81c7e54478be79641e2b6067e90b803e8acb062014c6a639502377f288",
+    ),
+    (
+        "det_math",
+        "4fb30a451a9aae88529c0f66ef1a94f9b3e400cf360cd6e7398a4d9622b318ab",
+    ),
+    (
+        "piecewise",
+        "a9706b8473b6d6c50334f9ee9e6726f9eb44409e13118a403c511843db8b49f7",
+    ),
+    (
+        "delta",
+        "c25c2ed884ea0d109d267e48a0a0c08f13c32291415002519af3a3ebea452d89",
+    ),
+    (
+        "law",
+        "53583c42b85669e3ecb5f701e23329ba759071d821ddb7efa06ac75424b17000",
+    ),
+    (
+        "object_features",
+        "1e4d836d63f7395d22b5d5a7b07e97340709e8a6b158e875f7442b44612c261a",
+    ),
+    (
+        "sensors",
+        "f40d90cb955cc8dcb3ec9bdc5e47523da138e5e2fde79e675358f8eb1ea2278c",
+    ),
+    (
+        "depth_capture",
+        "16d9355a324c9eed84fed8f03b5572579a551f215e3aec071f494a036b208122",
+    ),
+    (
+        "robust_k1",
+        "f7baf928bd39a35e1e03ecf93bb7779ebbde6e7c24bb5e28ebf59a1332806e76",
+    ),
+    (
+        "robust_k3",
+        "07caa63a49319ad7e8e2399d640779496b71d6cd1add0294cd874a91d469bb83",
+    ),
+    (
+        "robust_k10",
+        "75950f93be1f73f55d024000dccf87c9b62b4fc03a93885f11fedb0975aab1ae",
+    ),
+    (
+        "robust_kmax",
+        "a8de2b48247fbe7108931a655310ab569dc4f1999aa1ac000ac616004d81b5bd",
+    ),
+    (
+        "depth_frames_below_2_13",
+        "e74d950a951ef412c5cbf59d61868659920f0504bc7063b9da83f081f23cff1a",
+    ),
+    (
+        "depth_frames_from_2_13",
+        "a1146387667a53203d869d83e05ae0c7a1e57f84716f578efa5177aac67df764",
+    ),
+    (
+        "alice-det-math",
+        "a2a11b9b826227fa7a9ed8ab2c1ce63dbb07ad4c39aa2c46a363ddea6b47dbe9",
+    ),
+    (
+        "alice-zip",
+        "17d0df1d7c0a6e63d1a7380129f12386b677ac96e7ac193dece546805f4fe84c",
+    ),
+    (
+        "alice-db",
+        "670fa328eed6ddf2e28f96eb5ebabfe602eabd80dd025199edece388241223a7",
+    ),
+    (
+        "alice-analytics",
+        "38e4dba4aeda3ea1a291d620c0183470aaffb9c9d3cd9a101b1435b0d93909df",
+    ),
+    (
+        "alice-sdf",
+        "ad04549c331ec33377ef1d4419c0c6756cef6a852520e470a53f642257da4938",
+    ),
+];
+
+/// `573e1af1…` is no longer an identifier of this build, and the reason is
+/// exactly the move to alice-det-math 0.6: every golden of that build is
+/// unchanged, the whole-crate `alice-det-math` entry is replaced by one entry
+/// per called function, and the four upstream identifiers moved. A further
+/// change to any pin fails here.
+#[test]
+fn the_573e1af1_identifier_is_rejected_because_exactly_these_pins_moved() {
+    let unhex = |s: &str| -> [u8; 32] {
+        core::array::from_fn(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).expect("hex"))
+    };
+    let frozen: Vec<(&str, [u8; 32])> = PINS_573E1AF1.iter().map(|&(n, d)| (n, unhex(d))).collect();
+    assert_eq!(
+        hex(&fold(&frozen)),
+        "573e1af1a6d4556748faeff04c0a4bebe827cc42cbe95c38ef81fa9e09547e8b",
+        "the frozen table does not fold to its identifier"
+    );
+    let mut moved = Vec::new();
+    let mut compared = 0usize;
+    for (name, digest) in PINS_573E1AF1 {
+        compared += 1;
+        let current = EDGE_SEMANTICS_PINS.iter().find(|(n, _)| n == name);
+        if current.is_none_or(|(_, d)| hex(d) != *digest) {
+            moved.push(*name);
+        }
+    }
+    assert_eq!(compared, 24, "pins compared");
+    moved.sort_unstable();
+    assert_eq!(
+        moved,
+        [
+            "alice-analytics",
+            "alice-db",
+            "alice-det-math",
+            "alice-sdf",
+            "alice-zip"
+        ]
+    );
+    let added: Vec<_> = EDGE_SEMANTICS_PINS
+        .iter()
+        .map(|(n, _)| *n)
+        .filter(|n| !PINS_573E1AF1.iter().any(|(f, _)| f == n))
+        .collect();
+    assert_eq!(
+        added,
+        [
+            "det-math cos",
+            "det-math exp",
+            "det-math ln",
+            "det-math max",
+            "det-math min",
+            "det-math sin"
+        ]
+    );
+    assert!(!PREVIOUS_EDGE_SEMANTICS_IDS.contains(&unhex(
+        "573e1af1a6d4556748faeff04c0a4bebe827cc42cbe95c38ef81fa9e09547e8b"
     )));
 }
 

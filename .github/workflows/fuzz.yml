@@ -27,8 +27,6 @@ on:
       - 'Cargo.toml'
       - 'fuzz/**'
       - '.github/workflows/fuzz.yml'
-      - '.github/alice-siblings'
-      - '.github/actions/alice-siblings/**'
       - 'scripts/changed_paths.py'
       - '.github/paths/fuzz.txt'
   schedule:
@@ -107,7 +105,6 @@ jobs:
           - fuzz_mqtt_decode
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - uses: ./.github/actions/alice-siblings
 
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@f0d5300ba8908d942c808f4d31c08471d7798ba3 # nightly

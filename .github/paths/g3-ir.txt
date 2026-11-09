@@ -16,6 +16,3 @@ scripts/no-outer-fneg-of-fma-allowlist.toml
 scripts/changed_paths.py
 .github/workflows/g3-ir.yml
 .github/paths/g3-ir.txt
-# the sibling repositories the build takes by path, and the action that clones them
-.github/alice-siblings
-.github/actions/alice-siblings/**

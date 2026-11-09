@@ -20,6 +20,7 @@ dependencies = [
 [[package]]
 name = "alice-analytics"
 version = "0.7.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-Analytics?branch=main#6ef41bc5abd923ec2fdd47618f8f2ac7d6b7b707"
 dependencies = [
  "alice-det-math",
  "libm",
@@ -27,20 +28,21 @@ dependencies = [
 
 [[package]]
 name = "alice-codec"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9893c7a708174b015fa7d65e795481a370722461336a1978c4f274c02151c28"
+version = "0.2.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-Codec?branch=main#ce42348e1d1d40129950bc271f2979d9a398430d"
 dependencies = [
+ "alice-det-math",
  "libm",
 ]
 
 [[package]]
 name = "alice-db"
 version = "0.6.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-DB?branch=main#54697bf516a4240dbc029124e6651b572f1d2286"
 dependencies = [
  "alice-det-math",
+ "alice-serial",
  "alice-zip",
- "bincode 1.3.3",
  "crc32fast",
  "crossbeam-channel",
  "fs2",
@@ -57,8 +59,8 @@ dependencies = [
 
 [[package]]
 name = "alice-det-math"
-version = "0.5.2"
-source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?rev=2d01c63ff0849cf0ab82eafb89f87f1b729bd2a8#2d01c63ff0849cf0ab82eafb89f87f1b729bd2a8"
+version = "0.6.1"
+source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#001694ccbe9bf0cdcd93f3e6b45e27779b77a41d"
 dependencies = [
  "bytemuck",
  "wide",
@@ -92,17 +94,21 @@ dependencies = [
 
 [[package]]
 name = "alice-ml"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bda5d70d84e0c64ddcdd95bd34c90010ea080b8a7772bffc61cb08f23040836"
+version = "0.4.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-ML?branch=main#f3cccc24e63bff90919e278a41d88b1e41c3383a"
+dependencies = [
+ "alice-det-math",
+ "libm",
+]
 
 [[package]]
 name = "alice-sdf"
 version = "7.0.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#518e9986295875780ecfbacc958e8cdef08899e4"
 dependencies = [
  "alice-det-math",
  "alice-zip",
- "bincode 2.0.1",
+ "bincode",
  "crc32fast",
  "glam",
  "log",
@@ -115,9 +121,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "alice-serial"
+version = "0.2.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-Serial?rev=16b34ebcaf3a195fe6500defb4d1e6002cb3d09d#16b34ebcaf3a195fe6500defb4d1e6002cb3d09d"
+
+[[package]]
 name = "alice-zip"
 version = "0.11.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Zip?rev=19f6f2c1ff5537642cefca006e37e2f00570d6ba#19f6f2c1ff5537642cefca006e37e2f00570d6ba"
+source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#8d6e132ded0d804e2b3d6a6614396782aa0577b6"
 dependencies = [
  "alice-det-math",
  "crc",
@@ -164,15 +175,6 @@ name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
-
-[[package]]
-name = "bincode"
-version = "1.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "bincode"

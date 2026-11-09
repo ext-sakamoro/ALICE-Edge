@@ -9,7 +9,5 @@ scripts/semver_gate.py
 scripts/test_semver_gate.py
 .github/semver-gate.toml
 .github/workflows/semver-checks.yml
-.github/alice-siblings
-.github/actions/alice-siblings/**
 scripts/changed_paths.py
 .github/paths/semver-checks.txt

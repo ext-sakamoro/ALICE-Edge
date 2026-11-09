@@ -28,8 +28,6 @@ on:
       - 'scripts/changed_paths.py'
       - '.github/workflows/g3-ir.yml'
       - '.github/paths/g3-ir.txt'
-      - '.github/alice-siblings'
-      - '.github/actions/alice-siblings/**'
   schedule:
     - cron: '17 7 * * 1'
   workflow_dispatch:
@@ -96,7 +94,6 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-      - uses: ./.github/actions/alice-siblings
       # the toolchain is rust-toolchain.toml's (the IR text depends on the LLVM version);
       # both targets are installed for the probe tests, which build for each architecture
       - name: Targets for the pinned toolchain

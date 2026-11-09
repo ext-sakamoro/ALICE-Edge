@@ -27,8 +27,6 @@ on:
       - 'deny.toml'
       - '.github/workflows/security-audit.yml'
       - 'scripts/stub_guard.sh'
-      - '.github/alice-siblings'
-      - '.github/actions/alice-siblings/**'
       - 'scripts/alice_siblings_check.py'
       - 'scripts/test_package_integrity.py'
       - 'scripts/package_integrity.py'
@@ -91,7 +89,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -132,7 +129,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -150,7 +146,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
 
       # Static Cargo.toml analysis; false positives go into
@@ -165,7 +160,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
       # the lock-free check below builds the pyo3 bindings, which need a Python
       - uses: actions/setup-python@v6
@@ -173,8 +167,8 @@ jobs:
           python-version: '3.11'
 
       # the published .crate builds on its own (scripts/package_integrity.py, shared with the
-      # other ALICE crates): packaged, unpacked and built as a standalone package; a path
-      # dependency whose required version only an unpublished sibling in .github/alice-siblings
+      # other ALICE crates): packaged, unpacked and built as a standalone package; a
+      # dependency whose required version only an unpublished ALICE repository (taken by git)
       # satisfies (checked against the crates.io index) is patched in and reported as
       # `blocked`, every other packaging or build error fails
       # - shipped-lock check with the default features (sensors-hw pulls libudev-sys, which the
@@ -199,7 +193,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/alice-siblings
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
@@ -231,7 +224,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/alice-siblings
 
       # Production path (src/) must not carry todo! / unimplemented! /
       # panic!("...STUB...") placeholders or dbg!; 0 files compared is red.

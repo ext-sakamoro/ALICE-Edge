@@ -6,8 +6,6 @@ src/**
 deny.toml
 .github/workflows/security-audit.yml
 scripts/stub_guard.sh
-.github/alice-siblings
-.github/actions/alice-siblings/**
 scripts/alice_siblings_check.py
 scripts/test_package_integrity.py
 scripts/package_integrity.py

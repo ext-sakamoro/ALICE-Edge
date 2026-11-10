@@ -60,7 +60,7 @@ db = ["dep:alice-db", "std"]  # ALICE-DB persistence for model coefficients
 depth-camera = ["dep:rusb", "std"]  # Dolphin D5 Lite depth camera driver
 sdf = ["dep:alice-sdf", "std"]  # SDF compression for point clouds
 ml = ["dep:alice-ml", "std"]  # 1.58bit ternary object classification
-asp = ["dep:libasp", "std", "sdf", "ml"]  # ALICE Streaming Protocol bridge (libasp 1.0 on crates.io; asp_bridge uses sdf_compress + object_classifier::ObjectClass)
+asp = ["dep:libasp", "std", "sdf", "ml"]  # ALICE Streaming Protocol bridge (libasp from git, branch main; asp_bridge uses sdf_compress + object_classifier::ObjectClass)
 edge-pipeline = ["depth-camera", "sdf", "ml", "asp"]  # Full edge pipeline
 sensors = ["dep:serde", "std"]  # Sensor drivers (simulated)
 # Serialize / Deserialize on mqtt_bridge::CoefficientPayload with no semantics
@@ -92,7 +92,7 @@ alice-db = { git = "https://github.com/ext-sakamoro/ALICE-DB", branch = "main", 
 rusb = { version = "0.9", optional = true }
 alice-sdf = { git = "https://github.com/ext-sakamoro/ALICE-SDF", branch = "main", version = ">=7, <8", optional = true, default-features = false, features = ["svo"] }
 alice-ml = { git = "https://github.com/ext-sakamoro/ALICE-ML", branch = "main", version = "0.4", optional = true, default-features = false, features = ["std"] }
-libasp = { version = "1.0", optional = true, default-features = false }
+libasp = { git = "https://github.com/ext-sakamoro/ALICE-Streaming-Protocol", branch = "main", version = "1", optional = true, default-features = false }
 # Sensor drivers
 rppal = { version = "0.19", optional = true }
 serialport = { version = "4.6", optional = true }

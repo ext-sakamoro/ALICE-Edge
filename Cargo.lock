@@ -911,8 +911,7 @@ dependencies = [
 [[package]]
 name = "libasp"
 version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "505ca247a638e712346e097ffa8d5f103f0e7aad2633f5b1f3932c107197ac63"
+source = "git+https://github.com/ext-sakamoro/ALICE-Streaming-Protocol?branch=main#ec5991d9a430a8835041f5d43a9c20c555143b3c"
 dependencies = [
  "base64",
  "bytemuck",

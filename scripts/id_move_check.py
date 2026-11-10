@@ -27,7 +27,10 @@ For each identifier that exists at the base and has another value now:
   .github/alice-siblings (`<Repo> <40-hex SHA>`): the sibling must be at the pinned commit and
   clean, the list is located by the sibling's rustdoc span, and the value is taken out of a
   copy of the sibling laid out next to a copy of this crate (the real sibling is never
-  changed). A re-export that does not resolve that way fails, with the reason;
+  changed). A re-export of a crate taken from git is read at the manifest's 40-hex `rev`, or,
+  without a `rev` (`branch`, `tag` or the default branch), at the commit Cargo.lock resolved it
+  to (no Cargo.lock, the package not in it from that url, or a source without a 40-hex commit
+  fails). A re-export that does not resolve that way fails, with the reason;
 - otherwise (not in the list, or no list) the move is a change of meaning and it must be
   announced to the consumers: the version is a breaking step from the base's (a major for 1.x
   and later, a minor or a major for 0.x), or, while publication is frozen and the version does
@@ -84,7 +87,10 @@ them), and nothing for a base that reaches no sibling. It reads only this reposi
 CI runs it before any sibling is cloned and gives the file to the alice-siblings action as `list:`,
 which clones the repositories with their full history and makes each commit present. It fails
 on a base whose tree path-depends on a sibling it does not pin and on a broken base (the pin file is
-in its first-parent history but not in its tree). A base from before the pin file takes each sibling
+in its first-parent history but not in its tree, and the newest commit of that history touching it
+still has it). A base whose history removed the file (the newest first-parent commit touching it
+has none: the repository dropped its path dependencies with the pins) has no siblings: it is
+accepted when it reaches none and refused when it still path-depends on one. A base from before the pin file takes each sibling
 it reaches, and the ones those reach in turn, at the newest commit of the sibling's main (first
 parent) whose committer date is not later than the base commit's, as the check does: the printer
 fetches each such sibling's main read-only over git into a temporary directory (from
@@ -714,6 +720,24 @@ def run_named_test(crate_dir: Path, ref: str, target_dir: Path, features: tuple[
 
 # a POSIX string, not a Path: it appears in messages that must read the same on every OS
 SIBLINGS_FILE = ".github/alice-siblings"
+
+
+def siblings_file_removed(root: Path, base_ref: str) -> str | None:
+    """the commit that removed .github/alice-siblings from `base_ref`'s first-parent history, when
+    the base tree has no such file because it was deleted (the newest first-parent commit touching
+    it has no file either: the repository dropped its path dependencies and the pins with them);
+    None when no commit of that history has the file (a base from before the pins). CheckError for a
+    base tree without the file whose history's newest touch still has it (broken: the file is
+    missing from the base, not removed in its history)"""
+    touched = git(root, "log", "--first-parent", "--format=%H", base_ref, "--", SIBLINGS_FILE).split()
+    if not touched:
+        return None
+    has = subprocess.run(["git", "-C", str(root), "cat-file", "-e", f"{touched[0]}:{SIBLINGS_FILE}"],
+                         capture_output=True).returncode == 0
+    if has:
+        raise CheckError(f"broken base {base_ref}: {SIBLINGS_FILE} is in the base's first-parent history "
+                         f"(last changed in {touched[0][:12]}, which has it), but the base tree has none")
+    return touched[0]
 SIBLING_LINE = re.compile(r"(ALICE-[A-Za-z0-9-]+) ([0-9a-f]{40})")
 
 
@@ -899,14 +923,13 @@ def materialize_pinned_siblings(tree: Path, real_parent: Path, work: Path,
     report lines"""
     pins, problems = listed_siblings(tree)
     as_of = None
+    removed = None
     if not (tree / SIBLINGS_FILE).is_file() and root is not None and base_ref is not None:
-        # the fallback is for a base from before the pins only: if any commit of the base's
-        # first-parent history has the file, the base lacks it because it was removed, and is broken
-        touched = git(root, "log", "--first-parent", "--format=%H", base_ref, "--", SIBLINGS_FILE).split()
-        if touched:
-            raise CheckError(f"broken base {base_ref}: {SIBLINGS_FILE} is in the base's first-parent history "
-                             f"(last changed in {touched[0][:12]}), but the base tree has none")
-        as_of = git(root, "show", "-s", "--format=%cI", base_ref).strip()
+        # the date fallback is for a base from before the pins only; a base whose history removed the
+        # file has no siblings (it reaches none, or is refused below); any other absence is broken
+        removed = siblings_file_removed(root, base_ref)
+        if removed is None:
+            as_of = git(root, "show", "-s", "--format=%cI", base_ref).strip()
     resolved = []
     own, done, queue = tree.name, set(), [tree]
     while queue:
@@ -922,6 +945,9 @@ def materialize_pinned_siblings(tree: Path, real_parent: Path, work: Path,
                 sha = _sibling_at_date(name, real, as_of)
                 resolved.append(f"../{name} at {sha[:12]} (sibling main as of {as_of}, base predates pins)")
             elif name not in pins:
+                if removed:
+                    raise CheckError(f"broken base {base_ref}: the base tree path-depends on ../{name} but its "
+                                     f"{SIBLINGS_FILE} was removed in {removed[:12]}")
                 why = "; ".join(problems) if problems else f"{SIBLINGS_FILE} lists no {name}"
                 raise CheckError(f"the base tree path-depends on ../{name} but has no pin for it ({why})")
             else:
@@ -1054,10 +1080,12 @@ def base_sibling_pins(root: Path, refs: list[str]) -> list[tuple[str, str]]:
         r = subprocess.run(["git", "-C", str(root), "show", f"{ref}:{SIBLINGS_FILE}"],
                            capture_output=True, text=True)
         if r.returncode != 0:
-            touched = git(root, "log", "--first-parent", "--format=%H", ref, "--", SIBLINGS_FILE).split()
-            if touched:
-                raise CheckError(f"broken base {ref}: {SIBLINGS_FILE} is in the base's first-parent history "
-                                 f"(last changed in {touched[0][:12]}), but the base tree has none")
+            removed = siblings_file_removed(root, ref)
+            if removed is not None:
+                if reached:
+                    raise CheckError(f"broken base {ref}: it path-depends on {', '.join('../' + n for n in reached)} "
+                                     f"but its {SIBLINGS_FILE} was removed in {removed[:12]}")
+                continue  # the history removed the pins with the path dependencies: nothing to build against
             if reached:
                 as_of = git(root, "show", "-s", "--format=%cI", ref).strip()
                 for pair in _siblings_as_of(root, ref, reached, as_of):
@@ -1079,9 +1107,43 @@ def base_sibling_pins(root: Path, refs: list[str]) -> list[tuple[str, str]]:
     return sorted(out)
 
 
+def locked_git_commit(root: Path, crate_dir: Path, package: str, url: str) -> str:
+    """the 40-hex commit Cargo.lock resolved the git source `url` of `package` to (a git dependency
+    without a `rev`: `branch`, `tag` or the default branch); CheckError when there is no Cargo.lock,
+    the package is not in it from that url, its source names no 40-hex commit, or two entries name
+    different commits"""
+    lock = next((d / "Cargo.lock" for d in dict.fromkeys([crate_dir, root]) if (d / "Cargo.lock").is_file()), None)
+    if lock is None:
+        raise CheckError(f"{package} is taken from git without a `rev` and there is no Cargo.lock to read "
+                         f"the commit it resolved to")
+    try:
+        doc = tomllib.loads(lock.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
+        raise CheckError(f"{lock}: unreadable: {e}") from None
+    want = url.removesuffix("/").removesuffix(".git")
+    commits = set()
+    for pkg in doc.get("package", []):
+        source = pkg.get("source", "")
+        if pkg.get("name") != package or not isinstance(source, str) or not source.startswith("git+"):
+            continue
+        base, _, commit = source[len("git+"):].partition("#")
+        if base.split("?", 1)[0].removesuffix("/").removesuffix(".git") != want:
+            continue
+        if not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise CheckError(f"{lock}: {package} from {url} names {commit!r}, not a 40-hex commit")
+        commits.add(commit)
+    if not commits:
+        raise CheckError(f"{lock}: {package} from {url} is not in it (run cargo to resolve it, then commit the lock)")
+    if len(commits) > 1:
+        raise CheckError(f"{lock}: {package} from {url} resolves to {len(commits)} commits: "
+                         f"{', '.join(sorted(c[:12] for c in commits))}")
+    return commits.pop()
+
+
 def git_rev_dependency(root: Path, crate_dir: Path, crate: str) -> dict | str | None:
-    """the `git` + `rev` source the manifests of the crate (and its workspace) give the dependency
-    `crate` (lib name), as {url, rev, package}; None when no manifest takes it from git"""
+    """the `git` source the manifests of the crate (and its workspace) give the dependency `crate`
+    (lib name) and the commit it is read at, as {url, rev, package}: the manifest's 40-hex `rev`, or,
+    without a `rev`, the commit Cargo.lock resolved it to; None when no manifest takes it from git"""
     for m in dict.fromkeys([crate_dir / "Cargo.toml", root / "Cargo.toml"]):
         if not m.is_file():
             continue
@@ -1096,8 +1158,13 @@ def git_rev_dependency(root: Path, crate_dir: Path, crate: str) -> dict | str | 
                 if package.replace("-", "_") != crate:
                     continue
                 rev = spec.get("rev")
-                if not isinstance(rev, str) or not re.fullmatch(r"[0-9a-f]{40}", rev):
-                    return f"{m}: {key} is taken from git without a 40-hex `rev`"
+                if rev is None:
+                    try:
+                        rev = locked_git_commit(root, crate_dir, package, str(spec["git"]))
+                    except CheckError as e:
+                        return f"{m}: {key}: {e}"
+                elif not isinstance(rev, str) or not re.fullmatch(r"[0-9a-f]{40}", rev):
+                    return f"{m}: {key} is taken from git with a `rev` that is not 40 hex digits"
                 return {"url": str(spec["git"]), "rev": rev, "package": package}
     return None
 

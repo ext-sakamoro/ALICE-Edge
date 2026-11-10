@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """No deterministic path of the crate draws OS entropy or reads the wall clock.
 
-A fitted model's coefficients are transmitted (MQTT) and can be stored by a
-caller; this crate's own production code must never make that model, or any
-other value it computes/stores, depend on OS randomness or the wall clock --
-a device that sampled at a different moment or rounded one ulp differently
-would then produce a different model from the same samples.
+An estimate this crate computes (a quantile, a cardinality, a noisy count) is
+meant to compare equal given the same input, on any machine, at any time, so
+no part of production code may depend on the wall clock or on OS randomness:
+either one would make the same input produce a different estimate on a
+different run. Randomness a caller wants belongs to the caller, passed in
+explicitly (`XorShift64::new(seed)` / `with_seed` / `with_probability` /
+`with_seed_params`); this crate's own production code never reaches for it on
+its own, except the one deprecated path documented below.
 
 Checked in every src/**/*.rs file, outside `#[cfg(test)]` / `#[cfg(all(test,
 ...))]` modules, with the code of a file joined (a call split over lines still
@@ -18,22 +21,31 @@ as the plain form:
     `::new`: `::default()` reaches the same OS-seeded hasher)  Uuid::new_v4
 
 clippy's `disallowed-methods` in clippy.toml is the first layer (compiled,
-`cargo clippy --all-targets -- -D warnings`); this script is the second,
-readable without compiling and run on `src/` only (clippy's `--all-targets`
-also covers tests/benches/examples, where a scoped
-`#[allow(clippy::disallowed_methods, reason = "...")]` carries the same
-per-call-site accounting this script does, e.g. the demo examples that print
-a fit's wall-clock latency or stamp a send-time on an MQTT payload).
+`cargo clippy --all-targets -D warnings`); this script is the second, readable
+without compiling and run on `src/` only (clippy's `--all-targets` also covers
+tests/benches/examples/fuzz, where a scoped `#[allow(clippy::disallowed_methods,
+reason = "...")]` carries the same per-call-site accounting this script does).
 
 Deliberately not scanned: `HashMap` / `HashSet` (their default hasher also
 seeds from OS randomness, but that is a separate gate -- iteration order, not
-entropy in a stored value -- out of scope here; this crate has no
-HashMap/HashSet in a path that affects a stored/computed/transmitted value).
+entropy in a value -- this crate has no HashMap/HashSet in src/ today).
 
-A definition (`fn from_entropy`) is not a call. ALLOWED lists the call sites
-that stay, each with its reason and exact count: a count that drifts either
-way fails, so a new call cannot hide behind an old entry and a removed one
-must be removed here too. Scanning no file, or no pattern, fails.
+A definition (`fn from_entropy`) is not a call. The call sites that stay are
+this repository's own data, listed in scripts/entropy_guard.toml (this script
+is shared byte-for-byte between repositories, so it carries none):
+
+    [[allow]]
+    path = "src/bin/main.rs"
+    pattern = "Instant::now"
+    count = 14
+    reason = "CLI timing printed to the terminal, not stored"
+
+Each entry gives the path, a pattern name above, the exact count and a reason:
+a count that drifts either way fails, so a new call cannot hide behind an old
+entry and a removed one must be removed there too; an entry that matches
+nothing fails as stale; the same site listed twice, an unknown pattern or key,
+or a file that does not parse fails. No file means no allowance (every call is
+a finding), never a skip. Scanning no file, or no pattern, fails.
 
     python3 scripts/entropy_guard.py
 """
@@ -41,6 +53,7 @@ from __future__ import annotations
 
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,40 +86,49 @@ ALIASABLE = {
     "SystemTime": ("SystemTime::now", r"\b{}\b" + _QUALIFIED_SELF + r"::\s*now\b"),
 }
 ALIAS_RE = re.compile(r"\b(Instant|SystemTime)\s+as\s+(\w+)")
-# (file, pattern) -> (count, reason)
-ALLOWED: dict[tuple[str, str], tuple[int, str]] = {
-    ("src/depth_capture.rs", "Instant::now"): (
-        2, "DolphinD5Driver::init's start_time only backs timestamp_ms, a per-frame diagnostic metadata field "
-           "no code in this crate reads back; the point cloud itself is derived from frame_counter",
-    ),
-    ("src/dashboard.rs", "Instant::now"): (
-        3, "EdgeDashboard's start/last_reset only back uptime_secs/models_per_sec, live monitoring telemetry "
-           "never read back into a compression/classification/encoding value",
-    ),
-    ("src/edge_pipeline.rs", "Instant::now"): (
-        7, "process_frame's 5 timers measure per-stage latency fed only into self.stats (diagnostic averages), "
-           "never into the returned packet/compress_stats; run_for's 2 timers pace a duration-bounded real-time "
-           "frame loop (the loop's own contract), not the content of any one packet",
-    ),
-    ("src/mqtt_bridge.rs", "Instant::now"): (
-        2, "the MQTT network thread's clock (origin and elapsed): it decides when a PINGREQ is due, when a "
-           "missing CONNACK or PINGRESP closes the connection and when a reconnect is attempted; it never "
-           "enters a payload, a coefficient or any other computed value",
-    ),
-    ("src/watchdog.rs", "Instant::now"): (
-        3, "Watchdog is a liveness/safety mechanism: is_expired() asks whether real wall-clock time since the "
-           "last kick exceeds timeout, a hardware-hang detector that is inherently wall-clock-driven; the "
-           "result is consulted live (a bool), never stored, transmitted or compared for equality",
-    ),
-    ("src/sensors.rs", "Instant::now"): (
-        10,
-        "ts only backs batch.timestamps metadata or paces/rate-limits real hardware reads -- every "
-        "no-hardware branch's simulated reading is computed from the loop index or a deterministic hash "
-        "(Bno055Sensor, Max30102Sensor, GpsSensor, SimulatedSensor, and -- since this audit found and fixed "
-        "them to match -- Bme280Sensor, Dht22Sensor, Adxl345Sensor); DHT22's start_wait/high_start measure a "
-        "real GPIO pulse width, the sensor's actual bit encoding",
-    ),
-}
+# this repository's allowances: (file, pattern) -> (count, reason), read by load_allowed
+ALLOW_FILE = "scripts/entropy_guard.toml"
+ALLOW_KEYS = {"path", "pattern", "count", "reason"}
+
+
+def load_allowed(root: Path) -> tuple[dict[tuple[str, str], tuple[int, str]], list[str]]:
+    """(allowances, problems) from ALLOW_FILE under `root`; an absent file is no allowance"""
+    f = root / ALLOW_FILE
+    if not f.is_file():
+        return {}, []
+    try:
+        data = tomllib.loads(f.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        return {}, [f"{ALLOW_FILE} is not TOML: {e}"]
+    problems: list[str] = []
+    if set(data) - {"allow"} or not isinstance(data.get("allow", []), list):
+        problems.append(f"{ALLOW_FILE}: only [[allow]] entries are read (found {sorted(data)})")
+    allowed: dict[tuple[str, str], tuple[int, str]] = {}
+    for i, e in enumerate(data.get("allow", []) if isinstance(data.get("allow", []), list) else [], 1):
+        where = f"{ALLOW_FILE} entry {i}"
+        if not isinstance(e, dict):
+            problems.append(f"{where}: not a table")
+            continue
+        extra = set(e) - ALLOW_KEYS
+        if extra:
+            problems.append(f"{where}: unknown key {sorted(extra)}")
+        path, name, count, reason = e.get("path"), e.get("pattern"), e.get("count"), e.get("reason", "")
+        if not isinstance(path, str) or not path:
+            problems.append(f"{where}: path must be a file under src/")
+            continue
+        if name not in PATTERNS:
+            problems.append(f"{where}: unknown pattern {name!r} (one of {sorted(PATTERNS)})")
+            continue
+        if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+            problems.append(f"{where}: count must be a positive integer (got {count!r})")
+            continue
+        if not isinstance(reason, str):
+            reason = ""
+        if (path, name) in allowed:
+            problems.append(f"{where}: {name} in {path} listed twice")
+            continue
+        allowed[(path, name)] = (count, reason)
+    return allowed, problems
 # A char literal ('{', '\n', '\u{1F600}', also after a `b` prefix) but not a
 # lifetime ('a, 'static: those have no closing quote, so they never match.
 CHAR_RE = re.compile(r"'(?:\\u\{[0-9a-fA-F_]+\}|\\x[0-9a-fA-F]{2}|\\.|[^'\\\n])'")
@@ -220,7 +242,7 @@ def matches(lines: list[tuple[int, str]]) -> dict[str, list[int]]:
 
 
 def check(root: Path) -> tuple[list[str], int, int]:
-    problems: list[str] = []
+    allowed_sites, problems = load_allowed(root)
     counts: dict[tuple[str, str], list[int]] = {}
     files = sorted((root / "src").rglob("*.rs"))
     for path in files:
@@ -228,17 +250,17 @@ def check(root: Path) -> tuple[list[str], int, int]:
         for name, hits in matches(production_lines(path.read_text(encoding="utf-8"))).items():
             counts[(rel, name)] = hits
     for key, lines in sorted(counts.items()):
-        allowed = ALLOWED.get(key)
+        allowed = allowed_sites.get(key)
         where = ", ".join(f"{key[0]}:{n}" for n in lines)
         if allowed is None:
             problems.append(f"{key[1]} in production code: {where}")
         elif allowed[0] != len(lines):
-            problems.append(f"{key[1]} in {key[0]}: {len(lines)} call sites, ALLOWED says {allowed[0]} ({where})")
-    for key, (count, reason) in sorted(ALLOWED.items()):
+            problems.append(f"{key[1]} in {key[0]}: {len(lines)} call sites, {ALLOW_FILE} allows {allowed[0]} ({where})")
+    for key, (count, reason) in sorted(allowed_sites.items()):
         if not reason.strip():
-            problems.append(f"ALLOWED entry {key[1]} in {key[0]} has no reason")
+            problems.append(f"{ALLOW_FILE} entry {key[1]} in {key[0]} has no reason")
         if key not in counts:
-            problems.append(f"ALLOWED entry {key[1]} in {key[0]} ({count}) matches nothing: remove it")
+            problems.append(f"{ALLOW_FILE} entry {key[1]} in {key[0]} ({count}) matches nothing: remove it")
     return problems, len(files), len(PATTERNS)
 
 

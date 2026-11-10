@@ -1,0 +1,37 @@
+# ALICE-Edge: the call sites scripts/entropy_guard.py allows in src/ (exact counts; an entry that matches nothing fails)
+
+[[allow]]
+path = "src/dashboard.rs"
+pattern = "Instant::now"
+count = 3
+reason = "EdgeDashboard's start/last_reset only back uptime_secs/models_per_sec, live monitoring telemetry never read back into a compression/classification/encoding value"
+
+[[allow]]
+path = "src/depth_capture.rs"
+pattern = "Instant::now"
+count = 2
+reason = "DolphinD5Driver::init's start_time only backs timestamp_ms, a per-frame diagnostic metadata field no code in this crate reads back; the point cloud itself is derived from frame_counter"
+
+[[allow]]
+path = "src/edge_pipeline.rs"
+pattern = "Instant::now"
+count = 7
+reason = "process_frame's 5 timers measure per-stage latency fed only into self.stats (diagnostic averages), never into the returned packet/compress_stats; run_for's 2 timers pace a duration-bounded real-time frame loop (the loop's own contract), not the content of any one packet"
+
+[[allow]]
+path = "src/mqtt_bridge.rs"
+pattern = "Instant::now"
+count = 2
+reason = "the MQTT network thread's clock (origin and elapsed): it decides when a PINGREQ is due, when a missing CONNACK or PINGRESP closes the connection and when a reconnect is attempted; it never enters a payload, a coefficient or any other computed value"
+
+[[allow]]
+path = "src/sensors.rs"
+pattern = "Instant::now"
+count = 10
+reason = "ts only backs batch.timestamps metadata or paces/rate-limits real hardware reads -- every no-hardware branch's simulated reading is computed from the loop index or a deterministic hash (Bno055Sensor, Max30102Sensor, GpsSensor, SimulatedSensor, and -- since this audit found and fixed them to match -- Bme280Sensor, Dht22Sensor, Adxl345Sensor); DHT22's start_wait/high_start measure a real GPIO pulse width, the sensor's actual bit encoding"
+
+[[allow]]
+path = "src/watchdog.rs"
+pattern = "Instant::now"
+count = 3
+reason = "Watchdog is a liveness/safety mechanism: is_expired() asks whether real wall-clock time since the last kick exceeds timeout, a hardware-hang detector that is inherently wall-clock-driven; the result is consulted live (a bool), never stored, transmitted or compared for equality"

@@ -36,15 +36,22 @@ Any other path dependency (outside the repository and not a listed sibling, or a
 directory without a package) fails, except a dev-dependency without a version, which
 cargo leaves out of the package.
 
-A dependency taken from git at a pinned commit (`{ git = URL, rev = <40 hex>, version = "X" }`,
+A dependency taken from git (`{ git = URL, version = "X", rev = <40 hex> | branch = B | tag = T }`,
 used while that version is not on crates.io) is blocked the same way: `cargo package` drops
-`git` and `rev`, so the packaged crate would resolve the version from crates.io. It is blocked
-when its requirement names a version, `rev` is 40 lowercase hex digits (a `branch` / `tag` or a
-missing or short `rev` fails: the package would not name one commit) and no published version
-satisfies the requirement; every cargo call then carries `patch.crates-io.<name>.git` and
-`.rev` at that commit, and the shipped and the freshly resolved Cargo.lock of the unpacked crate
-must take <name> from exactly `git+URL?rev=REV#REV` (a lock without it, or with another source,
-fails: the pin was not used). A git dependency whose requirement crates.io already satisfies is
+`git` and the reference, so the packaged crate would resolve the version from crates.io. It is
+blocked when its requirement names a version and no published version satisfies it; every cargo
+call then carries `patch.crates-io.<name>.git` and the same reference Cargo.toml names (`.rev`,
+`.branch` or `.tag`; none for the default branch), never a `rev` for a branch: the crates it
+reaches through git take their siblings by that reference too, and a `rev` patch would give cargo
+a second source of the same package (two copies linked). The shipped and the freshly resolved
+Cargo.lock of the unpacked crate must take <name> from exactly the source cargo writes for that
+reference at one commit: `git+URL?rev=REV#REV` for a rev, and for a branch / tag / the default
+branch `git+URL?branch=B#C` (`?tag=T#C`, `#C`) where C is the commit this repository's Cargo.lock
+resolved it to (read by `locked_git_commit` of scripts/id_move_check.py, the one place that rule
+lives), so a packaged crate that resolved a branch whose tip moved since the tested lock fails, as
+does a lock with a second source of the package. A `rev` that is not 40 lowercase hex digits, a
+dependency naming more than one of rev / branch / tag, and a branch / tag dependency with no
+Cargo.lock entry to read fail. A git dependency whose requirement crates.io already satisfies is
 not patched.
 
 --patches prints the patch arguments of the blocked dependencies, one per line
@@ -84,6 +91,7 @@ from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from alice_siblings_check import read_list  # noqa: E402
+from id_move_check import CheckError, locked_git_commit  # noqa: E402
 
 DEP_TABLES = ("dependencies", "dev-dependencies", "build-dependencies")
 SIBLING_RE = re.compile(r"ALICE-[A-Za-z0-9-]+")
@@ -281,7 +289,8 @@ def git_deps(root: Path, member: str = ".") -> list[dict]:
             continue
         deps.append({"name": spec.get("package", key), "req": spec.get("version"), "table": table,
                      "kind": "git", "git": spec["git"], "rev": spec.get("rev"),
-                     "other_ref": sorted(k for k in ("branch", "tag") if k in spec)})
+                     "refs": {k: spec[k] for k in ("rev", "branch", "tag") if k in spec},
+                     "pkg_dir": pkg_dir})
     return deps
 
 
@@ -372,7 +381,7 @@ def classify(
         return [], [str(e)]
     seen_git: set[tuple[str, str, str]] = set()
     for dep in gits:
-        key = (dep["name"], dep["git"], str(dep["rev"]))
+        key = (dep["name"], dep["git"], json.dumps(dep["refs"], sort_keys=True))
         if key in seen_git:
             continue
         seen_git.add(key)
@@ -381,10 +390,28 @@ def classify(
                 continue  # cargo leaves a version-less git dev-dependency out of the package
             problems.append(f"{dep['name']}: git dependency without a version cannot be published")
             continue
-        if dep["other_ref"] or not isinstance(dep["rev"], str) or not REV_RE.fullmatch(dep["rev"]):
-            problems.append(f"{dep['name']}: git dependency {dep['git']} is not pinned to a 40-hex rev "
-                            f"(rev {dep['rev']!r}{', ' + ' / '.join(dep['other_ref']) if dep['other_ref'] else ''})")
+        refs = dep["refs"]
+        if len(refs) > 1:
+            problems.append(f"{dep['name']}: git dependency {dep['git']} names more than one of rev / branch / tag "
+                            f"({', '.join(sorted(refs))})")
             continue
+        if "rev" in refs:
+            if not isinstance(refs["rev"], str) or not REV_RE.fullmatch(refs["rev"]):
+                problems.append(f"{dep['name']}: git dependency {dep['git']} has rev {refs['rev']!r}, "
+                                f"not 40 lowercase hex digits")
+                continue
+            dep = {**dep, "ref": ("rev", refs["rev"]), "commit": refs["rev"]}
+        else:
+            kind, value = next(iter(refs.items()), ("", ""))
+            if not isinstance(value, str):
+                problems.append(f"{dep['name']}: git dependency {dep['git']} has {kind} {value!r}, not a string")
+                continue
+            try:
+                commit = locked_git_commit(root, dep["pkg_dir"], dep["name"], dep["git"])
+            except CheckError as e:
+                problems.append(f"{dep['name']}: {e}")
+                continue
+            dep = {**dep, "ref": (kind, value), "commit": commit}
         published = versions_of(dep["name"])
         if any(satisfies(v, dep["req"]) for v in published):
             continue  # resolvable from crates.io: packaged without the pin
@@ -396,9 +423,12 @@ def classify(
 def report_blocked(blocked: list[dict]) -> None:
     for b in blocked:
         if b.get("kind") == "git":
+            kind, value = b["ref"]
+            how = f"{kind} {value} at {b['commit'][:12]}" if kind in ("branch", "tag") else (
+                f"at {b['commit'][:12]}" if kind == "rev" else f"the default branch at {b['commit'][:12]}")
             print(
                 f"blocked: {b['name']} {b['req']} unpublished (crates.io max {b['registry_max']}), "
-                f"taken from git {b['git']} at {b['rev'][:12]}; publish wave: {b['name']}@{b['req']}"
+                f"taken from git {b['git']} {how}; publish wave: {b['name']}@{b['req']}"
             )
             continue
         if "member" in b:
@@ -420,8 +450,10 @@ def patch_args(blocked: list[dict]) -> list[str]:
     args: list[str] = []
     for b in blocked:
         if b.get("kind") == "git":
-            args += ["--config", f"patch.crates-io.{b['name']}.git={json.dumps(b['git'])}",
-                     "--config", f"patch.crates-io.{b['name']}.rev={json.dumps(b['rev'])}"]
+            args += ["--config", f"patch.crates-io.{b['name']}.git={json.dumps(b['git'])}"]
+            kind, value = b["ref"]
+            if kind:  # the same reference Cargo.toml names; the default branch needs none
+                args += ["--config", f"patch.crates-io.{b['name']}.{kind}={json.dumps(value)}"]
             continue
         args += ["--config", f"patch.crates-io.{b['name']}.path={json.dumps(b['path'])}"]
     return args
@@ -429,7 +461,8 @@ def patch_args(blocked: list[dict]) -> list[str]:
 
 def git_pin_problems(blocked: list[dict], lock_text: str, which: str) -> tuple[list[str], int]:
     """(problems, pins compared): each blocked git dependency must be in the lock, and only from
-    git at exactly its pinned commit."""
+    git with the reference Cargo.toml names at exactly its commit (the rev, or the commit this
+    repository's Cargo.lock resolved a branch / tag to)."""
     try:
         packages = tomllib.loads(lock_text).get("package", []) if lock_text else []
     except tomllib.TOMLDecodeError as e:
@@ -438,7 +471,8 @@ def git_pin_problems(blocked: list[dict], lock_text: str, which: str) -> tuple[l
     for b in blocked:
         if b.get("kind") != "git":
             continue
-        want = f"git+{b['git']}?rev={b['rev']}#{b['rev']}"
+        kind, value = b["ref"]
+        want = f"git+{b['git']}" + (f"?{kind}={value}" if kind else "") + f"#{b['commit']}"
         sources = [p.get("source", "path") for p in packages if p.get("name") == b["name"]]
         compared += 1
         if not sources:
@@ -458,13 +492,19 @@ def run_cmd(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
     return p.returncode, p.stdout, p.stderr
 
 
+# this script reads cargo test's output (scripts/cargo_output_parser_check.py): its runs set
+# CARGO_TERM_COLOR=never, and the reader still drops escape codes, so a coloured summary
+# (CARGO_TERM_COLOR=always / --color always in CI) reads the same (tests carry a coloured sample)
+CARGO_OUTPUT_PARSER = True
+ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 TEST_RESULT_RE = re.compile(r"^test result: (\w+)\. (\d+) passed; (\d+) failed", re.M)
 
 
 def passed_tests(out: str) -> tuple[int, int]:
-    """(passed, failed) summed over every `test result:` line of a cargo test run."""
+    """(passed, failed) summed over every `test result:` line of a cargo test run (escape codes
+    removed first)."""
     passed = failed = 0
-    for m in TEST_RESULT_RE.finditer(out):
+    for m in TEST_RESULT_RE.finditer(ESCAPE_RE.sub("", out)):
         passed += int(m.group(2))
         failed += int(m.group(3))
     return passed, failed
@@ -547,7 +587,23 @@ def package_and_build(
                 return [f"`cargo test {spec}` ran no test in the unpacked crate (compared nothing)"]
             print(f"package_integrity: unpacked `cargo test {spec}`: {passed} passed")
         (pkg / "Cargo.lock").unlink(missing_ok=True)
-        rc, stdout, stderr = runner(["cargo", "check", *shlex.split(opts.check_args), *patches], pkg)
+        # a fresh resolution: crates.io dependencies at their newest compatible versions; a git
+        # dependency taken by branch / tag / the default branch is then put back at the commit this
+        # repository's Cargo.lock resolved (what was tested here), since the fresh resolution takes
+        # the branch tip and another repository's push must not decide this check (a lock behind
+        # the tip is the scheduled report's line, not a finding here); a rev is exact already
+        rc, stdout, stderr = runner(["cargo", "generate-lockfile", *patches], pkg)
+        if rc != 0:
+            return [f"the unpacked crate has no fresh resolution:\n{stdout + stderr}"]
+        for b in blocked:
+            if b.get("kind") != "git" or b["ref"][0] == "rev":
+                continue
+            rc, stdout, stderr = runner(
+                ["cargo", "update", "-p", b["name"], "--precise", b["commit"], *patches], pkg)
+            if rc != 0:
+                return [f"the fresh resolution cannot take {b['name']} at the locked commit {b['commit']} "
+                        f"(gone from {b['git']}?):\n{stdout + stderr}"]
+        rc, stdout, stderr = runner(["cargo", "check", "--locked", *shlex.split(opts.check_args), *patches], pkg)
         out = stdout + stderr
         if rc != 0:
             return [f"the unpacked crate does not build with a fresh resolution:\n{out}"]

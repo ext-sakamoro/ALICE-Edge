@@ -607,6 +607,22 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("(0.3.0)", report[0])
         self.assertTrue(any("moved 11111111 -> 22222222" in r for r in report), report)
 
+    def test_a_ci_branch_bump_that_moves_an_id_unnamed_fails_on_the_branch(self):
+        """a version bump that is only on a ci branch (main has not got it yet) is judged as main judges it
+        after a fast-forward landing: against the commit before the bump, so a move CHANGELOG.md does not
+        name fails on the branch, not only after landing (2026-11-09: it passed on ci/** and went red on main)"""
+        d = self.repo()
+        subprocess.run(["git", "-C", str(d), "checkout", "-q", "-B", "ci/x"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(d), "branch", "-f", "main", "HEAD"], check=True, capture_output=True)
+        self.write(d, "0.4.0", "0x22", "")
+        (d / "CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n\n- the version moves\n")
+        self.commit(d, "bump on the branch")
+        problems = imc.check(d, None, "bump", "main")[0]
+        self.assertTrue(any("does not name 11111111, 22222222" in p for p in problems), problems)
+        # the same commit on main (landed by fast-forward) gives the same verdict
+        subprocess.run(["git", "-C", str(d), "branch", "-f", "main", "HEAD"], check=True, capture_output=True)
+        self.assertEqual(imc.check(d, None, "bump", "main")[0], problems)
+
     def test_bump_base_named_only_in_an_older_section_fails(self):
         d = self.repo()
         self.write(d, "0.4.0", "0x22", "")
@@ -1454,6 +1470,27 @@ class GitRevPreviousList(unittest.TestCase):
         self.assertEqual(passed, [])
         self.assertTrue(any("fetching ALICE-Zz failed" in p for p in problems), problems)
 
+    def test_a_branch_dependency_is_read_at_the_commit_its_lock_names(self):
+        # no `rev`: the checker reads the dependency at the commit Cargo.lock resolved the branch to,
+        # here the first commit while the branch has moved on to a list without the old value
+        branch = self.git(self.up, "branch", "--show-current")
+        (self.d / "Cargo.toml").write_text((self.d / "Cargo.toml").read_text().replace(
+            f'rev = "{self.rev}"', f'branch = "{branch}"'))
+        imc.rustdoc_json(self.d, self.cfg)  # resolves and writes Cargo.lock at the branch's head
+        lock = (self.d / "Cargo.lock").read_text()
+        self.assertIn(f"#{self.rev}", lock)
+        self.upstream_list("")
+        self.git(self.up, "add", "-A")
+        self.git(self.up, "commit", "-qm", "list emptied")
+        self.git(self.up, "pu" + "sh", "-q", "origin", f"HEAD:refs/heads/{branch}")
+        self.git(self.up, "fetch", "-q", "origin")
+        self.git(self.d, "add", "-A")
+        self.git(self.d, "commit", "-qm", "branch dependency")
+        passed, problems = self.verify()
+        self.assertEqual(problems, [])
+        self.assertEqual(passed, [self.REF])
+        self.assertEqual((self.d / "Cargo.lock").read_text(), lock, "the lock was not re-resolved")
+
     def test_a_rev_not_on_an_origin_branch_fails(self):
         (self.up / "NOTES").write_text("local only\n")
         self.git(self.up, "add", "-A")
@@ -1468,6 +1505,82 @@ class GitRevPreviousList(unittest.TestCase):
         passed, problems = self.verify()
         self.assertEqual(passed, [])
         self.assertTrue(any("still passes" in p for p in problems), problems)
+
+
+class GitDependencyCommit(unittest.TestCase):
+    """The commit a re-exported list's git dependency is read at: the manifest's 40-hex `rev`, or,
+    without one, the commit Cargo.lock resolved it to; any other case is a reason, never a guess"""
+
+    URL = "https://example.invalid/ext/ALICE-Zz"
+    COMMIT = "0123456789abcdef0123456789abcdef01234567"
+
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp(prefix="id-move-lockrev-"))
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def manifest(self, dep: str):
+        (self.d / "Cargo.toml").write_text(
+            '[package]\nname = "probe-crate"\nversion = "0.6.0"\nedition = "2021"\n\n[dependencies]\n' + dep + "\n")
+
+    def lock(self, source: str | None, name: str = "alice-zz"):
+        body = '[[package]]\nname = "probe-crate"\nversion = "0.6.0"\n'
+        if source is not None:
+            body += f'\n[[package]]\nname = "{name}"\nversion = "0.11.0"\nsource = "{source}"\n'
+        (self.d / "Cargo.lock").write_text("version = 4\n\n" + body)
+
+    def dep(self):
+        return imc.git_rev_dependency(self.d, self.d, "alice_zz")
+
+    def test_a_branch_dependency_is_read_at_the_locked_commit(self):
+        self.manifest(f'alice-zz = {{ git = "{self.URL}", branch = "main", version = "0.11" }}')
+        self.lock(f"git+{self.URL}?branch=main#{self.COMMIT}")
+        self.assertEqual(self.dep(), {"url": self.URL, "rev": self.COMMIT, "package": "alice-zz"})
+
+    def test_a_dependency_with_no_branch_named_is_read_at_the_locked_commit(self):
+        self.manifest(f'zz = {{ package = "alice-zz", git = "{self.URL}.git", version = "0.11" }}')
+        self.lock(f"git+{self.URL}#{self.COMMIT}")
+        self.assertEqual(self.dep()["rev"], self.COMMIT)
+
+    def test_a_rev_dependency_is_read_at_its_rev_and_not_the_lock(self):
+        rev = "f" * 40
+        self.manifest(f'alice-zz = {{ git = "{self.URL}", rev = "{rev}", version = "0.11" }}')
+        self.lock(f"git+{self.URL}?rev={rev}#{self.COMMIT}")
+        self.assertEqual(self.dep()["rev"], rev)
+
+    def test_a_short_rev_is_refused(self):
+        self.manifest(f'alice-zz = {{ git = "{self.URL}", rev = "0123abc", version = "0.11" }}')
+        self.lock(f"git+{self.URL}?rev=0123abc#{self.COMMIT}")
+        self.assertIn("not 40 hex digits", self.dep())
+
+    def test_without_a_lock_a_branch_dependency_is_refused(self):
+        self.manifest(f'alice-zz = {{ git = "{self.URL}", branch = "main", version = "0.11" }}')
+        self.assertIn("no Cargo.lock", self.dep())
+
+    def test_a_branch_dependency_not_in_the_lock_is_refused(self):
+        self.manifest(f'alice-zz = {{ git = "{self.URL}", branch = "main", version = "0.11" }}')
+        for source, name in ((None, "alice-zz"), (f"git+{self.URL}?branch=main#{self.COMMIT}", "alice-yy"),
+                             (f"git+https://example.invalid/other/ALICE-Zz?branch=main#{self.COMMIT}", "alice-zz"),
+                             ("registry+https://github.com/rust-lang/crates.io-index", "alice-zz")):
+            with self.subTest(source=source, name=name):
+                self.lock(source, name)
+                self.assertIn("is not in it", self.dep())
+
+    def test_a_locked_source_without_a_40_hex_commit_is_refused(self):
+        self.manifest(f'alice-zz = {{ git = "{self.URL}", branch = "main", version = "0.11" }}')
+        for source in (f"git+{self.URL}?branch=main#0123abc", f"git+{self.URL}?branch=main",
+                       f"git+{self.URL}?branch=main#{self.COMMIT.upper()}"):
+            with self.subTest(source=source):
+                self.lock(source)
+                self.assertIn("not a 40-hex commit", self.dep())
+
+    def test_two_locked_commits_are_refused(self):
+        self.manifest(f'alice-zz = {{ git = "{self.URL}", branch = "main", version = "0.11" }}')
+        self.lock(f"git+{self.URL}?branch=main#{self.COMMIT}")
+        with (self.d / "Cargo.lock").open("a") as f:
+            f.write(f'\n[[package]]\nname = "alice-zz"\nversion = "0.10.0"\nsource = "git+{self.URL}?branch=old#{"e" * 40}"\n')
+        self.assertIn("resolves to 2 commits", self.dep())
 
 
 @unittest.skipUnless(shutil.which("cargo") and shutil.which("git"), "needs cargo and git")
@@ -1546,6 +1659,51 @@ class BaseBeforePins(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.parent, ignore_errors=True)
+
+    def drop_path_deps(self, version: str):
+        (self.d / "Cargo.toml").write_text(
+            f'[package]\nname = "probe-crate"\nversion = "{version}"\nedition = "2021"\n\n[workspace]\n')
+
+    def remove_pins_history(self, keep_path_dep: bool) -> None:
+        """pins added, then removed in a later commit (with the path dependency, or not), then a release"""
+        (self.d / ".github" / "alice-siblings").write_text(f"ALICE-Up {self.v1}\n")
+        self.git(self.d, "add", "-A", date="2026-02-15T00:00:00Z")
+        self.git(self.d, "commit", "-qm", "pins", date="2026-02-15T00:00:00Z")
+        (self.d / ".github" / "alice-siblings").unlink()
+        if keep_path_dep:
+            self.probe("0.3.0", "^1")
+        else:
+            self.drop_path_deps("0.3.0")
+        self.git(self.d, "add", "-A", date="2026-02-20T00:00:00Z")
+        self.git(self.d, "commit", "-qm", "path deps and pins removed", date="2026-02-20T00:00:00Z")
+        (self.d / "CHANGELOG.md").write_text("# Changelog\n\n## 0.3.0\n")
+        self.release("2026-03-02T00:00:00Z")
+        self.drop_path_deps("0.4.0")
+
+    def test_a_base_whose_history_removed_the_pins_with_the_path_deps_is_accepted(self):
+        # the repository dropped its path dependencies and .github/alice-siblings with them: the
+        # base has no siblings, so there is nothing to build against and nothing is broken
+        self.remove_pins_history(keep_path_dep=False)
+        removed = self.git(self.d, "rev-parse", "v0.3.0~1")
+        self.assertEqual(imc.siblings_file_removed(self.d, "v0.3.0"), removed)
+        self.assertEqual(imc.base_sibling_pins(self.d, ["v0.3.0"]), [])
+        problems, report = imc.check(self.d, None, "tag")
+        self.assertEqual(problems, [])
+        self.assertFalse(any("ALICE-Up" in r for r in report), report)
+
+    def test_a_base_whose_history_removed_the_pins_but_still_reaches_a_sibling_is_broken(self):
+        self.remove_pins_history(keep_path_dep=True)
+        with self.assertRaises(imc.CheckError) as e:
+            imc.base_sibling_pins(self.d, ["v0.3.0"])
+        self.assertIn("broken base", str(e.exception))
+        self.assertIn("was removed in", str(e.exception))
+        with self.assertRaises(imc.CheckError) as e:
+            imc.check(self.d, None, "tag")
+        self.assertIn("broken base", str(e.exception))
+        self.assertIn("../ALICE-Up", str(e.exception))
+
+    def test_a_base_from_before_any_pin_file_is_no_removal(self):
+        self.assertIsNone(imc.siblings_file_removed(self.d, "v0.3.0"))
 
     def test_each_sibling_is_taken_at_its_main_as_of_the_base_commit(self):
         problems, report = imc.check(self.d, None, "tag")

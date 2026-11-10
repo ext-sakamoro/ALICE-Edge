@@ -230,7 +230,7 @@ robust 系の入口 (`fit_linear_robust` / `filter_outliers_mad`) の外れ値�
 
 ## 最小対応 Rust バージョン
 
-1.87 (`Cargo.toml` の `rust-version`) CI はそのバージョンの toolchain で、
+1.88 (`Cargo.toml` の `rust-version`) CI はそのバージョンの toolchain で、
 feature なしと docs.rs の feature 集合の両方で library を compile する
 
 ## ビルドとテスト

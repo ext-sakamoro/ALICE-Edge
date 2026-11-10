@@ -33,7 +33,7 @@ case "${1:-}" in
 esac
 # docs.rs feature set (Cargo.toml [package.metadata.docs.rs]) = ci.yml FULL_FEATURES
 FULL='std,zip,law,codec,db,ml,sdf,depth-camera,asp,sensors,mqtt,dashboard,ffi,serde-raw'
-MSRV='1.87'
+MSRV='1.88'
 
 step() { printf '\n\033[1;34m== %s\033[0m\n' "$*"; }
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing tool: $1 ($2)" >&2; exit 1; }; }

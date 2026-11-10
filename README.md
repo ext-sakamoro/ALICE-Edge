@@ -246,7 +246,7 @@ their result through an out-parameter; the C# wrapper raises
 
 ## Minimum supported Rust version
 
-1.87 (`rust-version` in `Cargo.toml`). CI compiles the library on exactly
+1.88 (`rust-version` in `Cargo.toml`). CI compiles the library on exactly
 that toolchain, without features and with the docs.rs feature set.
 
 ## Building and testing

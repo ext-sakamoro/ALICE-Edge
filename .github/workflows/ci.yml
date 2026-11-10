@@ -362,7 +362,7 @@ jobs:
         run: python3 scripts/id_move_check.py
 
   msrv:
-    name: MSRV (rust-version = 1.87)
+    name: MSRV (rust-version = 1.88)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -370,18 +370,18 @@ jobs:
 
       # Must match `rust-version` in Cargo.toml; bump both in the same commit.
       - name: Install MSRV toolchain
-        uses: dtolnay/rust-toolchain@1.87
+        uses: dtolnay/rust-toolchain@1.88
 
       - uses: Swatinem/rust-cache@v2
 
       - name: cargo check on MSRV (lib, no_std)
-        run: cargo +1.87 check --lib --no-default-features
+        run: cargo +1.88 check --lib --no-default-features
 
       - name: cargo check on MSRV (lib, no_std + law)
-        run: cargo +1.87 check --lib --no-default-features --features "law"
+        run: cargo +1.88 check --lib --no-default-features --features "law"
 
       - name: cargo check on MSRV (lib, full feature set)
-        run: cargo +1.87 check --lib --features "$FULL_FEATURES"
+        run: cargo +1.88 check --lib --features "$FULL_FEATURES"
 
   feature-powerset:
     name: Feature powerset (cargo-hack, depth 2)

@@ -28,6 +28,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 - `tests/float_environment.rs` (ALICE-DB と同一): round-to-nearest-even と subnormal が flush されないことを実行時に確かめる test test job (4 OS) の debug と release で `scripts/run_tests.sh` を通して実行 `alice-law-conformance.toml` の G14 を pass にした
 
 ### Changed
+- `svo_diff_hash` と `zip_bridge::decompress_coefficients` の `chunks_exact(N)` を `as_chunks::<N>()` に替えた (MSRV 1.88 で clippy の `chunks_exact_to_as_chunks` が有効になる) 走査の順と端数の扱いは同じで、hash と係数の値は変わらない (golden の試験で確認)
 - MSRV を 1.87 から 1.88 に上げた (`rust-version`、CI の `msrv` job、README) git の main から引く libasp (feature `asp`) が 1.88 を宣言する (その alice-sync と alice-identity が 1.88 を要る)
 - 依存: `libasp` (feature `asp`) を crates.io の 1.0 から git の main (1) に替えた CI: 追跡する Cargo.lock の alice-* と libasp が、この repository 自身の package か git から来るものだけで、alice-det-math が lock ごとに高々 1 つであることを `scripts/lock_sources_check.py` (試験 `scripts/test_lock_sources_check.py`、比較 0 件は exit 2) で検査する `scripts/gen_db_fixture` は公開版に固定した fixture の生成器のまま (lock は追跡しない) `deny.toml` の `allow-git` に ALICE-Streaming-Protocol を足した
 - `scripts/entropy_guard.py` と試験を ALICE-Analytics と同じ新しい bytes にした 許可する呼び出しは repo ごとの `scripts/entropy_guard.toml` に path・pattern・件数・理由で書く (`dashboard` / `depth_capture` / `edge_pipeline` / `mqtt_bridge` / `sensors` / `watchdog` の 6 件、件数は完全一致、何にも当たらない行は失敗)

@@ -51,7 +51,9 @@ pub fn decompress_coefficients(batch: &CompressedModelBatch) -> std::io::Result<
     let floats = compression::decompress_residual_quantized(&batch.data)?;
 
     let coefficients: Vec<(i32, i32)> = floats
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| (pair[0] as i32, pair[1] as i32))
         .collect();
 

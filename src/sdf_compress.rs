@@ -356,15 +356,14 @@ fn build_svo_node_recursive(
 /// Returns a 64-bit hash of the SVO structure for change detection.
 ///
 /// # Panics
-/// Does not panic. `chunks_exact(8)` guarantees `try_into().unwrap()` succeeds.
+/// Does not panic.
 #[inline(always)]
 #[must_use]
 pub fn svo_diff_hash(data: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    let chunks = data.chunks_exact(8);
-    let remainder = chunks.remainder();
+    let (chunks, remainder) = data.as_chunks::<8>();
     for chunk in chunks {
-        let word = u64::from_le_bytes(chunk.try_into().unwrap());
+        let word = u64::from_le_bytes(*chunk);
         hash ^= word;
         hash = hash.wrapping_mul(0x0100_0000_01b3);
     }

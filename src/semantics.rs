@@ -13,7 +13,7 @@
 //! # Hex form
 //!
 //! ```text
-//! e0a546aa1a5ce5195e8fa294fb90dbce52470468495900ce503ce09ece90497f
+//! f58c1c1f198961401672b63d85e721b2e25948bee2a2caf1ced81e01efbdd678
 //! ```
 //!
 //! # Entries
@@ -225,14 +225,14 @@ pub const EDGE_SEMANTICS_PINS: [(&str, [u8; 32]); 29] = [
     ),
     (
         "alice-sdf",
-        hex32("0f6ffc20efe7737c4cfbb95d35e74c62edd16c1c0d562faf35a2abdcc5ccb7e7"),
+        hex32("dca9b09275b952e2e45ab7cd9426cd99f86e3cc65a16ffc2ffd76b188b01780f"),
     ),
 ];
 
 /// The semantics identifier of this crate: the fold of
 /// [`EDGE_SEMANTICS_PINS`] (see the module documentation).
 pub const EDGE_SEMANTICS_ID: [u8; 32] =
-    hex32("e0a546aa1a5ce5195e8fa294fb90dbce52470468495900ce503ce09ece90497f");
+    hex32("f58c1c1f198961401672b63d85e721b2e25948bee2a2caf1ced81e01efbdd678");
 
 /// Earlier values of [`EDGE_SEMANTICS_ID`] whose pinned bits this release
 /// still reproduces
@@ -241,6 +241,9 @@ pub const EDGE_SEMANTICS_ID: [u8; 32] =
 /// this crate's own simulated depth frames move from frame 81920 on (`sin` /
 /// `cos` reduce arguments from `2^13` on in double precision), so
 /// `1dd8876b…` (alice-det-math 0.5.1) does not name this build's bits.
+/// `e0a546aa…` (alice-sdf `0f6ffc20…`) is listed: only the alice-sdf pin moved
+/// (alice-sdf's heightmap face blend moved one of its own goldens, so alice-sdf
+/// refuses its earlier identifiers) and every golden of this crate is unchanged.
 /// `d4d143d1…` (alice-det-math 0.6 folded per function) is listed: only the
 /// alice-zip pin moved (alice-zip added the kind tag of its causal 2-D law) and
 /// every golden is unchanged, so its pinned bits are reproduced.
@@ -250,6 +253,7 @@ pub const EDGE_SEMANTICS_ID: [u8; 32] =
 /// every scenario golden is unchanged, so its pinned bits are reproduced.
 /// `tests/edge_semantics_id.rs` shows which pins moved.
 pub const PREVIOUS_EDGE_SEMANTICS_IDS: &[[u8; 32]] = &[
+    hex32("e0a546aa1a5ce5195e8fa294fb90dbce52470468495900ce503ce09ece90497f"),
     hex32("d4d143d1d024b2d75778cb8d3667a333eccebc009ef387586cba02c3c8a1c976"),
     hex32("573e1af1a6d4556748faeff04c0a4bebe827cc42cbe95c38ef81fa9e09547e8b"),
 ];

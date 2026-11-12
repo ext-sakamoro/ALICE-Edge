@@ -939,17 +939,19 @@ fn golden_depth_frames_below_and_from_2_13() {
 // ---------------------------------------------------------------------------
 
 /// `alice_zip::law::SEMANTICS_ID` of alice-zip 0.11 over alice-det-math 0.6
-/// (`65f48962…`, folding the identifier of each alice-det-math function
-/// alice-zip calls), the identifier this crate re-exports as `SEMANTICS_ID`
+/// (`922b2865…`, folding the identifier of each alice-det-math function
+/// alice-zip calls and the kind tag of its causal 2-D law), the identifier
+/// this crate re-exports as `SEMANTICS_ID`
 ///
-/// It moved from `17d0df1d…` (alice-zip over alice-det-math 0.5.2, kept in
-/// `alice_zip::law::PREVIOUS_SEMANTICS_IDS`): the golden scenario hashes above
-/// did not change, only the identifier input did.
+/// It moved from `65f48962…` (the same fold without the causal law's kind tag)
+/// and before that from `17d0df1d…` (alice-zip over alice-det-math 0.5.2), both
+/// kept in `alice_zip::law::PREVIOUS_SEMANTICS_IDS`: the golden scenario hashes
+/// above did not change, only the identifier input did.
 /// If this test fails, check which alice-zip and alice-det-math resolved,
 /// confirm the scenario hashes above are unchanged (or explained), then update
 /// this constant and record both in CHANGELOG.
 const GOLDEN_SEMANTICS_ID: &str =
-    "65f48962c757ebb619d252f8784f830aca5f3698fbd22f34150f9887863f38dd";
+    "922b28656da64d8651eae0db86d0070078c4b5dc183c4a4d0219107f73ffca78";
 
 #[test]
 fn golden_semantics_id() {
@@ -999,22 +1001,29 @@ fn golden_semantics_id() {
 /// rather than whatever happened to come out.
 #[cfg(feature = "law")]
 const GOLDEN_LAW_ID_RISING: &str =
-    "a9e7a5fecc2016b722318fd56010425446d41f017d013ff91bede0e10d6dd4d2";
+    "30e68c03cf0a1a988f2b94102be3142ebdbc19c7e9076387d1a3ad956a450a27";
 #[cfg(feature = "law")]
 const GOLDEN_LAW_ID_FALLING: &str =
-    "803e433bcbe653a290f1ec9c462ba24b14529cf791aa56b9ebf4e2a9e4de1ddf";
+    "2def0320d52e0940573d883a21c5b8a5513c0202fb1e654d956991ce444d9583";
 
 /// The law identifiers this crate recorded under earlier identifiers:
-/// `(that identifier, rising, falling)`. Before the alice-det-math 2d01c63f
+/// `(that identifier, rising, falling)`. Before alice-zip added the causal
+/// law's kind tag they were recorded under `65f48962…`, before the
+/// alice-det-math 0.6 move under `17d0df1d…`. Before the alice-det-math 2d01c63f
 /// fold, 0.4.0 recorded them under alice-zip's `51ffeb07…` (alice-det-math
 /// 0.5.1); before 0.4.0, when it exported alice-det-math's identifier, 0.3.0
 /// recorded them under 0.5.1's `85e08846…`, 0.2.0 and 0.2.1 under 0.5.0's
-/// `135c407d…`. All three identifiers are in alice-zip's
+/// `135c407d…`. All five identifiers are in alice-zip's
 /// `law::PREVIOUS_SEMANTICS_IDS`, so the same fits under them still give these
 /// values, which shows that each re-recording of `GOLDEN_LAW_ID_*` moved the
 /// identifier input only
 #[cfg(feature = "law")]
-const PREVIOUS_GOLDEN_LAW_IDS: [(&str, &str, &str); 4] = [
+const PREVIOUS_GOLDEN_LAW_IDS: [(&str, &str, &str); 5] = [
+    (
+        "65f48962c757ebb619d252f8784f830aca5f3698fbd22f34150f9887863f38dd",
+        "a9e7a5fecc2016b722318fd56010425446d41f017d013ff91bede0e10d6dd4d2",
+        "803e433bcbe653a290f1ec9c462ba24b14529cf791aa56b9ebf4e2a9e4de1ddf",
+    ),
     (
         "17d0df1d7c0a6e63d1a7380129f12386b677ac96e7ac193dece546805f4fe84c",
         "a4090eaba8ab4ae79d7ea35d3d5711da56210675ed13c78d3614fe84a87f1f93",
@@ -1070,8 +1079,8 @@ fn golden_law_id_under_the_previous_identifiers_is_unchanged() {
         }
     }
     assert_eq!(
-        compared, 8,
-        "compared {compared} law identifiers, expected 8"
+        compared, 10,
+        "compared {compared} law identifiers, expected 10"
     );
 }
 

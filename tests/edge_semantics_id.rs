@@ -463,13 +463,13 @@ const PINS_573E1AF1: &[(&str, &str)] = &[
     ),
 ];
 
-/// `573e1af1…` is no longer an identifier of this build, and the reason is
+/// `573e1af1…` is a previous identifier of this build, and the reason is
 /// exactly the move to alice-det-math 0.6: every golden of that build is
 /// unchanged, the whole-crate `alice-det-math` entry is replaced by one entry
 /// per called function, and the four upstream identifiers moved. A further
 /// change to any pin fails here.
 #[test]
-fn the_573e1af1_identifier_is_rejected_because_exactly_these_pins_moved() {
+fn the_573e1af1_identifier_is_previous_because_exactly_these_pins_moved() {
     let unhex = |s: &str| -> [u8; 32] {
         core::array::from_fn(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).expect("hex"))
     };
@@ -516,9 +516,231 @@ fn the_573e1af1_identifier_is_rejected_because_exactly_these_pins_moved() {
             "det-math sin"
         ]
     );
-    assert!(!PREVIOUS_EDGE_SEMANTICS_IDS.contains(&unhex(
-        "573e1af1a6d4556748faeff04c0a4bebe827cc42cbe95c38ef81fa9e09547e8b"
-    )));
+    let id = unhex("573e1af1a6d4556748faeff04c0a4bebe827cc42cbe95c38ef81fa9e09547e8b");
+    assert_eq!(
+        alice_edge::semantics::check_semantics(&id),
+        Ok(alice_edge::semantics::IdStatus::VerifiedPrevious(id))
+    );
+}
+
+/// The pins of `d4d143d1…` (alice-det-math 0.6 folded per function, alice-zip
+/// `65f48962…`), frozen as they were: 19 goldens, 6 alice-det-math functions and
+/// 4 upstream identifiers
+const PINS_D4D143D1: &[(&str, &str)] = &[
+    (
+        "q16_linear",
+        "105580c224a8b5fe8ac11762db84662a699ad8aed740a52892f10ef92892041d",
+    ),
+    (
+        "adaptive_polyfit",
+        "b4a125049e4d8d4ae0278243c32cc972ec46c81cb8f90295695ac8c638d815b5",
+    ),
+    (
+        "constant_fit",
+        "6f3c6335869a8c6320ba5972a9007a76180aee43ddaaa6be3df785a91baee705",
+    ),
+    (
+        "simd_fit",
+        "6907b2ffc5067ca5c9a5188a709e5f0a217fe7e436542c5c3c5397dfdf034a9a",
+    ),
+    (
+        "sensor_fusion",
+        "976837f60532e082cbbb29a9d987b08080f8cdb8172fba329f66cb875ac3eacf",
+    ),
+    (
+        "ring_buffer",
+        "224f9f81c7e54478be79641e2b6067e90b803e8acb062014c6a639502377f288",
+    ),
+    (
+        "det_math",
+        "4fb30a451a9aae88529c0f66ef1a94f9b3e400cf360cd6e7398a4d9622b318ab",
+    ),
+    (
+        "piecewise",
+        "a9706b8473b6d6c50334f9ee9e6726f9eb44409e13118a403c511843db8b49f7",
+    ),
+    (
+        "delta",
+        "c25c2ed884ea0d109d267e48a0a0c08f13c32291415002519af3a3ebea452d89",
+    ),
+    (
+        "law",
+        "53583c42b85669e3ecb5f701e23329ba759071d821ddb7efa06ac75424b17000",
+    ),
+    (
+        "object_features",
+        "1e4d836d63f7395d22b5d5a7b07e97340709e8a6b158e875f7442b44612c261a",
+    ),
+    (
+        "sensors",
+        "f40d90cb955cc8dcb3ec9bdc5e47523da138e5e2fde79e675358f8eb1ea2278c",
+    ),
+    (
+        "depth_capture",
+        "16d9355a324c9eed84fed8f03b5572579a551f215e3aec071f494a036b208122",
+    ),
+    (
+        "robust_k1",
+        "f7baf928bd39a35e1e03ecf93bb7779ebbde6e7c24bb5e28ebf59a1332806e76",
+    ),
+    (
+        "robust_k3",
+        "07caa63a49319ad7e8e2399d640779496b71d6cd1add0294cd874a91d469bb83",
+    ),
+    (
+        "robust_k10",
+        "75950f93be1f73f55d024000dccf87c9b62b4fc03a93885f11fedb0975aab1ae",
+    ),
+    (
+        "robust_kmax",
+        "a8de2b48247fbe7108931a655310ab569dc4f1999aa1ac000ac616004d81b5bd",
+    ),
+    (
+        "depth_frames_below_2_13",
+        "e74d950a951ef412c5cbf59d61868659920f0504bc7063b9da83f081f23cff1a",
+    ),
+    (
+        "depth_frames_from_2_13",
+        "a1146387667a53203d869d83e05ae0c7a1e57f84716f578efa5177aac67df764",
+    ),
+    (
+        "det-math cos",
+        "f7627941400acabe93c8dca4090eee12f8910fe4c14a8735ad456cef3c48ed7b",
+    ),
+    (
+        "det-math exp",
+        "606918f2d637f46f9a792a29b3ee31a991ef3196064456caa7b3a7ca81700a63",
+    ),
+    (
+        "det-math ln",
+        "6fe18bc0fba8b7e3e871c4cbe555ddb40a460be7b3c7690303ee30accdcb7291",
+    ),
+    (
+        "det-math max",
+        "8bd32fcb313f7fb3d7a699fc3075273de7e5a4e083912d8dc7f4cc4016fc2286",
+    ),
+    (
+        "det-math min",
+        "2939e83813b26c868ec3113fb1c25102f16f28d8f24c343a727d4b1bec5904fe",
+    ),
+    (
+        "det-math sin",
+        "ee1b80d12df18ec0de5bce5a6bf05432484dabfc1cee1bb9b3f3291dd862cfec",
+    ),
+    (
+        "alice-zip",
+        "65f48962c757ebb619d252f8784f830aca5f3698fbd22f34150f9887863f38dd",
+    ),
+    (
+        "alice-db",
+        "62d72c5042a8e0b894a02a655803850557882a94abb0de1fc4455c22ecfbffa8",
+    ),
+    (
+        "alice-analytics",
+        "847535174fa305517aa11fe8b98f604d1b1ec48abaa23d2b1dce9ccc8aa8884f",
+    ),
+    (
+        "alice-sdf",
+        "0f6ffc20efe7737c4cfbb95d35e74c62edd16c1c0d562faf35a2abdcc5ccb7e7",
+    ),
+];
+
+/// `d4d143d1…` is the previous identifier, and the reason is exactly
+/// alice-zip's identifier moving (the kind tag of its causal 2-D law became an
+/// entry) and with it alice-db's and alice-analytics', which fold it: every
+/// golden is unchanged and no pin was added or removed, so its pinned bits are
+/// reproduced and `check_semantics` accepts a value stamped
+/// with it as `VerifiedPrevious`. A further change to any pin fails here.
+#[test]
+fn the_d4d143d1_identifier_is_previous_because_only_upstream_pins_moved() {
+    let unhex = |s: &str| -> [u8; 32] {
+        core::array::from_fn(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).expect("hex"))
+    };
+    let frozen: Vec<(&str, [u8; 32])> = PINS_D4D143D1.iter().map(|&(n, d)| (n, unhex(d))).collect();
+    assert_eq!(
+        hex(&fold(&frozen)),
+        "d4d143d1d024b2d75778cb8d3667a333eccebc009ef387586cba02c3c8a1c976",
+        "the frozen table does not fold to its identifier"
+    );
+    let mut moved = Vec::new();
+    let mut compared = 0usize;
+    for (name, digest) in PINS_D4D143D1 {
+        compared += 1;
+        let current = EDGE_SEMANTICS_PINS.iter().find(|(n, _)| n == name);
+        if current.is_none_or(|(_, d)| hex(d) != *digest) {
+            moved.push(*name);
+        }
+    }
+    assert_eq!(compared, 29, "pins compared");
+    moved.sort_unstable();
+    assert_eq!(moved, ["alice-analytics", "alice-db", "alice-zip"]);
+    assert_eq!(
+        EDGE_SEMANTICS_PINS.len(),
+        PINS_D4D143D1.len(),
+        "no pin added or removed"
+    );
+    let d4 = unhex("d4d143d1d024b2d75778cb8d3667a333eccebc009ef387586cba02c3c8a1c976");
+    assert_eq!(PREVIOUS_EDGE_SEMANTICS_IDS[0], d4);
+    assert_eq!(
+        alice_edge::semantics::check_semantics(&d4),
+        Ok(alice_edge::semantics::IdStatus::VerifiedPrevious(d4))
+    );
+}
+
+/// Every identifier of `PREVIOUS_EDGE_SEMANTICS_IDS` names this build's bits: its frozen pin table
+/// has every scenario golden of this build unchanged (only upstream and alice-det-math entries may
+/// differ). An identifier without a frozen table, or a list that lost one, fails here
+#[test]
+fn every_previous_identifier_reproduces_this_builds_goldens() {
+    let unhex = |s: &str| -> [u8; 32] {
+        core::array::from_fn(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).expect("hex"))
+    };
+    let tables: [(&str, &[(&str, &str)]); 2] = [
+        (
+            "d4d143d1d024b2d75778cb8d3667a333eccebc009ef387586cba02c3c8a1c976",
+            PINS_D4D143D1,
+        ),
+        (
+            "573e1af1a6d4556748faeff04c0a4bebe827cc42cbe95c38ef81fa9e09547e8b",
+            PINS_573E1AF1,
+        ),
+    ];
+    let mut ids = 0usize;
+    let mut goldens = 0usize;
+    for previous in PREVIOUS_EDGE_SEMANTICS_IDS {
+        let (_, table) = tables
+            .iter()
+            .find(|(id, _)| unhex(id) == *previous)
+            .unwrap_or_else(|| panic!("no frozen pin table for {}", hex(previous)));
+        assert_eq!(
+            hex(&fold(
+                &table
+                    .iter()
+                    .map(|&(n, d)| (n, unhex(d)))
+                    .collect::<Vec<_>>()
+            )),
+            hex(previous)
+        );
+        for (name, digest) in *table {
+            if name.starts_with("alice-") || name.starts_with("det-math ") {
+                continue;
+            }
+            let current = EDGE_SEMANTICS_PINS
+                .iter()
+                .find(|(n, _)| n == name)
+                .unwrap_or_else(|| panic!("the golden {name} of {} is gone", hex(previous)));
+            assert_eq!(
+                hex(&current.1),
+                *digest,
+                "golden {name} under {}",
+                hex(previous)
+            );
+            goldens += 1;
+        }
+        ids += 1;
+    }
+    assert_eq!(ids, tables.len(), "previous identifiers compared");
+    assert!(goldens >= 2 * 19, "goldens compared: {goldens}");
 }
 
 #[test]

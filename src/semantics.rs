@@ -13,7 +13,7 @@
 //! # Hex form
 //!
 //! ```text
-//! d4d143d1d024b2d75778cb8d3667a333eccebc009ef387586cba02c3c8a1c976
+//! e0a546aa1a5ce5195e8fa294fb90dbce52470468495900ce503ce09ece90497f
 //! ```
 //!
 //! # Entries
@@ -61,7 +61,10 @@
 //! The identifier is a constant of this crate version: a dependency bump or
 //! a toolchain change that moved any pinned bits fails a golden, and moving
 //! the golden moves the identifier. Earlier identifiers whose pinned bits
-//! are still reproduced are listed in [`PREVIOUS_EDGE_SEMANTICS_IDS`].
+//! are still reproduced are listed in [`PREVIOUS_EDGE_SEMANTICS_IDS`]:
+//! when only an upstream identifier this crate folds moves (a pin-only move,
+//! every golden unchanged) the old identifier is listed; when a golden moved
+//! (the pinned bits are not reproduced) it is not.
 
 /// Decodes 64 hex digits into 32 bytes at compile time; anything else is a
 /// compile error.
@@ -210,15 +213,15 @@ pub const EDGE_SEMANTICS_PINS: [(&str, [u8; 32]); 29] = [
     ("det-math sin", DET_MATH_PINS[5].1),
     (
         "alice-zip",
-        hex32("65f48962c757ebb619d252f8784f830aca5f3698fbd22f34150f9887863f38dd"),
+        hex32("922b28656da64d8651eae0db86d0070078c4b5dc183c4a4d0219107f73ffca78"),
     ),
     (
         "alice-db",
-        hex32("62d72c5042a8e0b894a02a655803850557882a94abb0de1fc4455c22ecfbffa8"),
+        hex32("97d6853c2d8eda9e80fa985081ca8e982d7a4dc9cd276f9b83c95c153f6000bb"),
     ),
     (
         "alice-analytics",
-        hex32("847535174fa305517aa11fe8b98f604d1b1ec48abaa23d2b1dce9ccc8aa8884f"),
+        hex32("67650b7f63ebe71670b7fd9b5781fe276f515dbcee4497169cdd74f1c19a08d4"),
     ),
     (
         "alice-sdf",
@@ -229,20 +232,27 @@ pub const EDGE_SEMANTICS_PINS: [(&str, [u8; 32]); 29] = [
 /// The semantics identifier of this crate: the fold of
 /// [`EDGE_SEMANTICS_PINS`] (see the module documentation).
 pub const EDGE_SEMANTICS_ID: [u8; 32] =
-    hex32("d4d143d1d024b2d75778cb8d3667a333eccebc009ef387586cba02c3c8a1c976");
+    hex32("e0a546aa1a5ce5195e8fa294fb90dbce52470468495900ce503ce09ece90497f");
 
 /// Earlier values of [`EDGE_SEMANTICS_ID`] whose pinned bits this release
 /// still reproduces
 ///
-/// Empty: with alice-det-math at 2d01c63f the upstream identifiers moved and
+/// Not listed: with alice-det-math at 2d01c63f the upstream identifiers moved and
 /// this crate's own simulated depth frames move from frame 81920 on (`sin` /
 /// `cos` reduce arguments from `2^13` on in double precision), so
 /// `1dd8876b…` (alice-det-math 0.5.1) does not name this build's bits.
+/// `d4d143d1…` (alice-det-math 0.6 folded per function) is listed: only the
+/// alice-zip pin moved (alice-zip added the kind tag of its causal 2-D law) and
+/// every golden is unchanged, so its pinned bits are reproduced.
 /// `573e1af1…` (alice-det-math 0.5.2 at 2d01c63f, folded as one identifier) is
-/// not listed either: its scenario goldens are unchanged, but the upstream
-/// identifiers it folds moved with alice-det-math 0.6.
+/// listed: the move to alice-det-math 0.6 replaced the whole-crate det-math
+/// entry by one entry per called function and moved the upstream pins, but
+/// every scenario golden is unchanged, so its pinned bits are reproduced.
 /// `tests/edge_semantics_id.rs` shows which pins moved.
-pub const PREVIOUS_EDGE_SEMANTICS_IDS: &[[u8; 32]] = &[];
+pub const PREVIOUS_EDGE_SEMANTICS_IDS: &[[u8; 32]] = &[
+    hex32("d4d143d1d024b2d75778cb8d3667a333eccebc009ef387586cba02c3c8a1c976"),
+    hex32("573e1af1a6d4556748faeff04c0a4bebe827cc42cbe95c38ef81fa9e09547e8b"),
+];
 
 /// How a stored or received identifier relates to this build's
 /// [`EDGE_SEMANTICS_ID`].
@@ -293,8 +303,7 @@ pub fn check_semantics(stored: &[u8; 32]) -> Result<IdStatus, SemanticsMismatch>
 }
 
 /// [`check_semantics`] against an explicit current identifier and list of
-/// earlier ones (the list is empty in this release, so the previous-identifier
-/// path is tested through this function).
+/// earlier ones.
 pub(crate) fn check_semantics_against(
     stored: &[u8; 32],
     current: &[u8; 32],

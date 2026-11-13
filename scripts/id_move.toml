@@ -14,3 +14,4 @@ SEMANTICS_ID = "alice-zip's law::SEMANTICS_ID, re-exported for reference (the id
 [[id]]
 path = "alice_edge::semantics::EDGE_SEMANTICS_ID"
 previous = "alice_edge::semantics::PREVIOUS_EDGE_SEMANTICS_IDS"
+previous-tests = ["tests/edge_semantics_id.rs::the_f58c1c1f_identifier_is_previous_because_only_the_alice_sdf_pin_moved"]

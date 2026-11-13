@@ -200,12 +200,12 @@ impl CoefficientStore {
         created_at: u64,
     ) -> Result<Self, CoefficientStoreError> {
         let open = |series: Series| {
-            AliceDB::with_config(StorageConfig {
-                data_dir: PathBuf::from(dir).join(series.to_string()),
-                residual_policy,
-                created_at,
-                ..StorageConfig::default()
-            })
+            AliceDB::with_config(
+                StorageConfig::default()
+                    .with_data_dir(PathBuf::from(dir).join(series.to_string()))
+                    .with_residual_policy(residual_policy)
+                    .with_created_at(created_at),
+            )
             .map_err(db(series, "open"))
         };
         Ok(Self {

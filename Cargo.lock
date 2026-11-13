@@ -20,7 +20,7 @@ dependencies = [
 [[package]]
 name = "alice-analytics"
 version = "0.7.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Analytics?branch=main#cf16e1928fae6b73fa3c3e2792aa687175a29267"
+source = "git+https://github.com/ext-sakamoro/ALICE-Analytics?branch=main#fd09b3e447107fb9a57750b8077b30fe696f9d6d"
 dependencies = [
  "alice-det-math",
  "libm",
@@ -29,7 +29,7 @@ dependencies = [
 [[package]]
 name = "alice-codec"
 version = "0.2.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Codec?branch=main#ce42348e1d1d40129950bc271f2979d9a398430d"
+source = "git+https://github.com/ext-sakamoro/ALICE-Codec?branch=main#c6ad2d5c9823e2f7da384fe3fffaf5e39ac23059"
 dependencies = [
  "alice-det-math",
  "libm",
@@ -37,8 +37,8 @@ dependencies = [
 
 [[package]]
 name = "alice-db"
-version = "0.6.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-DB?branch=main#6618a43e088c99c3a9d7f95a617c620099007610"
+version = "0.7.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-DB?branch=main#0fb8271a71eeed5081bf5d035c61edee7cc4a4f8"
 dependencies = [
  "alice-det-math",
  "alice-serial",
@@ -60,7 +60,7 @@ dependencies = [
 [[package]]
 name = "alice-det-math"
 version = "0.6.1"
-source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#d80446ebce73c5c397f7df12435cf574460400bf"
+source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#6269efc2280a74301c91139117d5d01a5eca60df"
 dependencies = [
  "bytemuck",
  "wide",
@@ -68,7 +68,7 @@ dependencies = [
 
 [[package]]
 name = "alice-edge"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "alice-analytics",
  "alice-codec",
@@ -95,7 +95,7 @@ dependencies = [
 [[package]]
 name = "alice-ml"
 version = "0.4.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-ML?branch=main#f3cccc24e63bff90919e278a41d88b1e41c3383a"
+source = "git+https://github.com/ext-sakamoro/ALICE-ML?branch=main#5b3d871c1577b6a5db4e41f5c619f1502db7322c"
 dependencies = [
  "alice-det-math",
  "libm",
@@ -104,7 +104,7 @@ dependencies = [
 [[package]]
 name = "alice-sdf"
 version = "7.0.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#75bbb3f0e825976c855632f455e13c5861a66f1d"
+source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#0df82712d4341a161ff000db46f60c17cd98531b"
 dependencies = [
  "alice-det-math",
  "alice-zip",
@@ -123,12 +123,12 @@ dependencies = [
 [[package]]
 name = "alice-serial"
 version = "0.2.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Serial?branch=main#16b34ebcaf3a195fe6500defb4d1e6002cb3d09d"
+source = "git+https://github.com/ext-sakamoro/ALICE-Serial?branch=main#38f306c2a4fc49d2b89f61494a16f1d0b07dc609"
 
 [[package]]
 name = "alice-zip"
-version = "0.11.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#c498e1769a71532239aed179e918734dd6329d8a"
+version = "0.12.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#6c5fc8b08f9c5f7232e072f12fea88b9999df310"
 dependencies = [
  "alice-det-math",
  "crc",

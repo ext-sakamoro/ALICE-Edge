@@ -130,13 +130,17 @@ fn a_timestamp_above_i64_max_is_refused_before_anything_is_written() {
     );
 }
 
-/// A write ALICE-DB cannot persist is an error of `record_batch`, for either
-/// series. With one series' directory read-only after opening, a batch above
-/// the memtable capacity (1000 points by default) has to create a segment
-/// file there and fails; the error names that series.
+/// A write ALICE-DB cannot persist is reported, never lost, for either series.
+/// With one series' directory read-only after opening, a batch above the
+/// memtable capacity (1000 points by default) has to create a segment file
+/// there. Since alice-db 0.7 a segment the store refuses stays in memory and
+/// is written again later, so `record_batch` returns either success or that
+/// series' write error, `flush` reports that series' error while the directory
+/// stays read-only, and once it is writable again `flush` succeeds and every
+/// point reads back.
 #[cfg(unix)]
 #[test]
-fn a_batch_the_store_cannot_persist_is_an_error() {
+fn a_batch_the_store_cannot_persist_is_reported_and_kept() {
     use std::os::unix::fs::PermissionsExt;
     for (series, name) in [(Series::Slope, "slope"), (Series::Intercept, "intercept")] {
         let tmp = tempfile::tempdir().expect("temp dir");
@@ -149,13 +153,28 @@ fn a_batch_the_store_cannot_persist_is_an_error() {
              produce a write error here"
         );
         let entries: Vec<(u64, f32, f32)> = (0..1500u64).map(|i| (i, i as f32, 0.0)).collect();
-        let result = store.record_batch(&entries);
-        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).expect("chmod back");
-        match result {
+        match store.record_batch(&entries) {
+            Ok(()) => {}
             Err(CoefficientStoreError::Db { series: s, op, .. }) => {
                 assert_eq!((s, op), (series, "write"), "{name}");
             }
-            other => panic!("{name}: expected a write error, got {other:?}"),
+            Err(other) => panic!("{name}: expected success or a write error, got {other:?}"),
         }
+        let flushed = store.flush();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).expect("chmod back");
+        match flushed {
+            Err(CoefficientStoreError::Db { series: s, .. }) => assert_eq!(s, series, "{name}"),
+            other => {
+                panic!("{name}: expected the flush to report the refused segment, got {other:?}")
+            }
+        }
+        store.flush().expect("flush once the directory is writable");
+        let slopes = store.query_slopes(0, 1499).expect("read slopes");
+        let intercepts = store.query_intercepts(0, 1499).expect("read intercepts");
+        assert_eq!(
+            (slopes.len(), intercepts.len()),
+            (1500, 1500),
+            "{name}: nothing lost"
+        );
     }
 }

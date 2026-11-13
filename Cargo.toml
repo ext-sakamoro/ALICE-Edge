@@ -1,6 +1,6 @@
 [package]
 name = "alice-edge"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 # MSRV: libasp (feature `asp`, ALICE-Streaming-Protocol main) declares 1.88 (its alice-sync and
 # alice-identity need it); `u64::is_multiple_of` needs 1.87. CI `msrv` job compiles on exactly
@@ -84,11 +84,11 @@ alice-det-math = { git = "https://github.com/ext-sakamoro/ALICE-DetMath", branch
 pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 numpy = { version = "0.29", optional = true }
 # `zip` turns on alice-zip's std + lzma, `law` uses it without them (no_std)
-alice_core = { package = "alice-zip", git = "https://github.com/ext-sakamoro/ALICE-Zip", branch = "main", version = "0.11", default-features = false }
+alice_core = { package = "alice-zip", git = "https://github.com/ext-sakamoro/ALICE-Zip", branch = "main", version = "0.12", default-features = false }
 alice-codec = { git = "https://github.com/ext-sakamoro/ALICE-Codec", branch = "main", version = "0.2", optional = true, default-features = false, features = ["std"] }
 # alice-db (from 0.4) keeps its file backend behind the default `fs` feature; this
 # crate opens on-disk stores, so `fs` is named explicitly
-alice-db = { git = "https://github.com/ext-sakamoro/ALICE-DB", branch = "main", version = ">=0.6, <0.7", optional = true, default-features = false, features = ["fs"] }
+alice-db = { git = "https://github.com/ext-sakamoro/ALICE-DB", branch = "main", version = "0.7", optional = true, default-features = false, features = ["fs"] }
 rusb = { version = "0.9", optional = true }
 alice-sdf = { git = "https://github.com/ext-sakamoro/ALICE-SDF", branch = "main", version = ">=7, <8", optional = true, default-features = false, features = ["svo"] }
 alice-ml = { git = "https://github.com/ext-sakamoro/ALICE-ML", branch = "main", version = "0.4", optional = true, default-features = false, features = ["std"] }

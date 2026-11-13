@@ -7,6 +7,11 @@
 # The versions are pinned exactly: the point of the fixture is the arithmetic
 # that wrote it. Rerunning reproduces the files byte for byte except the
 # segment's creation time (3 bytes of seg_1.rkyv at offset 360, wall clock)
+#
+# Intentional legacy writer: these registry pins must not be widened when
+# alice-db moves on (a push of a new alice-db reports this file as a
+# "publish-wave widening" consumer; that report is expected for this file).
+# Its Cargo.lock is not tracked, so scripts/lock_sources.toml has no entry.
 [package]
 name = "gen-db-fixture"
 version = "0.0.0"

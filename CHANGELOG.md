@@ -5,7 +5,7 @@ All notable changes to ALICE-Edge will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- CI: 他の crate の `PREVIOUS_*_SEMANTICS_IDS` を位置で読む書き方 (添字・slice・`.get` / `.first` / `.last` / `.nth` / `.next`、`use` の別名と `let` の束縛を含む) を拒む `scripts/upstream_previous_ids_check.py` と試験を足した 上流は major で一覧を空にするので、下流は一覧全体を回すか `contains` を使う 既知の書き方を捕まえる検査で、長さへの依存が無いことの証明ではない 走査した .rs が 0 件なら失敗 (ci.yml の clippy job と preflight)
+- CI: 他の crate の `PREVIOUS_*_SEMANTICS_IDS` は一覧全体としてだけ使える (`contains` / `len` / `is_empty`、全体を回す iterator や for、引数として丸ごと渡す、束縛や `to_vec` / `collect` の写しは追って同じ規則) とし、それ以外の使い方 (添字・slice のパターン・`.first` / `.get` / `next` / `take` など) を拒む `scripts/upstream_previous_ids_check.py` と試験を足した 上流は major で一覧を空にする 読み取れる書き方を捕まえる検査で、長さへの依存が無いことの証明ではない 走査した .rs が 0 件なら失敗 (ci.yml の clippy job と preflight)
 - `mqtt_bridge::ConnectionState` / `ConnectRefused` / `MqttPublisher::connection_state`: CONNACK の拒否 (return code 1〜5) をそれぞれ別の状態で返す (`is_connected` は従来どおり) 試験 `tests/mqtt_client.rs` (10 件、loopback の台本どおりに動く broker と、仕様から書いた独立の packet 読み取り、再接続が backoff を待つことと送信の統計を含む) と `tests/mqtt_tls.rs` (8 件、close_notify なしで切れた broker からすぐ離れることを含む、相互認証の TLS 証明書は試験の中で x509-cert と p256 で作る pure Rust、鍵は固定の名前から導くので毎回同じ) を test job の 4 OS と preflight で `scripts/run_tests.sh` を通して走らせる
 - fuzz target `fuzz_mqtt_decode`: MQTT client の decoder (`src/mqtt_wire.rs` を path で取り込む) を任意の broker の bytes で走らせ、panic しないこと、受け取れる 3 種の packet の規則、途中で切った入力が別の packet にならないこと、remaining length の往復を確かめる regression の入力 7 件 (最短でない remaining length を含む)
 - `conformance/g11-own.toml`: ALICE-Law G11 の表のうち、この crate 固有の行 (G4 / G5 の golden、G6 の識別子、比較 0 件は `scripts/run_tests.sh` の試験、G10 の `scripts/entropy_guard.py` とその試験) 共有の検査器の行は ALICE-Law の `conformance/g11-shared-rows.toml` から生成する

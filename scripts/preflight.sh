@@ -99,6 +99,8 @@ python3 scripts/test_boundary_guard.py
 python3 scripts/boundary_guard.py
 python3 scripts/test_lock_sources_check.py
 python3 scripts/lock_sources_check.py
+python3 scripts/test_upstream_previous_ids_check.py
+python3 scripts/upstream_previous_ids_check.py
 
 step "ci.yml / docs-lint: Order guard (G13, interim text layer, tests, then src/)"
 python3 scripts/test_order_guard.py

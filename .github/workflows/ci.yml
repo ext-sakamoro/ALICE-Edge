@@ -344,6 +344,12 @@ jobs:
         run: python3 scripts/test_lock_sources_check.py
       - name: Lock sources (alice-* by git, one alice-det-math)
         run: python3 scripts/lock_sources_check.py
+      # another crate's PREVIOUS_*_SEMANTICS_IDS is read as a whole, never by position (an upstream
+      # empties the list on a major version)
+      - name: Upstream previous identifiers (tests)
+        run: python3 scripts/test_upstream_previous_ids_check.py
+      - name: Upstream previous identifiers (no positional read)
+        run: python3 scripts/upstream_previous_ids_check.py
       # G9: an identifier (EDGE_SEMANTICS_ID) moves only with a breaking version, with the
       # released value in its previous list (when it has one) and both values named in
       # CHANGELOG.md; the released value is read from the published crate at the newest

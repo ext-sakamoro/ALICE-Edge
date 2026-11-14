@@ -173,7 +173,9 @@ reference_repo = "ALICE-LOL"
 
 [G12]
 status = "pass"
-evidence = [".github/workflows/public-text.yml", "scripts/public_text.sh", ".github/public-text-pin", "scripts/test_public_text.py", ".public-text.toml"]
+evidence = [".github/workflows/public-text.yml", "scripts/public_text.sh", ".github/public-text-pin", "scripts/test_public_text.py", ".public-text.toml",
+    "the public text check runs in CI: `.github/workflows/public-text.yml#- name: Public text (tree at HEAD, then the pushed commits)` (scripts/public_text.sh, ALICE-Law's checker at .github/public-text-pin) after its tests `.github/workflows/public-text.yml#- name: Tests of scripts/public_text.sh (no network)`",
+]
 mutant = "in a throwaway clone at this commit, commit a README.md line naming an internal rules file and run PUBLIC_TEXT_BASE=<previous commit> scripts/public_text.sh: it reports a private name on the committed line and exits 1; the unchanged tree reports '0 findings in 105 files at HEAD' and exits 0."
 since = "e11dfa4"
 note = "the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (779fa443f95bc0caca5ca2d5bdb9156051fd6143) and refuses it unless its SHA-256 is e439fdd7495e45486b67d57d227f828426b703c0224b8a00d2e8a1c2f1e66594 (rechecked against the file at that revision); it reads the tree at HEAD and the commits since the base, exits 2 when it compared nothing, and runs on pushes to main and ci/** branches and on pull requests. .public-text.toml allows the words the docs linter and its test must contain, by exact line count per file."
@@ -202,6 +204,7 @@ evidence = [
     ".github/workflows/ci.yml docs-lint job (ubuntu, macOS, Windows): the static guard and both test files",
     ".github/workflows/ci.yml build-flags job (ubuntu, macOS): the dynamic check for the no_std, std and full feature sets in the release profile",
     "tests/float_environment.rs round_to_nearest_even and subnormals_are_not_flushed (byte-identical to ALICE-DB's; ci.yml test job on the four OS, debug and release, through scripts/run_tests.sh as `float_environment=2`, so the step fails unless both tests pass: an #[ignore], a #[cfg] that drops one, or a rename is red)",
+    "where each half runs: the static guard `.github/workflows/ci.yml#python scripts/build_config_guard.py`, the dynamic check `.github/workflows/ci.yml#name: Effective rustc flags (${{ matrix.os }})`, and the float environment `.github/workflows/ci.yml#- name: Test — float environment (debug and release)`",
 ]
 mutant = "measured 2026-10-16, each reverted: `RUSTFLAGS: \"-C target-cpu=native\"` added to ci.yml's env makes scripts/build_config_guard.py exit 1 with `target-cpu-native: target-cpu=native` on the added line; RUSTFLAGS=$'-C target-cpu=nat\\x69ve' makes scripts/build_flags_check.py exit 1 with `alice_edge: target-cpu-native: target-cpu=native`; setting FPCR.RMode to round-toward-plus-infinity fails round_to_nearest_even and setting FPCR.FZ (flush-to-zero) fails subnormals_are_not_flushed (aarch64, macOS)"
 since = ""

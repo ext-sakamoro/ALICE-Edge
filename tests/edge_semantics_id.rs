@@ -210,6 +210,127 @@ fn every_pin_moves_the_identifier() {
     }
 }
 
+/// The pins of `3c3b3b9b…` (alice-sdf `db7ff4a4…`, before alice-sdf's cell repetition),
+/// frozen as they were: only the alice-sdf pin differs from this build's.
+const PINS_3C3B3B9B: &[(&str, &str)] = &[
+    (
+        "q16_linear",
+        "105580c224a8b5fe8ac11762db84662a699ad8aed740a52892f10ef92892041d",
+    ),
+    (
+        "adaptive_polyfit",
+        "b4a125049e4d8d4ae0278243c32cc972ec46c81cb8f90295695ac8c638d815b5",
+    ),
+    (
+        "constant_fit",
+        "6f3c6335869a8c6320ba5972a9007a76180aee43ddaaa6be3df785a91baee705",
+    ),
+    (
+        "simd_fit",
+        "6907b2ffc5067ca5c9a5188a709e5f0a217fe7e436542c5c3c5397dfdf034a9a",
+    ),
+    (
+        "sensor_fusion",
+        "976837f60532e082cbbb29a9d987b08080f8cdb8172fba329f66cb875ac3eacf",
+    ),
+    (
+        "ring_buffer",
+        "224f9f81c7e54478be79641e2b6067e90b803e8acb062014c6a639502377f288",
+    ),
+    (
+        "det_math",
+        "4fb30a451a9aae88529c0f66ef1a94f9b3e400cf360cd6e7398a4d9622b318ab",
+    ),
+    (
+        "piecewise",
+        "a9706b8473b6d6c50334f9ee9e6726f9eb44409e13118a403c511843db8b49f7",
+    ),
+    (
+        "delta",
+        "c25c2ed884ea0d109d267e48a0a0c08f13c32291415002519af3a3ebea452d89",
+    ),
+    (
+        "law",
+        "53583c42b85669e3ecb5f701e23329ba759071d821ddb7efa06ac75424b17000",
+    ),
+    (
+        "object_features",
+        "1e4d836d63f7395d22b5d5a7b07e97340709e8a6b158e875f7442b44612c261a",
+    ),
+    (
+        "sensors",
+        "f40d90cb955cc8dcb3ec9bdc5e47523da138e5e2fde79e675358f8eb1ea2278c",
+    ),
+    (
+        "depth_capture",
+        "16d9355a324c9eed84fed8f03b5572579a551f215e3aec071f494a036b208122",
+    ),
+    (
+        "robust_k1",
+        "f7baf928bd39a35e1e03ecf93bb7779ebbde6e7c24bb5e28ebf59a1332806e76",
+    ),
+    (
+        "robust_k3",
+        "07caa63a49319ad7e8e2399d640779496b71d6cd1add0294cd874a91d469bb83",
+    ),
+    (
+        "robust_k10",
+        "75950f93be1f73f55d024000dccf87c9b62b4fc03a93885f11fedb0975aab1ae",
+    ),
+    (
+        "robust_kmax",
+        "a8de2b48247fbe7108931a655310ab569dc4f1999aa1ac000ac616004d81b5bd",
+    ),
+    (
+        "depth_frames_below_2_13",
+        "e74d950a951ef412c5cbf59d61868659920f0504bc7063b9da83f081f23cff1a",
+    ),
+    (
+        "depth_frames_from_2_13",
+        "a1146387667a53203d869d83e05ae0c7a1e57f84716f578efa5177aac67df764",
+    ),
+    (
+        "det-math cos",
+        "f7627941400acabe93c8dca4090eee12f8910fe4c14a8735ad456cef3c48ed7b",
+    ),
+    (
+        "det-math exp",
+        "606918f2d637f46f9a792a29b3ee31a991ef3196064456caa7b3a7ca81700a63",
+    ),
+    (
+        "det-math ln",
+        "6fe18bc0fba8b7e3e871c4cbe555ddb40a460be7b3c7690303ee30accdcb7291",
+    ),
+    (
+        "det-math max",
+        "8bd32fcb313f7fb3d7a699fc3075273de7e5a4e083912d8dc7f4cc4016fc2286",
+    ),
+    (
+        "det-math min",
+        "2939e83813b26c868ec3113fb1c25102f16f28d8f24c343a727d4b1bec5904fe",
+    ),
+    (
+        "det-math sin",
+        "ee1b80d12df18ec0de5bce5a6bf05432484dabfc1cee1bb9b3f3291dd862cfec",
+    ),
+    (
+        "alice-zip",
+        "922b28656da64d8651eae0db86d0070078c4b5dc183c4a4d0219107f73ffca78",
+    ),
+    (
+        "alice-db",
+        "97d6853c2d8eda9e80fa985081ca8e982d7a4dc9cd276f9b83c95c153f6000bb",
+    ),
+    (
+        "alice-analytics",
+        "67650b7f63ebe71670b7fd9b5781fe276f515dbcee4497169cdd74f1c19a08d4",
+    ),
+    (
+        "alice-sdf",
+        "db7ff4a4b7daf3f242f353fc7af2c448832e8625c19f2522561d3b83a496f775",
+    ),
+];
+
 /// The pins of `1dd8876b…` (alice-det-math 0.5.1 from crates.io), frozen as
 /// they were: the 17 goldens of that build and its 5 upstream identifiers
 const PINS_1DD8876B: &[(&str, &str)] = &[
@@ -1017,7 +1138,11 @@ fn every_previous_identifier_reproduces_this_builds_goldens() {
     let unhex = |s: &str| -> [u8; 32] {
         core::array::from_fn(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).expect("hex"))
     };
-    let tables: [(&str, &[(&str, &str)]); 4] = [
+    let tables: [(&str, &[(&str, &str)]); 5] = [
+        (
+            "3c3b3b9ba9080c6437de392d5ed6f92c02a6e8e82636f24343c5499dbeb58ad8",
+            PINS_3C3B3B9B,
+        ),
         (
             "f58c1c1f198961401672b63d85e721b2e25948bee2a2caf1ced81e01efbdd678",
             PINS_F58C1C1F,

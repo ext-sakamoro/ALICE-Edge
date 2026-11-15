@@ -60,7 +60,7 @@ dependencies = [
 [[package]]
 name = "alice-det-math"
 version = "0.6.1"
-source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#6269efc2280a74301c91139117d5d01a5eca60df"
+source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#9b6538aab2f166ae0afb5b806ae8611b89cad5dd"
 dependencies = [
  "bytemuck",
  "wide",
@@ -104,10 +104,11 @@ dependencies = [
 [[package]]
 name = "alice-sdf"
 version = "7.0.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#0df82712d4341a161ff000db46f60c17cd98531b"
+source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#656c21962dce61b3244bd79d4741b65a1cfbfbbc"
 dependencies = [
  "alice-det-math",
  "alice-zip",
+ "arrayvec",
  "bincode",
  "crc32fast",
  "glam",
@@ -128,7 +129,7 @@ source = "git+https://github.com/ext-sakamoro/ALICE-Serial?branch=main#38f306c2a
 [[package]]
 name = "alice-zip"
 version = "0.12.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#6c5fc8b08f9c5f7232e072f12fea88b9999df310"
+source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#52186410b2f445090b33429270671d8c4fe47683"
 dependencies = [
  "alice-det-math",
  "crc",
@@ -151,6 +152,12 @@ name = "anstyle"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
+
+[[package]]
+name = "arrayvec"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "autocfg"

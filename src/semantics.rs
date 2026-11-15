@@ -13,7 +13,7 @@
 //! # Hex form
 //!
 //! ```text
-//! 3c3b3b9ba9080c6437de392d5ed6f92c02a6e8e82636f24343c5499dbeb58ad8
+//! 6059de51191babe6e3ef3a7e2d94d63c280531380106f134b334d1c7c8864aaa
 //! ```
 //!
 //! # Entries
@@ -225,14 +225,14 @@ pub const EDGE_SEMANTICS_PINS: [(&str, [u8; 32]); 29] = [
     ),
     (
         "alice-sdf",
-        hex32("db7ff4a4b7daf3f242f353fc7af2c448832e8625c19f2522561d3b83a496f775"),
+        hex32("d7389231c17a0dade9a46c5610ed9911ab97b725dfdbc0d8b9d33c3e2113974c"),
     ),
 ];
 
 /// The semantics identifier of this crate: the fold of
 /// [`EDGE_SEMANTICS_PINS`] (see the module documentation).
 pub const EDGE_SEMANTICS_ID: [u8; 32] =
-    hex32("3c3b3b9ba9080c6437de392d5ed6f92c02a6e8e82636f24343c5499dbeb58ad8");
+    hex32("6059de51191babe6e3ef3a7e2d94d63c280531380106f134b334d1c7c8864aaa");
 
 /// Earlier values of [`EDGE_SEMANTICS_ID`] whose pinned bits this release
 /// still reproduces
@@ -241,6 +241,9 @@ pub const EDGE_SEMANTICS_ID: [u8; 32] =
 /// this crate's own simulated depth frames move from frame 81920 on (`sin` /
 /// `cos` reduce arguments from `2^13` on in double precision), so
 /// `1dd8876b…` (alice-det-math 0.5.1) does not name this build's bits.
+/// `3c3b3b9b…` (alice-sdf `db7ff4a4…`) is listed: only the alice-sdf pin moved
+/// (alice-sdf's cell repetition added golden rows and still reproduces `db7ff4a4…`)
+/// and every golden of this crate is unchanged.
 /// `f58c1c1f…` (alice-sdf `dca9b092…`) is listed: only the alice-sdf pin moved
 /// (alice-sdf's bell pull added golden rows and still reproduces `dca9b092…`)
 /// and every golden of this crate is unchanged.
@@ -256,6 +259,7 @@ pub const EDGE_SEMANTICS_ID: [u8; 32] =
 /// every scenario golden is unchanged, so its pinned bits are reproduced.
 /// `tests/edge_semantics_id.rs` shows which pins moved.
 pub const PREVIOUS_EDGE_SEMANTICS_IDS: &[[u8; 32]] = &[
+    hex32("3c3b3b9ba9080c6437de392d5ed6f92c02a6e8e82636f24343c5499dbeb58ad8"),
     hex32("f58c1c1f198961401672b63d85e721b2e25948bee2a2caf1ced81e01efbdd678"),
     hex32("e0a546aa1a5ce5195e8fa294fb90dbce52470468495900ce503ce09ece90497f"),
     hex32("d4d143d1d024b2d75778cb8d3667a333eccebc009ef387586cba02c3c8a1c976"),

@@ -20,7 +20,7 @@ dependencies = [
 [[package]]
 name = "alice-analytics"
 version = "0.7.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Analytics?branch=main#fd09b3e447107fb9a57750b8077b30fe696f9d6d"
+source = "git+https://github.com/ext-sakamoro/ALICE-Analytics?branch=main#22eb80532d5df3717595b54e15377884827ceec6"
 dependencies = [
  "alice-det-math",
  "libm",

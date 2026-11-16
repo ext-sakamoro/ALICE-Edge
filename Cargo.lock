@@ -37,8 +37,8 @@ dependencies = [
 
 [[package]]
 name = "alice-db"
-version = "0.7.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-DB?branch=main#0fb8271a71eeed5081bf5d035c61edee7cc4a4f8"
+version = "0.7.2"
+source = "git+https://github.com/ext-sakamoro/ALICE-DB?branch=main#9d567a61a650ae14cf07ceaf673b5d7d1539ba49"
 dependencies = [
  "alice-det-math",
  "alice-serial",
@@ -124,7 +124,7 @@ dependencies = [
 [[package]]
 name = "alice-serial"
 version = "0.2.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Serial?branch=main#38f306c2a4fc49d2b89f61494a16f1d0b07dc609"
+source = "git+https://github.com/ext-sakamoro/ALICE-Serial?branch=main#ccf4338606257aae8cbfdbfac8544577d11bb927"
 
 [[package]]
 name = "alice-zip"

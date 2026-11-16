@@ -918,8 +918,9 @@ dependencies = [
 [[package]]
 name = "libasp"
 version = "1.1.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Streaming-Protocol?branch=main#ec5991d9a430a8835041f5d43a9c20c555143b3c"
+source = "git+https://github.com/ext-sakamoro/ALICE-Streaming-Protocol?branch=main#352bdf1e62630856bffc134325f0bb7358753c91"
 dependencies = [
+ "alice-det-math",
  "base64",
  "bytemuck",
  "flatbuffers",

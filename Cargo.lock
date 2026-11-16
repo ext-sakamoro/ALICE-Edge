@@ -95,7 +95,7 @@ dependencies = [
 [[package]]
 name = "alice-ml"
 version = "0.4.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-ML?branch=main#5b3d871c1577b6a5db4e41f5c619f1502db7322c"
+source = "git+https://github.com/ext-sakamoro/ALICE-ML?branch=main#0de3abd996eaaf9ff26a3858800ab536b95a532a"
 dependencies = [
  "alice-det-math",
  "libm",

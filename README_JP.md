@@ -256,16 +256,16 @@ scripts/preflight.sh --quick    # static checks, clippy, builds, docs, cargo tes
 - [ALICE-Analytics](https://github.com/ext-sakamoro/ALICE-Analytics) — ダッシュボード用 sketch
 - [ALICE-Streaming-Protocol](https://github.com/ext-sakamoro/ALICE-Streaming-Protocol) — ストリーミングブリッジ
 
-<!-- law-integration:begin law=ffcc3d5a9395f4620aec29c5244fc2c528122fb0 -->
+<!-- law-integration:begin law=4bb6b5045e12169f6a7676ee606868b39332b6bc -->
 ## ALICE-Law との統合
 
-ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `ffcc3d5a9395` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
+ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `4bb6b5045e12` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
 
 | | |
 |---|---|
-| release train | alice-edge 0.4.0 (planned)、Law への依存: あり |
-| 算術 | main branch の alice-det-math 0.6.1、算術の識別子 `6fc214e924c53557f33775df51f1f8dfe2f246d67a9e493d6fb5837d999022f2` (release train の alice-det-math は 0.5.1 で、測った版と違う) この crate の要求は `alice-det-math = "0.6"` |
-| end to end 検査 | 対象 (`alice-edge` 0.4、main branch から)、値の digest `66b99010e871b2bc099ad5a4dd0f7c34cc5d6731f1c2a0459c0dd58284b081d7`、aarch64 と x86_64 で同じ |
+| release train | alice-edge 0.5.0 (main 719bf8b4f92f)、Law への依存: あり |
+| 算術 | main branch の alice-det-math 0.6.1、算術の識別子 `6fc214e924c53557f33775df51f1f8dfe2f246d67a9e493d6fb5837d999022f2` この crate の要求は `alice-det-math = "0.6"` |
+| end to end 検査 | 対象 (`alice-edge` 0.5、main branch から)、値の digest `d1a37d5f3bf2590657f8507277f1661ea9f7ea27bb0b492e7952add280f2a414`、aarch64 と x86_64 で同じ |
 
 ### 適合 (G1-G14)
 
@@ -282,7 +282,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `ffcc3d5a9395` と
 | G9 persisted-meaning-change-is-major | 適合 | definition: EDGE_SEMANTICS_ID (the identifier the weights and payloads carry, [[id]] in scripts/id_move.toml with PREVIOUS_EDGE_SEMANTICS_IDS) may move only … |
 | G10 no-run-varying-artifacts | 適合 | the 23 production .elapsed() reads (a 24th grep hit, `src/sensors.rs#/// its reading from `, is a doc comment) sit under scoped clippy::disallowed_methods … |
 | G11 gate-self-tests | 適合 | clause (c) has a check: scripts/g11_table.sh runs ALICE-Law's scripts/g11_table_check.py (fetched at .github/g11-table-pin, SHA-256 pinned, 0 compared fails) … |
-| G12 public-repo-text-rules | 適合 | the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (779fa443f95bc0caca5ca2d5bdb9156051fd6143) and refuses … |
+| G12 public-repo-text-rules | 適合 | the workflow fetches ALICE-Law's scripts/public_text_check.py at the revision in .github/public-text-pin (a5824065c35f161c07d5a158f21198fb198494ee) and refuses … |
 | G13 no-unspecified-order | 適合 | no parallel reduction over floats exists, so the ordered-reduction test with two thread counts has nothing to test; the lint keeps it that way. … |
 | G14 float-environment-invariants | 適合 | the static scan covers the files of this repository and the dynamic check covers the builds CI runs on ubuntu and macOS; a flag passed by a build outside this … |
 | G15 surface-claims | 未申告 |  |

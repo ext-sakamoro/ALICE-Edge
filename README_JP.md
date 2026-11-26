@@ -256,10 +256,10 @@ scripts/preflight.sh --quick    # static checks, clippy, builds, docs, cargo tes
 - [ALICE-Analytics](https://github.com/ext-sakamoro/ALICE-Analytics) — ダッシュボード用 sketch
 - [ALICE-Streaming-Protocol](https://github.com/ext-sakamoro/ALICE-Streaming-Protocol) — ストリーミングブリッジ
 
-<!-- law-integration:begin law=4bb6b5045e12169f6a7676ee606868b39332b6bc -->
+<!-- law-integration:begin law=e6544bea973fd11ae6399caa7492486cd4d26d52 -->
 ## ALICE-Law との統合
 
-ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `4bb6b5045e12` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
+ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `e6544bea973f` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
 
 | | |
 |---|---|

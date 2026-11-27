@@ -567,78 +567,47 @@ fn an_overlong_window_degrades_to_the_lower_degree_fit() {
     assert_eq!((qb, qc), (int_to_q16(3), 0));
 }
 
-/// Contract: **exact, for every window up to the measured capacity.** The
-/// linear fit shifts the numerator up by 16 before dividing, so the range in
-/// which it is exact is bounded by `i64`, and the bound depends on the window
-/// length and the slope together rather than on either alone. The three
-/// capacities below were found by bisection on exact ramps `y = step · x`
-/// (the largest window whose fit is still the exact slope): 6410 for
-/// `step = 1`, 4870 for `step = 3`, 2027 for `step = 100`. Each assertion is
-/// the exact answer, so no wrapped value is written down here.
-///
-/// The companion case
-/// `the_linear_fit_should_stay_exact_past_its_current_capacity` is ignored
-/// and records what happens one sample past each of these.
+/// Contract: **exact, past the windows where the fit used to wrap.** The
+/// slope numerator is shifted up by 16 before dividing; until the normal
+/// equations moved to `i128` (`solve_linear_normal_q16`) that shift ran in
+/// `i64` and wrapped one sample past 6410 (`step = 1`), 4870 (`step = 3`) and
+/// 2027 (`step = 100`) on exact ramps `y = step · x` (found by bisection), and
+/// returned a slope with the wrong sign and magnitude. Each of those windows,
+/// the one after it, and 10⁵ samples now give the exact slope from both the
+/// scalar fit and the SIMD kernel. Each assertion is the exact answer.
 #[test]
-fn the_linear_fit_is_exact_up_to_its_measured_capacity() {
-    // (slope of the ramp, largest window that is still exact — bisected)
-    for (step, capacity) in [(1i32, 6_410usize), (3, 4_870), (100, 2_027)] {
-        let ramp: Vec<i32> = (0..capacity).map(|i| i as i32 * step).collect();
-        assert_eq!(
-            fit_linear_fixed(&ramp),
-            (int_to_q16(step), 0),
-            "step {step}, window {capacity}"
-        );
-        assert_eq!(
-            fit_linear_simd(&ramp),
-            (int_to_q16(step), 0),
-            "the SIMD kernel must agree (step {step}, window {capacity})"
-        );
+fn the_linear_fit_stays_exact_past_the_old_i64_capacity() {
+    for (step, old_capacity) in [(1i32, 6_410usize), (3, 4_870), (100, 2_027)] {
+        for window in [old_capacity, old_capacity + 1, 100_000] {
+            let ramp: Vec<i32> = (0..window).map(|i| i as i32 * step).collect();
+            assert_eq!(
+                fit_linear_fixed(&ramp),
+                (int_to_q16(step), 0),
+                "step {step}, window {window}"
+            );
+            assert_eq!(
+                fit_linear_simd(&ramp),
+                (int_to_q16(step), 0),
+                "the SIMD kernel must agree (step {step}, window {window})"
+            );
+        }
     }
 
     // a constant window never loses the slope, however long it is: the
-    // numerator is exactly zero, so there is nothing for the shift to lose
+    // numerator is exactly zero
     assert_eq!(
         fit_linear_fixed(&vec![32_767; 20_000]),
         (0, int_to_q16(32_767))
     );
 }
 
-/// Known defect, recorded rather than asserted: one sample past the capacity
-/// of the case above, `fit_linear_fixed` returns a slope with the wrong sign
-/// and magnitude instead of degrading or refusing.
-///
-/// The mechanism is that `slope_num << Q16_SHIFT` is a multiplication by
-/// 2¹⁶ written as a shift, and **a shift does not check the value for
-/// overflow** — only the shift amount is checked — so the numerator wraps
-/// with no diagnostic in either build profile. `fit_quadratic_fixed` and
-/// `fit_cubic_fixed` solve the same normal equations with checked `i128` and
-/// are exact here, so the defect is specific to the first-degree path;
-/// `fit_linear_simd` shares the same expression and the same limit.
-///
-/// With the `law` feature the break is visible in the residual (measured:
-/// RMS 1.6e-13 at the capacity, 8.4e3 one sample past it), but the raw fit
-/// reports nothing.
-#[test]
-#[ignore = "known defect: the linear fit multiplies by 2^16 with a shift, which does not check the value for overflow, so a long window wraps"]
-fn the_linear_fit_should_stay_exact_past_its_current_capacity() {
-    for (step, capacity) in [(1i32, 6_410usize), (3, 4_870), (100, 2_027)] {
-        let ramp: Vec<i32> = (0..=capacity).map(|i| i as i32 * step).collect();
-        assert_eq!(
-            fit_linear_fixed(&ramp),
-            (int_to_q16(step), 0),
-            "step {step}, window {}",
-            capacity + 1
-        );
-    }
-}
-
-/// Contract: **bit-identical, across and past the capacity boundary.** The
-/// scalar fit and the SSE2 / NEON kernels are three implementations of one
-/// formula, and only one of them runs on a given target, so a divergence
-/// between them is a divergence between devices. They agree today both where
-/// the fit is exact and where it wraps, and this case fixes that: a change to
-/// one of the three that is not made to the others fails here.
+/// Contract: **bit-identical, on every window.** The scalar fit and the
+/// SSE2 / NEON kernels are three implementations of one formula (they share
+/// the solver and differ in how they accumulate Σy and Σxy), and only one of
+/// them runs on a given target, so a divergence between them is a divergence
+/// between devices. This case fixes that, including where the Q16 conversion
+/// of full-scale samples wraps: a change to one of the three that is not made
+/// to the others fails here.
 #[test]
 fn the_simd_kernels_agree_with_the_scalar_fit_bit_for_bit() {
     // lengths around the kernel threshold (8) and its remainder handling
@@ -646,8 +615,8 @@ fn the_simd_kernels_agree_with_the_scalar_fit_bit_for_bit() {
         let w: Vec<i32> = (0..n).map(|i| 13 * i as i32 - 500).collect();
         assert_eq!(fit_linear_simd(&w), fit_linear_fixed(&w), "window {n}");
     }
-    // across the capacity boundary of the `step = 3` ramp (4870), on both
-    // sides, so the two implementations stay together through the wrap
+    // around the window where the `step = 3` ramp used to wrap (4870), on
+    // both sides
     for n in [4_000usize, 4_869, 4_870, 4_871, 4_872, 5_000, 8_192] {
         let w: Vec<i32> = (0..n).map(|i| i as i32 * 3).collect();
         assert_eq!(fit_linear_simd(&w), fit_linear_fixed(&w), "window {n}");

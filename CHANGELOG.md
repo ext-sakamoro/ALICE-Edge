@@ -4,6 +4,9 @@ All notable changes to ALICE-Edge will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- `mqtt_bridge`: publisher を drop した時の DISCONNECT の後、socket を閉じる前に書き込み側を shutdown し、受信を読み切ってから閉じる (1 回の読み取りは最大 500 ms、最大 16 回、時計は読まない) 未読の bytes (broker の PUBACK) を残して閉じると Linux / BSD は FIN でなく RST を送り、broker の読み取りが `ConnectionReset` になっていた (ubuntu-24.04-arm の CI で `tests/mqtt_client.rs::connect_publish_and_disconnect_on_the_wire` が時々失敗) 試験 `closing_with_unread_bytes_gives_the_peer_eof_not_a_reset` (未読の PUBACK を peek で確かめてから閉じ、client に未読が残らないことと、client の socket が開いている間に broker が EOF を読むことを見る、読み切りを外す・shutdown を外す・関数を飛ばす変異はどれも red)
+
 ### Added
 - CI: 他の crate の `PREVIOUS_*_SEMANTICS_IDS` は一覧全体としてだけ使える (`contains` / `len` / `is_empty`、全体を回す iterator や for、引数として丸ごと渡す、束縛や `to_vec` / `collect` の写しは追って同じ規則) とし、それ以外の使い方 (添字・slice のパターン・`.first` / `.get` / `next` / `take` など) を拒む `scripts/upstream_previous_ids_check.py` と試験を足した 上流は major で一覧を空にする 読み取れる書き方を捕まえる検査で、長さへの依存が無いことの証明ではない 走査した .rs が 0 件なら失敗 (ci.yml の clippy job と preflight)
 - `mqtt_bridge::ConnectionState` / `ConnectRefused` / `MqttPublisher::connection_state`: CONNACK の拒否 (return code 1〜5) をそれぞれ別の状態で返す (`is_connected` は従来どおり) 試験 `tests/mqtt_client.rs` (10 件、loopback の台本どおりに動く broker と、仕様から書いた独立の packet 読み取り、再接続が backoff を待つことと送信の統計を含む) と `tests/mqtt_tls.rs` (8 件、close_notify なしで切れた broker からすぐ離れることを含む、相互認証の TLS 証明書は試験の中で x509-cert と p256 で作る pure Rust、鍵は固定の名前から導くので毎回同じ) を test job の 4 OS と preflight で `scripts/run_tests.sh` を通して走らせる

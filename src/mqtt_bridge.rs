@@ -581,6 +581,38 @@ const REQUEST_QUEUE: usize = 64;
 const IO_POLL: Duration = Duration::from_millis(50);
 /// TCP connect and TLS handshake limit
 const OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long each read after DISCONNECT waits for the broker before the
+/// publisher closes the socket anyway ([`finish_tcp`])
+const CLOSE_DRAIN: Duration = Duration::from_millis(500);
+/// At most this many reads drain the socket after DISCONNECT, so a broker that
+/// keeps writing cannot hold the close open (with [`CLOSE_DRAIN`] per read, a
+/// bound of 8 s without reading a clock)
+const CLOSE_DRAIN_READS: usize = 16;
+
+/// Close a TCP connection so the peer reads EOF rather than a reset.
+///
+/// A socket closed while bytes it has received are still unread is reset
+/// (RST) by Linux and the BSDs instead of being closed with FIN, and the peer's
+/// pending read fails with `ConnectionReset`. After DISCONNECT the broker may
+/// have written bytes (a PUBACK) the publisher has not read, so the publisher
+/// first shuts down its write side (the broker reads EOF and closes; MQTT 3.1.1
+/// §3.14.4: the server SHOULD close the connection on DISCONNECT if the client
+/// has not) and then reads to EOF, each read waiting at most [`CLOSE_DRAIN`]
+/// and at most [`CLOSE_DRAIN_READS`] reads, before the socket is dropped.
+fn finish_tcp(tcp: &mut TcpStream) {
+    if tcp.shutdown(std::net::Shutdown::Write).is_err()
+        || tcp.set_read_timeout(Some(CLOSE_DRAIN)).is_err()
+    {
+        return;
+    }
+    let mut buf = [0u8; 512];
+    for _ in 0..CLOSE_DRAIN_READS {
+        match tcp.read(&mut buf) {
+            Ok(0) | Err(_) => return,
+            Ok(_) => {}
+        }
+    }
+}
 
 enum Request {
     Publish { topic: String, payload: Vec<u8> },
@@ -835,9 +867,14 @@ impl Driver {
                     .and_then(|()| stream.flush());
             }
         }
-        if let Some(Stream::Tls(stream)) = self.stream.as_mut() {
-            stream.conn.send_close_notify();
-            let _ = stream.flush();
+        match self.stream.as_mut() {
+            Some(Stream::Tls(stream)) => {
+                stream.conn.send_close_notify();
+                let _ = stream.flush();
+                finish_tcp(&mut stream.sock);
+            }
+            Some(Stream::Plain(tcp)) => finish_tcp(tcp),
+            None => {}
         }
         self.stream = None;
         self.state.store(STATE_DISCONNECTED, Ordering::Release);
@@ -1201,6 +1238,43 @@ impl std::error::Error for MqttError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A socket closed with received bytes still unread is reset (RST); the
+    /// broker's read after DISCONNECT then fails with `ConnectionReset`
+    /// instead of reading EOF (seen on ubuntu-24.04-arm in
+    /// `tests/mqtt_client.rs::connect_publish_and_disconnect_on_the_wire`).
+    /// Both halves of [`finish_tcp`] are pinned without timing: the unread
+    /// PUBACK is made certain first (peek waits for it); after `finish_tcp`
+    /// nothing is left unread on the client (the drain), and the broker reads
+    /// EOF while the client socket is still open (only the write shutdown can
+    /// send that FIN). One thread: the broker does not close, so the drain ends
+    /// on its read timeout.
+    #[test]
+    fn closing_with_unread_bytes_gives_the_peer_eof_not_a_reset() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut broker, _) = listener.accept().unwrap();
+        broker.write_all(&[0x40, 2, 0, 2]).unwrap(); // a PUBACK the client never reads
+        let mut one = [0u8; 1];
+        assert_eq!(client.peek(&mut one).unwrap(), 1, "the PUBACK has arrived");
+
+        finish_tcp(&mut client);
+
+        client.set_nonblocking(true).unwrap();
+        match client.peek(&mut one) {
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
+            other => panic!("bytes left unread after finish_tcp: {other:?}"),
+        }
+        broker
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut rest = Vec::new();
+        match broker.read_to_end(&mut rest) {
+            Ok(_) => assert!(rest.is_empty(), "no bytes after DISCONNECT: {rest:?}"),
+            Err(e) => panic!("the broker read {e} instead of EOF"),
+        }
+        drop(client);
+    }
 
     #[test]
     fn test_payload_json() {

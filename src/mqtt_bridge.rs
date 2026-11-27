@@ -888,6 +888,13 @@ impl Driver {
 /// network thread opens the connection, keeps it alive (PINGREQ after
 /// `keep_alive` without traffic), reconnects after a backoff of 1 s doubling
 /// to 32 s, and sends every unacknowledged message again after a reconnect.
+///
+/// Dropping the publisher returns at once. The network thread then sends
+/// DISCONNECT, shuts down its write side and reads until the broker closes
+/// before it closes the socket (so the broker reads EOF, not a reset). That
+/// drain uses socket read timeouts, 16 reads of at most 500 ms each, so the
+/// thread can stay up to about 8 s against a broker that never closes; MQTT
+/// 3.1.1 §3.14.4 only says the server SHOULD close on DISCONNECT.
 pub struct MqttPublisher {
     requests: SyncSender<Request>,
     config: MqttConfig,
@@ -1249,6 +1256,57 @@ mod tests {
     /// EOF while the client socket is still open (only the write shutdown can
     /// send that FIN). One thread: the broker does not close, so the drain ends
     /// on its read timeout.
+    /// The same close, driven through the network thread's shutdown path
+    /// (`Driver::shutdown`, what dropping the publisher runs): a connected
+    /// session with a PUBACK left unread must give the broker DISCONNECT and
+    /// then EOF. Removing the `finish_tcp` call from `shutdown` drops the socket
+    /// with the PUBACK unread, which resets the connection on Linux and macOS,
+    /// so this case catches that without depending on timing.
+    #[test]
+    fn the_shutdown_path_sends_disconnect_and_closes_without_a_reset() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut broker, _) = listener.accept().unwrap();
+        let mut session = Session::new(&wire::Connect {
+            client_id: "edge-test",
+            keep_alive_secs: 30,
+            clean_session: true,
+            user_name: None,
+            password: None,
+        })
+        .unwrap();
+        let _connect = session.on_open(0);
+        session.on_bytes(0, &[0x20, 2, 0, 0]).unwrap(); // CONNACK, accepted
+        assert_eq!(session.status(), Status::Connected);
+        broker.write_all(&[0x40, 2, 0, 1]).unwrap(); // a PUBACK the driver never reads
+        let mut one = [0u8; 1];
+        assert_eq!(client.peek(&mut one).unwrap(), 1, "the PUBACK has arrived");
+        let (_requests, receiver) = sync_channel(1);
+        let state = Arc::new(AtomicU8::new(STATE_CONNECTED));
+        let mut driver = Driver {
+            host: "127.0.0.1".into(),
+            port: 0,
+            transport: Transport::Plain,
+            session,
+            requests: receiver,
+            state: Arc::clone(&state),
+            stream: Some(Stream::Plain(client)),
+        };
+
+        driver.shutdown();
+
+        assert!(driver.stream.is_none(), "the socket is closed");
+        assert_eq!(state.load(Ordering::Acquire), STATE_DISCONNECTED);
+        broker
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut got = Vec::new();
+        match broker.read_to_end(&mut got) {
+            Ok(_) => assert_eq!(got, wire::encode_disconnect(), "DISCONNECT, then EOF"),
+            Err(e) => panic!("the broker read {e} after {got:?} instead of DISCONNECT and EOF"),
+        }
+    }
+
     #[test]
     fn closing_with_unread_bytes_gives_the_peer_eof_not_a_reset() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
